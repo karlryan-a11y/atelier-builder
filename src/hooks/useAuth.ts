@@ -57,12 +57,10 @@ export function useAuth() {
     setLoading(false)
   }
 
-  async function signInWithMagicLink(email: string) {
-    const { error } = await supabase.auth.signInWithOtp({
+  async function signInWithPassword(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+      password,
     })
     return { error }
   }
@@ -73,5 +71,5 @@ export function useAuth() {
     setSession(null)
   }
 
-  return { session, user, loading, signInWithMagicLink, signOut }
+  return { session, user, loading, signInWithPassword, signOut }
 }

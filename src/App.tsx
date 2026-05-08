@@ -13,12 +13,10 @@ function App() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-wsg-cream">
+      <div className="h-screen flex items-center justify-center bg-[#1A1A1A]">
         <div className="text-center">
-          <h1 className="text-xl font-semibold tracking-tight text-wsg-black">
-            Atelier <span className="text-wsg-gold font-normal">Builder</span>
-          </h1>
-          <p className="text-sm text-wsg-muted mt-2">Loading...</p>
+          <img src="/brand/atelier-logo-inverse.svg" alt="Atelier" className="h-10 mx-auto mb-3" />
+          <p className="text-[10px] tracking-[0.35em] uppercase text-white/30">Loading...</p>
         </div>
       </div>
     )

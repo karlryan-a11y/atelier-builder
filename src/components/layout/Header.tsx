@@ -33,50 +33,51 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
     .slice(0, 2)
 
   return (
-    <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4">
+    <header className="h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">
-          Atelier
-          <span className="text-wsg-gold ml-1 font-normal">Builder</span>
-        </h1>
-        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-          v1
+        <img
+          src="/brand/atelier-logo-horizontal.svg"
+          alt="Atelier by Watson"
+          className="h-5 invert"
+        />
+        <span className="text-[10px] tracking-[0.25em] uppercase text-white/30 ml-1">
+          Builder
         </span>
       </div>
 
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex items-center gap-2 text-sm hover:bg-muted rounded-lg px-2 py-1 transition-colors"
+          className="flex items-center gap-2 text-[11px] tracking-[0.15em] uppercase hover:bg-white/5 rounded px-2 py-1 transition-colors"
         >
-          <span className="text-muted-foreground">{user.displayName}</span>
-          <div className="w-7 h-7 rounded-full bg-wsg-gold/20 flex items-center justify-center text-xs font-medium text-wsg-gold">
+          <span className="text-white/60">{user.displayName}</span>
+          <div className="w-7 h-7 rounded-full bg-blush/20 flex items-center justify-center text-[10px] font-medium text-blush">
             {initials}
           </div>
-          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 text-white/40" />
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
-            <div className="px-3 py-2 border-b border-border">
-              <p className="text-xs font-medium">{user.displayName}</p>
-              <p className="text-xs text-muted-foreground">{user.email}</p>
-              <p className="text-xs text-wsg-gold capitalize mt-0.5">{user.role}</p>
+          <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-sm shadow-lg border border-[#E8E4DF] py-1 z-50">
+            <div className="px-4 py-3 border-b border-[#E8E4DF]">
+              <p className="text-[11px] font-medium text-[#1A1A1A]">{user.displayName}</p>
+              <p className="text-[10px] text-text-muted mt-0.5">{user.email}</p>
+              <p className="text-[10px] tracking-[0.2em] uppercase text-blush mt-1">{user.role}</p>
             </div>
             {onOpenAdmin && (
               <button
                 onClick={() => { onOpenAdmin(); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-[#1A1A1A]"
               >
-                <Shield className="h-4 w-4" />
+                <Shield className="h-3.5 w-3.5" />
                 Team Management
               </button>
             )}
             <button
               onClick={onSignOut}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-destructive"
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-destructive"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5" />
               Sign out
             </button>
           </div>
