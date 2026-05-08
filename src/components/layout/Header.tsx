@@ -34,16 +34,11 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
 
   return (
     <header className="h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
-      <div className="flex items-center gap-3">
-        <img
-          src="/brand/atelier-logo-horizontal.svg"
-          alt="Atelier by Watson"
-          className="h-5 invert"
-        />
-        <span className="text-[10px] tracking-[0.25em] uppercase text-white/30 ml-1">
-          Builder
-        </span>
-      </div>
+      <img
+        src="/brand/atelier-logo-inverse.svg"
+        alt="Atelier by Watson"
+        className="h-10"
+      />
 
       <div className="relative" ref={menuRef}>
         <button

@@ -1,0 +1,3481 @@
+{
+  "generated_at": "2026-05-08T21:02:18.049Z",
+  "total_tags": 201,
+  "total_items": 1000,
+  "categorized_tags": [
+    {
+      "id": "680fbf021d137d602848f348",
+      "canonical_name": "jumpsuit",
+      "display_name": "Jumpsuits",
+      "category": "garment_type",
+      "aliases": [
+        "jumpsuits"
+      ]
+    },
+    {
+      "id": "672ab3fbabb8eb41dc61ce01",
+      "canonical_name": "hat",
+      "display_name": "Hats",
+      "category": "garment_type",
+      "aliases": [
+        "hats",
+        "hat"
+      ]
+    },
+    {
+      "id": "64a5deb45487b90ef3d2140a",
+      "canonical_name": "pant",
+      "display_name": "Pants",
+      "category": "garment_type",
+      "aliases": [
+        "pants",
+        "pant"
+      ]
+    },
+    {
+      "id": "641b5167bf5dee0ef5c7fe7b",
+      "canonical_name": "shoe",
+      "display_name": "Shoes",
+      "category": "garment_type",
+      "aliases": [
+        "shoe",
+        "shoes"
+      ]
+    },
+    {
+      "id": "661ea7949e9cd6146699306e",
+      "canonical_name": "top",
+      "display_name": "Tops",
+      "category": "garment_type",
+      "aliases": [
+        "top",
+        "tops"
+      ]
+    },
+    {
+      "id": "66ec4035fcbca50aecfef29c",
+      "canonical_name": "transition",
+      "display_name": "Transition",
+      "category": "occasion",
+      "aliases": [
+        "transition"
+      ]
+    },
+    {
+      "id": "666b05b4e53af40aeb0ddf01",
+      "canonical_name": "bag",
+      "display_name": "Bags",
+      "category": "garment_type",
+      "aliases": [
+        "bags",
+        "bag"
+      ]
+    },
+    {
+      "id": "66672eb66a126a5bb3811337",
+      "canonical_name": "skirt",
+      "display_name": "Skirts",
+      "category": "garment_type",
+      "aliases": [
+        "skirt",
+        "skirts"
+      ]
+    },
+    {
+      "id": "66672e326a126a5bb38112c6",
+      "canonical_name": "pant",
+      "display_name": "Pants",
+      "category": "garment_type",
+      "aliases": [
+        "pant"
+      ]
+    },
+    {
+      "id": "640a132c48fb470eec737c8f",
+      "canonical_name": "dress",
+      "display_name": "Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "dresses",
+        "dress"
+      ]
+    },
+    {
+      "id": "67fe627fbecab45fe566a92d",
+      "canonical_name": "denim",
+      "display_name": "Denim",
+      "category": "garment_type",
+      "aliases": [
+        "denim"
+      ]
+    },
+    {
+      "id": "641b50f5bf5dee0ef5c7fe3e",
+      "canonical_name": "dress",
+      "display_name": "Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "dress"
+      ]
+    },
+    {
+      "id": "6746027f3f3aae20c599f672",
+      "canonical_name": "sunglasses",
+      "display_name": "Sunglasses",
+      "category": "garment_type",
+      "aliases": [
+        "sunglasses"
+      ]
+    },
+    {
+      "id": "6669ccb37c39f65c573db438",
+      "canonical_name": "cardigan",
+      "display_name": "Cardigans",
+      "category": "garment_type",
+      "aliases": [
+        "cardigan",
+        "cardigans"
+      ]
+    },
+    {
+      "id": "641b5b1354af9f0eb8b372ff",
+      "canonical_name": "jacket",
+      "display_name": "Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "jacket",
+        "jackets"
+      ]
+    },
+    {
+      "id": "64a5e05b5487b90ef3d21525",
+      "canonical_name": "short",
+      "display_name": "Shorts",
+      "category": "garment_type",
+      "aliases": [
+        "shorts",
+        "short"
+      ]
+    },
+    {
+      "id": "64a5defc2bf9360ef81c1457",
+      "canonical_name": "skirt",
+      "display_name": "Skirts",
+      "category": "garment_type",
+      "aliases": [
+        "skirts"
+      ]
+    },
+    {
+      "id": "64a5e0182bf9360ef81c1525",
+      "canonical_name": "jean",
+      "display_name": "Jeans",
+      "category": "garment_type",
+      "aliases": [
+        "jeans",
+        "jean"
+      ]
+    },
+    {
+      "id": "64a5e2142bf9360ef81c167d",
+      "canonical_name": "sweater",
+      "display_name": "Sweaters",
+      "category": "garment_type",
+      "aliases": [
+        "sweaters",
+        "sweater"
+      ]
+    },
+    {
+      "id": "640a06c648fb470eec7379c0",
+      "canonical_name": "shoe",
+      "display_name": "Shoes",
+      "category": "garment_type",
+      "aliases": [
+        "shoes"
+      ]
+    },
+    {
+      "id": "64a5df0c2bf9360ef81c145f",
+      "canonical_name": "top",
+      "display_name": "Tops",
+      "category": "garment_type",
+      "aliases": [
+        "tops"
+      ]
+    },
+    {
+      "id": "6807ea45e756507cc288d22b",
+      "canonical_name": "cardigan",
+      "display_name": "Cardigans",
+      "category": "garment_type",
+      "aliases": [
+        "cardigans"
+      ]
+    },
+    {
+      "id": "64a5df5a5487b90ef3d21445",
+      "canonical_name": "jacket",
+      "display_name": "Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "jackets"
+      ]
+    },
+    {
+      "id": "64a5e1365487b90ef3d21607",
+      "canonical_name": "blazer",
+      "display_name": "Blazers",
+      "category": "garment_type",
+      "aliases": [
+        "blazers",
+        "blazer"
+      ]
+    },
+    {
+      "id": "668d5b6270f08f2949eb13dd",
+      "canonical_name": "coat",
+      "display_name": "Coats",
+      "category": "garment_type",
+      "aliases": [
+        "coat",
+        "coats"
+      ]
+    },
+    {
+      "id": "6855d6c35f98b7427bc87927",
+      "canonical_name": "at-home",
+      "display_name": "At Home",
+      "category": "location",
+      "aliases": [
+        "at home"
+      ]
+    },
+    {
+      "id": "687faacb0f469819a2f660aa",
+      "canonical_name": "weekend-vacation-dress",
+      "display_name": "Weekend/Vacation Dresses",
+      "category": "occasion",
+      "aliases": [
+        "weekend/vacation dresses"
+      ]
+    },
+    {
+      "id": "6966be79842c4b0af2a34b7b",
+      "canonical_name": "fur",
+      "display_name": "Furs",
+      "category": "garment_type",
+      "aliases": [
+        "furs"
+      ]
+    },
+    {
+      "id": "677ed8bc813e140aee22542b",
+      "canonical_name": "activewear",
+      "display_name": "Activewear",
+      "category": "garment_type",
+      "aliases": [
+        "activewear"
+      ]
+    },
+    {
+      "id": "68373be10538577f0611b6f6",
+      "canonical_name": "suit",
+      "display_name": "Suits",
+      "category": "garment_type",
+      "aliases": [
+        "suits",
+        "suit"
+      ]
+    },
+    {
+      "id": "666c6b6f9664a83d8cb3b4ab",
+      "canonical_name": "outerwear",
+      "display_name": "Outerwear",
+      "category": "garment_type",
+      "aliases": [
+        "outerwear"
+      ]
+    },
+    {
+      "id": "66672faee3a4a658c07302d1",
+      "canonical_name": "belt",
+      "display_name": "Belts",
+      "category": "garment_type",
+      "aliases": [
+        "belt",
+        "belts"
+      ]
+    },
+    {
+      "id": "64a5e7cd5487b90ef3d219d1",
+      "canonical_name": "handbag",
+      "display_name": "Handbags",
+      "category": "garment_type",
+      "aliases": [
+        "handbags"
+      ]
+    },
+    {
+      "id": "641b51cc54af9f0eb8b37113",
+      "canonical_name": "blazer",
+      "display_name": "Blazers",
+      "category": "garment_type",
+      "aliases": [
+        "blazer"
+      ]
+    },
+    {
+      "id": "64a5e4845487b90ef3d21726",
+      "canonical_name": "belt",
+      "display_name": "Belts",
+      "category": "garment_type",
+      "aliases": [
+        "belts"
+      ]
+    },
+    {
+      "id": "6669ba6e7c39f65c573daa80",
+      "canonical_name": "swim",
+      "display_name": "Swim",
+      "category": "garment_type",
+      "aliases": [
+        "swim"
+      ]
+    },
+    {
+      "id": "691c826c0295072e0e7fdac9",
+      "canonical_name": "fur-collar",
+      "display_name": "Fur Collars",
+      "category": "garment_type",
+      "aliases": [
+        "fur collar"
+      ]
+    },
+    {
+      "id": "666c807f4bace966a651b7e7",
+      "canonical_name": "accessory",
+      "display_name": "Accessories",
+      "category": "garment_type",
+      "aliases": [
+        "accessories",
+        "accessory"
+      ]
+    },
+    {
+      "id": "6699203a618ec666cdf14d2f",
+      "canonical_name": "undergarment",
+      "display_name": "Undergarments",
+      "category": "garment_type",
+      "aliases": [
+        "undergarment",
+        "undergarments"
+      ]
+    },
+    {
+      "id": "66676e19940aa20aeae6672d",
+      "canonical_name": "scarf",
+      "display_name": "Scarves",
+      "category": "garment_type",
+      "aliases": [
+        "scarf",
+        "scarves"
+      ]
+    },
+    {
+      "id": "64a5e52c2bf9360ef81c18b9",
+      "canonical_name": "scarf",
+      "display_name": "Scarves",
+      "category": "garment_type",
+      "aliases": [
+        "scarves"
+      ]
+    },
+    {
+      "id": "64a5e29d2bf9360ef81c16f6",
+      "canonical_name": "coat",
+      "display_name": "Coats",
+      "category": "garment_type",
+      "aliases": [
+        "coats"
+      ]
+    },
+    {
+      "id": "66e492e47e216e0dee9a3bcb",
+      "canonical_name": "spring-summer",
+      "display_name": "Spring Summer",
+      "category": "season",
+      "aliases": [
+        "spring summer"
+      ]
+    },
+    {
+      "id": "69c1822850564f090a175c61",
+      "canonical_name": "romper",
+      "display_name": "Rompers",
+      "category": "garment_type",
+      "aliases": [
+        "rompers",
+        "romper"
+      ]
+    },
+    {
+      "id": "6668a6ca92e3f73f5cb11b45",
+      "canonical_name": "suit",
+      "display_name": "Suits",
+      "category": "garment_type",
+      "aliases": [
+        "suit"
+      ]
+    },
+    {
+      "id": "66672ea86a126a5bb3811321",
+      "canonical_name": "short",
+      "display_name": "Shorts",
+      "category": "garment_type",
+      "aliases": [
+        "short"
+      ]
+    },
+    {
+      "id": "641b50fa54af9f0eb8b370b4",
+      "canonical_name": "sweater",
+      "display_name": "Sweaters",
+      "category": "garment_type",
+      "aliases": [
+        "sweater"
+      ]
+    },
+    {
+      "id": "6824e9718aeec85d5f794afc",
+      "canonical_name": "bodysuit",
+      "display_name": "Bodysuits",
+      "category": "garment_type",
+      "aliases": [
+        "bodysuits",
+        "bodysuit"
+      ]
+    },
+    {
+      "id": "67855c4099c7262c71b5bb72",
+      "canonical_name": "intimate",
+      "display_name": "Intimates",
+      "category": "garment_type",
+      "aliases": [
+        "intimates"
+      ]
+    },
+    {
+      "id": "680a4eff6f914f153673df75",
+      "canonical_name": "vest",
+      "display_name": "Vests",
+      "category": "garment_type",
+      "aliases": [
+        "vests",
+        "vest"
+      ]
+    },
+    {
+      "id": "691c7d000295072e0e7fd694",
+      "canonical_name": "dickey",
+      "display_name": "Dickeys",
+      "category": "garment_type",
+      "aliases": [
+        "dickeys",
+        "dickey",
+        "dickies"
+      ]
+    },
+    {
+      "id": "68e6a37d7598fc7873bd646c",
+      "canonical_name": "jacket-blazer",
+      "display_name": "Jackets/Blazers",
+      "category": "garment_type",
+      "aliases": [
+        "jackets/blazers"
+      ]
+    },
+    {
+      "id": "682b891140aeb437ab93e4bf",
+      "canonical_name": "swimwear",
+      "display_name": "Swimwear",
+      "category": "garment_type",
+      "aliases": [
+        "swimwear"
+      ]
+    },
+    {
+      "id": "67460427e37cb250dde518f9",
+      "canonical_name": "dickey",
+      "display_name": "Dickeys",
+      "category": "garment_type",
+      "aliases": [
+        "dickey"
+      ]
+    },
+    {
+      "id": "69c190aabd3149090dd5ed25",
+      "canonical_name": "spring-summer-work",
+      "display_name": "SS 26 Work",
+      "category": "workflow_status",
+      "aliases": [
+        "ss 26 work"
+      ]
+    },
+    {
+      "id": "69c190ccbd3149090dd5ed3e",
+      "canonical_name": "spring-summer-weekend",
+      "display_name": "SS 26 Weekend",
+      "category": "workflow_status",
+      "aliases": [
+        "ss 26 weekend"
+      ]
+    },
+    {
+      "id": "69e7eace2a7675d559a8db27",
+      "canonical_name": "tank-short-sleeve-tee",
+      "display_name": "Tanks and Short Sleeve Tees",
+      "category": "garment_type",
+      "aliases": [
+        "tanks and short sleeve tees"
+      ]
+    },
+    {
+      "id": "69e91f3781c56f0002039f28",
+      "canonical_name": "university-of-texas",
+      "display_name": "University of Texas",
+      "category": "location",
+      "aliases": [
+        "university of texas"
+      ]
+    },
+    {
+      "id": "69e7cf81c63e91093a4d77bc",
+      "canonical_name": "short-skort",
+      "display_name": "Shorts and Skorts",
+      "category": "garment_type",
+      "aliases": [
+        "shorts and skorts"
+      ]
+    },
+    {
+      "id": "69e7eaba65eb751a09f22f8d",
+      "canonical_name": "long-sleeve-top",
+      "display_name": "Long Sleeve Tops",
+      "category": "garment_type",
+      "aliases": [
+        "long sleeve tops"
+      ]
+    },
+    {
+      "id": "69e159988343f6091c127df2",
+      "canonical_name": "hiking",
+      "display_name": "Hiking",
+      "category": "occasion",
+      "aliases": [
+        "hiking"
+      ]
+    },
+    {
+      "id": "69e65591c63e91093a4c78a9",
+      "canonical_name": "hunting",
+      "display_name": "Hunting",
+      "category": "occasion",
+      "aliases": [
+        "hunting"
+      ]
+    },
+    {
+      "id": "691cdddb18532f0af6312c10",
+      "canonical_name": "blazer-jacket",
+      "display_name": "Blazer/Jacket",
+      "category": "garment_type",
+      "aliases": [
+        "blazer/jacket"
+      ]
+    },
+    {
+      "id": "66a68347d6e591080b44898e",
+      "canonical_name": "sandal",
+      "display_name": "Sandals",
+      "category": "garment_type",
+      "aliases": [
+        "sandal"
+      ]
+    },
+    {
+      "id": "69b9bfc14504b6090b5ca14b",
+      "canonical_name": "trying-to-return",
+      "display_name": "Trying to Return",
+      "category": "workflow_status",
+      "aliases": [
+        "trying to return"
+      ]
+    },
+    {
+      "id": "663389d0c6cb780af3729a60",
+      "canonical_name": "blouse",
+      "display_name": "Blouses",
+      "category": "garment_type",
+      "aliases": [
+        "blouses",
+        "blouse"
+      ]
+    },
+    {
+      "id": "66338aeb43ae3c7fcd6e7dc8",
+      "canonical_name": "base-layer",
+      "display_name": "Base Layers",
+      "category": "garment_type",
+      "aliases": [
+        "base layer"
+      ]
+    },
+    {
+      "id": "668309b9a8be45604b69b6af",
+      "canonical_name": "outerwear",
+      "display_name": "Outerwear",
+      "category": "garment_type",
+      "aliases": [
+        "outer wear"
+      ]
+    },
+    {
+      "id": "668306640b9ee45c9a0fb661",
+      "canonical_name": "inspiration",
+      "display_name": "Inspiration",
+      "category": "workflow_status",
+      "aliases": [
+        "inspo"
+      ]
+    },
+    {
+      "id": "69495b3eda635e0b053464a8",
+      "canonical_name": "too-big",
+      "display_name": "Too Big",
+      "category": "workflow_status",
+      "aliases": [
+        "too big"
+      ]
+    },
+    {
+      "id": "66672e6ae3a4a658c0730288",
+      "canonical_name": "accessory",
+      "display_name": "Accessories",
+      "category": "garment_type",
+      "aliases": [
+        "accessory"
+      ]
+    },
+    {
+      "id": "66a3dea41e41d54778a4580d",
+      "canonical_name": "la",
+      "display_name": "LA",
+      "category": "location",
+      "aliases": [
+        "la"
+      ]
+    },
+    {
+      "id": "681bb5d39d34201a56728e23",
+      "canonical_name": "glasses",
+      "display_name": "Glasses",
+      "category": "garment_type",
+      "aliases": [
+        "glasses"
+      ]
+    },
+    {
+      "id": "66e3475f22fb444533c3ffb4",
+      "canonical_name": "sacramento",
+      "display_name": "Sacramento",
+      "category": "location",
+      "aliases": [
+        "sacramento"
+      ]
+    },
+    {
+      "id": "66a683aadb41862c7f3d578f",
+      "canonical_name": "boot",
+      "display_name": "Boots",
+      "category": "garment_type",
+      "aliases": [
+        "boot",
+        "boots"
+      ]
+    },
+    {
+      "id": "691f44bb67236b34bcb56847",
+      "canonical_name": "knitwear",
+      "display_name": "Knitwear",
+      "category": "garment_type",
+      "aliases": [
+        "knitwear"
+      ]
+    },
+    {
+      "id": "69ef868582c2dc9b4b81ef7c",
+      "canonical_name": "do-not-use",
+      "display_name": "Do Not Use",
+      "category": "noise",
+      "aliases": [
+        "do not use - we need to replace"
+      ]
+    },
+    {
+      "id": "67067b5b2884d50fb0aeffcf",
+      "canonical_name": "summer-spring",
+      "display_name": "Summer Spring",
+      "category": "season",
+      "aliases": [
+        "s/s"
+      ]
+    },
+    {
+      "id": "698bb73f5e80f366427b3782",
+      "canonical_name": "tank-top",
+      "display_name": "Tank Tops",
+      "category": "garment_type",
+      "aliases": [
+        "tank tops",
+        "tank"
+      ]
+    },
+    {
+      "id": "66c513a5e02fc002f4ffacbb",
+      "canonical_name": "resort",
+      "display_name": "Resort",
+      "category": "occasion",
+      "aliases": [
+        "resort"
+      ]
+    },
+    {
+      "id": "681b72930c9b060e00dffabc",
+      "canonical_name": "tie",
+      "display_name": "Ties",
+      "category": "garment_type",
+      "aliases": [
+        "ties"
+      ]
+    },
+    {
+      "id": "682f3aa9893a270afa445a14",
+      "canonical_name": "shirt",
+      "display_name": "Shirts",
+      "category": "garment_type",
+      "aliases": [
+        "shirts"
+      ]
+    },
+    {
+      "id": "667476783f99c60bc539df35",
+      "canonical_name": "heel",
+      "display_name": "Heels",
+      "category": "garment_type",
+      "aliases": [
+        "heel",
+        "heels"
+      ]
+    },
+    {
+      "id": "66759b01c5397f166e452568",
+      "canonical_name": "pajama",
+      "display_name": "Pajamas",
+      "category": "garment_type",
+      "aliases": [
+        "pajamas"
+      ]
+    },
+    {
+      "id": "6977b6242898db0af358d855",
+      "canonical_name": "eveningwear",
+      "display_name": "Eveningwear",
+      "category": "garment_type",
+      "aliases": [
+        "eveningwear"
+      ]
+    },
+    {
+      "id": "64ad80378c270538ecd770dc",
+      "canonical_name": "casual",
+      "display_name": "Casual",
+      "category": "occasion",
+      "aliases": [
+        "casual"
+      ]
+    },
+    {
+      "id": "68484276d9c9c5232bb17be5",
+      "canonical_name": "set",
+      "display_name": "Sets",
+      "category": "garment_type",
+      "aliases": [
+        "sets",
+        "set"
+      ]
+    },
+    {
+      "id": "66688205634be73416025c36",
+      "canonical_name": "set",
+      "display_name": "Sets",
+      "category": "garment_type",
+      "aliases": [
+        "set"
+      ]
+    },
+    {
+      "id": "69a87967cd971176ed885c73",
+      "canonical_name": "beach-robe",
+      "display_name": "Beach Robes",
+      "category": "garment_type",
+      "aliases": [
+        "beach robes"
+      ]
+    },
+    {
+      "id": "698bbb0e5e80f366427b39b8",
+      "canonical_name": "longsleeve-top",
+      "display_name": "Longsleeve Tops",
+      "category": "garment_type",
+      "aliases": [
+        "longsleeve tops"
+      ]
+    },
+    {
+      "id": "698baf525e80f366427b326c",
+      "canonical_name": "camisole",
+      "display_name": "Camisoles",
+      "category": "garment_type",
+      "aliases": [
+        "camisoles"
+      ]
+    },
+    {
+      "id": "698bad1d18d32f0950ba4f93",
+      "canonical_name": "mini-skirt",
+      "display_name": "Mini Skirts",
+      "category": "garment_type",
+      "aliases": [
+        "mini skirts"
+      ]
+    },
+    {
+      "id": "698bacaf5e80f366427b2fa9",
+      "canonical_name": "knee-skirt",
+      "display_name": "Knee Skirts",
+      "category": "garment_type",
+      "aliases": [
+        "knee skirts"
+      ]
+    },
+    {
+      "id": "698baaff18d32f0950ba4e04",
+      "canonical_name": "dress-jacket",
+      "display_name": "Dress Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "dress jackets"
+      ]
+    },
+    {
+      "id": "6785549a99c7262c71b5b364",
+      "canonical_name": "sports-bra",
+      "display_name": "Sports Bras",
+      "category": "garment_type",
+      "aliases": [
+        "sportsbra"
+      ]
+    },
+    {
+      "id": "677edcd4813e140aee227380",
+      "canonical_name": "legging",
+      "display_name": "Leggings",
+      "category": "garment_type",
+      "aliases": [
+        "legging",
+        "leggings"
+      ]
+    },
+    {
+      "id": "681bbf6d9d34201a567295da",
+      "canonical_name": "hat",
+      "display_name": "Hats",
+      "category": "garment_type",
+      "aliases": [
+        "hat"
+      ]
+    },
+    {
+      "id": "691f88c83b025a2d1cdcd886",
+      "canonical_name": "blazer-jacket",
+      "display_name": "Blazers/Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "blazers/jackets"
+      ]
+    },
+    {
+      "id": "69f3b14fcab763d8227b43b9",
+      "canonical_name": "matching-set",
+      "display_name": "Matching Sets",
+      "category": "garment_type",
+      "aliases": [
+        "matching set"
+      ]
+    },
+    {
+      "id": "682f3abbcd7fad0af3731ffb",
+      "canonical_name": "sock",
+      "display_name": "Socks",
+      "category": "garment_type",
+      "aliases": [
+        "socks"
+      ]
+    },
+    {
+      "id": "66afa26ea4f96b0aeb7fd267",
+      "canonical_name": "flat",
+      "display_name": "Flats",
+      "category": "garment_type",
+      "aliases": [
+        "flat",
+        "flats"
+      ]
+    },
+    {
+      "id": "66afa299a4f96b0aeb7fd284",
+      "canonical_name": "necklace",
+      "display_name": "Necklaces",
+      "category": "garment_type",
+      "aliases": [
+        "necklace",
+        "necklaces"
+      ]
+    },
+    {
+      "id": "66afa79ca4f96b0aeb7fd357",
+      "canonical_name": "lingerie-hosiery",
+      "display_name": "Lingerie/Hosiery",
+      "category": "garment_type",
+      "aliases": [
+        "lingere/hosiery"
+      ]
+    },
+    {
+      "id": "66a6838dd6e591080b448a2b",
+      "canonical_name": "sneaker",
+      "display_name": "Sneakers",
+      "category": "garment_type",
+      "aliases": [
+        "sneaker"
+      ]
+    },
+    {
+      "id": "66aa9dd6cde5fe08e46b534a",
+      "canonical_name": "2024",
+      "display_name": "2024",
+      "category": "workflow_status",
+      "aliases": [
+        "2024"
+      ]
+    },
+    {
+      "id": "68ae7c15f979a103a1e65998",
+      "canonical_name": "eyewear",
+      "display_name": "Eyewear",
+      "category": "garment_type",
+      "aliases": [
+        "eyewear"
+      ]
+    },
+    {
+      "id": "682f3aee893a270afa445a6c",
+      "canonical_name": "polo",
+      "display_name": "Polos",
+      "category": "garment_type",
+      "aliases": [
+        "polos"
+      ]
+    },
+    {
+      "id": "682f3c79cd7fad0af3732161",
+      "canonical_name": "t-shirt",
+      "display_name": "T-Shirts",
+      "category": "garment_type",
+      "aliases": [
+        "t-shirts",
+        "t-shirt"
+      ]
+    },
+    {
+      "id": "682f3c6fcd7fad0af373214f",
+      "canonical_name": "watch",
+      "display_name": "Watches",
+      "category": "garment_type",
+      "aliases": [
+        "watches"
+      ]
+    },
+    {
+      "id": "668d5c7770f08f2949eb1405",
+      "canonical_name": "romper",
+      "display_name": "Rompers",
+      "category": "garment_type",
+      "aliases": [
+        "romper"
+      ]
+    },
+    {
+      "id": "672ab143abb8eb41dc61c7bf",
+      "canonical_name": "tight",
+      "display_name": "Tights",
+      "category": "garment_type",
+      "aliases": [
+        "tights",
+        "tight"
+      ]
+    },
+    {
+      "id": "68a722ed2fa5aa6a5abad38b",
+      "canonical_name": "sneaker-jean",
+      "display_name": "Sneaker Jeans",
+      "category": "garment_type",
+      "aliases": [
+        "sneaker jeans"
+      ]
+    },
+    {
+      "id": "68a722442fa5aa6a5abad36d",
+      "canonical_name": "heel-jean",
+      "display_name": "Heel Jeans",
+      "category": "garment_type",
+      "aliases": [
+        "heel jeans"
+      ]
+    },
+    {
+      "id": "691cbe98e5cd3a0af46fe7c5",
+      "canonical_name": "gown",
+      "display_name": "Gowns",
+      "category": "garment_type",
+      "aliases": [
+        "gown"
+      ]
+    },
+    {
+      "id": "68ed619e17f8950d439f12a7",
+      "canonical_name": "to-style",
+      "display_name": "To Style",
+      "category": "workflow_status",
+      "aliases": [
+        "to style"
+      ]
+    },
+    {
+      "id": "680a5c3dee6bba245d864150",
+      "canonical_name": "mask",
+      "display_name": "Masks",
+      "category": "garment_type",
+      "aliases": [
+        "masks"
+      ]
+    },
+    {
+      "id": "67c3d10063a7b31977e7daa7",
+      "canonical_name": "button-up",
+      "display_name": "Button Ups",
+      "category": "garment_type",
+      "aliases": [
+        "button up"
+      ]
+    },
+    {
+      "id": "674f2e37890b5e480c7068a4",
+      "canonical_name": "swimsuit",
+      "display_name": "Swimsuits",
+      "category": "garment_type",
+      "aliases": [
+        "swimsuit"
+      ]
+    },
+    {
+      "id": "652d5eaed2c4470a79191cd4",
+      "canonical_name": "spring",
+      "display_name": "Spring",
+      "category": "season",
+      "aliases": [
+        "spring"
+      ]
+    },
+    {
+      "id": "667475832730890af04662ef",
+      "canonical_name": "trouser",
+      "display_name": "Trousers",
+      "category": "garment_type",
+      "aliases": [
+        "trouser"
+      ]
+    },
+    {
+      "id": "692484ce2edeb90b05b0a27d",
+      "canonical_name": "kimono",
+      "display_name": "Kimonos",
+      "category": "garment_type",
+      "aliases": [
+        "kimonos"
+      ]
+    },
+    {
+      "id": "681e42a2d200020afa62a9eb",
+      "canonical_name": "sweatshirt",
+      "display_name": "Sweatshirts",
+      "category": "garment_type",
+      "aliases": [
+        "sweatshirts"
+      ]
+    },
+    {
+      "id": "64a5de932bf9360ef81c143a",
+      "canonical_name": "jewelry",
+      "display_name": "Jewelry",
+      "category": "garment_type",
+      "aliases": [
+        "jewelry"
+      ]
+    },
+    {
+      "id": "641b5125bf5dee0ef5c7fe4f",
+      "canonical_name": "blouse",
+      "display_name": "Blouses",
+      "category": "garment_type",
+      "aliases": [
+        "blouse"
+      ]
+    },
+    {
+      "id": "668d5b6a70f08f2949eb13e7",
+      "canonical_name": "jumpsuit",
+      "display_name": "Jumpsuits",
+      "category": "garment_type",
+      "aliases": [
+        "jumpsuit"
+      ]
+    },
+    {
+      "id": "66743421ad60f85397d53115",
+      "canonical_name": "robe",
+      "display_name": "Robes",
+      "category": "garment_type",
+      "aliases": [
+        "robe"
+      ]
+    },
+    {
+      "id": "67770b3acbb7485ee2667eb2",
+      "canonical_name": "tight",
+      "display_name": "Tights",
+      "category": "garment_type",
+      "aliases": [
+        "tight"
+      ]
+    },
+    {
+      "id": "6717d5acf0df3d20ab557ea0",
+      "canonical_name": "ski",
+      "display_name": "Ski",
+      "category": "occasion",
+      "aliases": [
+        "ski"
+      ]
+    },
+    {
+      "id": "669037a59ca3200bd83d260c",
+      "canonical_name": "lake-house",
+      "display_name": "Lake House",
+      "category": "location",
+      "aliases": [
+        "lake house"
+      ]
+    },
+    {
+      "id": "64a5e3665487b90ef3d2169e",
+      "canonical_name": "lounge",
+      "display_name": "Lounge",
+      "category": "garment_type",
+      "aliases": [
+        "lounge"
+      ]
+    },
+    {
+      "id": "6536a307840941039f30b101",
+      "canonical_name": "travel",
+      "display_name": "Travel",
+      "category": "occasion",
+      "aliases": [
+        "travel"
+      ]
+    },
+    {
+      "id": "69cd801b9d3a689194652c3d",
+      "canonical_name": "athletic-jacket",
+      "display_name": "Athletic Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "athletic jackets"
+      ]
+    },
+    {
+      "id": "69989e417f0bfe091be98929",
+      "canonical_name": "athletic-top",
+      "display_name": "Athletic Tops",
+      "category": "garment_type",
+      "aliases": [
+        "athletic tops"
+      ]
+    },
+    {
+      "id": "69cc0c17255f7a090afb40fa",
+      "canonical_name": "clutch-pouch",
+      "display_name": "Clutch/Pouch",
+      "category": "garment_type",
+      "aliases": [
+        "clutch/pouch"
+      ]
+    },
+    {
+      "id": "6998a60f7f0bfe091be98fcc",
+      "canonical_name": "athletic-vest",
+      "display_name": "Athletic Vests",
+      "category": "garment_type",
+      "aliases": [
+        "athletic vests"
+      ]
+    },
+    {
+      "id": "6998af043d3f4c09348e3d7a",
+      "canonical_name": "athletic-onepiece",
+      "display_name": "Athletic Onepieces",
+      "category": "garment_type",
+      "aliases": [
+        "athletic onepiece"
+      ]
+    },
+    {
+      "id": "69989e373d3f4c09348e2b1a",
+      "canonical_name": "athletic-pant",
+      "display_name": "Athletic Pants",
+      "category": "garment_type",
+      "aliases": [
+        "athletic pants"
+      ]
+    },
+    {
+      "id": "6998a7743d3f4c09348e3408",
+      "canonical_name": "sweater-drawer",
+      "display_name": "Sweater Drawer",
+      "category": "workflow_status",
+      "aliases": [
+        "sweater drawer"
+      ]
+    },
+    {
+      "id": "6998a6f97f0bfe091be990f8",
+      "canonical_name": "athletic-skirt",
+      "display_name": "Athletic Skirts",
+      "category": "garment_type",
+      "aliases": [
+        "athletic skirts"
+      ]
+    },
+    {
+      "id": "69989e2a7f0bfe091be98912",
+      "canonical_name": "athletic-shoe",
+      "display_name": "Athletic Shoes",
+      "category": "garment_type",
+      "aliases": [
+        "athletic shoes"
+      ]
+    },
+    {
+      "id": "697cfc989a73783e205311b5",
+      "canonical_name": "cl",
+      "display_name": "CL",
+      "category": "noise",
+      "aliases": [
+        "cl"
+      ]
+    },
+    {
+      "id": "697bc7adbdaa1c0b21ebc869",
+      "canonical_name": "tank",
+      "display_name": "Tanks",
+      "category": "garment_type",
+      "aliases": [
+        "tank"
+      ]
+    },
+    {
+      "id": "6977a9852898db0af358ce2e",
+      "canonical_name": "do-not-style",
+      "display_name": "Do Not Style",
+      "category": "workflow_status",
+      "aliases": [
+        "do not style"
+      ]
+    },
+    {
+      "id": "641b51d454af9f0eb8b37120",
+      "canonical_name": "legging",
+      "display_name": "Leggings",
+      "category": "garment_type",
+      "aliases": [
+        "leggings"
+      ]
+    },
+    {
+      "id": "641b511a54af9f0eb8b370c6",
+      "canonical_name": "athleisure",
+      "display_name": "Athleisure",
+      "category": "garment_type",
+      "aliases": [
+        "athleisure"
+      ]
+    },
+    {
+      "id": "641b50ec54af9f0eb8b370a5",
+      "canonical_name": "t-shirt",
+      "display_name": "T-Shirts",
+      "category": "garment_type",
+      "aliases": [
+        "t-shirt"
+      ]
+    },
+    {
+      "id": "66a26fb73f27d80aeb7197f7",
+      "canonical_name": "bodysuit",
+      "display_name": "Bodysuits",
+      "category": "garment_type",
+      "aliases": [
+        "bodysuit"
+      ]
+    },
+    {
+      "id": "682ce9799491f00af6e0ae41",
+      "canonical_name": "glove",
+      "display_name": "Gloves",
+      "category": "garment_type",
+      "aliases": [
+        "gloves"
+      ]
+    },
+    {
+      "id": "69c6ecfc59a302121a9176d4",
+      "canonical_name": "underpinning",
+      "display_name": "Underpinnings",
+      "category": "garment_type",
+      "aliases": [
+        "underpinnings"
+      ]
+    },
+    {
+      "id": "68d6e9fac8d32d420a0c8512",
+      "canonical_name": "transition-in-person",
+      "display_name": "Transition When In Person",
+      "category": "workflow_status",
+      "aliases": [
+        "transition when in person"
+      ]
+    },
+    {
+      "id": "678ec5f90ad9c80aeff67f33",
+      "canonical_name": "jean-flat",
+      "display_name": "Jeans with Flats",
+      "category": "noise",
+      "aliases": [
+        "jeans with flats"
+      ]
+    },
+    {
+      "id": "678ec56d1b2df70af1cee61e",
+      "canonical_name": "jean-heel",
+      "display_name": "Jeans with Heel",
+      "category": "noise",
+      "aliases": [
+        "jeans with heel"
+      ]
+    },
+    {
+      "id": "678ec5d41b2df70af1cee67c",
+      "canonical_name": "jean-cropped",
+      "display_name": "Jeans Cropped No Boot",
+      "category": "noise",
+      "aliases": [
+        "jeans cropped no boot"
+      ]
+    },
+    {
+      "id": "69af0d2c58887e092a1e67a9",
+      "canonical_name": "chicago-studio",
+      "display_name": "Chicago Studio",
+      "category": "location",
+      "aliases": [
+        "chicago studio"
+      ]
+    },
+    {
+      "id": "696a603ba576490af8de838d",
+      "canonical_name": "coverup",
+      "display_name": "Coverups",
+      "category": "garment_type",
+      "aliases": [
+        "coverups"
+      ]
+    },
+    {
+      "id": "666b348b055bc91dd5f3efe2",
+      "canonical_name": "winter",
+      "display_name": "Winter",
+      "category": "season",
+      "aliases": [
+        "winter"
+      ]
+    },
+    {
+      "id": "674f372789b00a0aed1718f7",
+      "canonical_name": "vest",
+      "display_name": "Vests",
+      "category": "garment_type",
+      "aliases": [
+        "vest"
+      ]
+    },
+    {
+      "id": "66a26ec03f27d80aeb7196b1",
+      "canonical_name": "heel",
+      "display_name": "Heels",
+      "category": "garment_type",
+      "aliases": [
+        "heels"
+      ]
+    },
+    {
+      "id": "6894c86485fc040b245a41a1",
+      "canonical_name": "sleepwear",
+      "display_name": "Sleepwear",
+      "category": "garment_type",
+      "aliases": [
+        "sleepwear"
+      ]
+    },
+    {
+      "id": "6894c6db85fc040b245a40a8",
+      "canonical_name": "hair-accessory",
+      "display_name": "Hair Accessories",
+      "category": "garment_type",
+      "aliases": [
+        "hair accessories"
+      ]
+    },
+    {
+      "id": "64a5e18f2bf9360ef81c15fd",
+      "canonical_name": "maternity",
+      "display_name": "Maternity",
+      "category": "garment_type",
+      "aliases": [
+        "maternity"
+      ]
+    },
+    {
+      "id": "672ab02aabb8eb41dc61c260",
+      "canonical_name": "bottom",
+      "display_name": "Bottoms",
+      "category": "garment_type",
+      "aliases": [
+        "bottoms"
+      ]
+    },
+    {
+      "id": "672ab01babb8eb41dc61c214",
+      "canonical_name": "top-blouse",
+      "display_name": "Tops/Blouses",
+      "category": "garment_type",
+      "aliases": [
+        "tops/blouses"
+      ]
+    },
+    {
+      "id": "672ab1b83a5403348195b450",
+      "canonical_name": "spring-2023",
+      "display_name": "Spring 2023",
+      "category": "workflow_status",
+      "aliases": [
+        "spring 2023"
+      ]
+    },
+    {
+      "id": "676b23ef0f15820aeff9a0b2",
+      "canonical_name": "handmade",
+      "display_name": "Handmade",
+      "category": "noise",
+      "aliases": [
+        "handmade"
+      ]
+    },
+    {
+      "id": "672aae5aabb8eb41dc61b653",
+      "canonical_name": "personal-purchase",
+      "display_name": "Personal Purchase",
+      "category": "noise",
+      "aliases": [
+        "personal purchase"
+      ]
+    },
+    {
+      "id": "672ab04e3a5403348195af49",
+      "canonical_name": "necklace",
+      "display_name": "Necklaces",
+      "category": "garment_type",
+      "aliases": [
+        "necklaces"
+      ]
+    },
+    {
+      "id": "672ab2d2abb8eb41dc61cc2b",
+      "canonical_name": "earring",
+      "display_name": "Earrings",
+      "category": "garment_type",
+      "aliases": [
+        "earrings"
+      ]
+    },
+    {
+      "id": "672ab00babb8eb41dc61c1dd",
+      "canonical_name": "coat-jacket",
+      "display_name": "Coats/Jackets",
+      "category": "garment_type",
+      "aliases": [
+        "coats/jackets"
+      ]
+    },
+    {
+      "id": "672aafd23a5403348195ac64",
+      "canonical_name": "winter-2024",
+      "display_name": "Winter 2024",
+      "category": "workflow_status",
+      "aliases": [
+        "winter 2024"
+      ]
+    },
+    {
+      "id": "67425b7e19c24a0461b2b91e",
+      "canonical_name": "purse",
+      "display_name": "Purses",
+      "category": "garment_type",
+      "aliases": [
+        "purse"
+      ]
+    },
+    {
+      "id": "672ab03f3a5403348195af3b",
+      "canonical_name": "spring-2024",
+      "display_name": "Spring 2024",
+      "category": "workflow_status",
+      "aliases": [
+        "spring 2024"
+      ]
+    },
+    {
+      "id": "672ab11cabb8eb41dc61c749",
+      "canonical_name": "winter-2023",
+      "display_name": "Winter 2023",
+      "category": "workflow_status",
+      "aliases": [
+        "winter 2023"
+      ]
+    },
+    {
+      "id": "672ab098abb8eb41dc61c500",
+      "canonical_name": "lingerie",
+      "display_name": "Lingerie",
+      "category": "garment_type",
+      "aliases": [
+        "lingerie"
+      ]
+    },
+    {
+      "id": "666b2992055bc91dd5f3ecb4",
+      "canonical_name": "shapewear",
+      "display_name": "Shapewear",
+      "category": "garment_type",
+      "aliases": [
+        "shapewear"
+      ]
+    },
+    {
+      "id": "64a83a927a6e5d7fd2367077",
+      "canonical_name": "weekend",
+      "display_name": "Weekend",
+      "category": "occasion",
+      "aliases": [
+        "weekend"
+      ]
+    },
+    {
+      "id": "68b6ee908d6d13409bd5d486",
+      "canonical_name": "dickey",
+      "display_name": "Dickeys",
+      "category": "garment_type",
+      "aliases": [
+        "dickies"
+      ]
+    },
+    {
+      "id": "6717d5bc2870ad5b20b02479",
+      "canonical_name": "active",
+      "display_name": "Active",
+      "category": "garment_type",
+      "aliases": [
+        "active"
+      ]
+    },
+    {
+      "id": "69d56f996cc3ae19517af4f0",
+      "canonical_name": "favorite",
+      "display_name": "Favorites",
+      "category": "workflow_status",
+      "aliases": [
+        "fave"
+      ]
+    },
+    {
+      "id": "66672e6e6a126a5bb38112de",
+      "canonical_name": "bag",
+      "display_name": "Bags",
+      "category": "garment_type",
+      "aliases": [
+        "bag"
+      ]
+    },
+    {
+      "id": "641b50e3bf5dee0ef5c7fe32",
+      "canonical_name": "jean",
+      "display_name": "Jeans",
+      "category": "garment_type",
+      "aliases": [
+        "jean"
+      ]
+    },
+    {
+      "id": "6668857b634be73416025d96",
+      "canonical_name": "separate",
+      "display_name": "Separates",
+      "category": "garment_type",
+      "aliases": [
+        "seperates"
+      ]
+    },
+    {
+      "id": "6668751df762e70aea6dfa44",
+      "canonical_name": "summer-dress",
+      "display_name": "Summer Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "summer dresses"
+      ]
+    },
+    {
+      "id": "6995f9b06a98f9fb61fa2866",
+      "canonical_name": "needs-brand",
+      "display_name": "Needs Brand",
+      "category": "workflow_status",
+      "aliases": [
+        "needs brand"
+      ]
+    },
+    {
+      "id": "666864c5eb522d2de4bb91b4",
+      "canonical_name": "winter-dress",
+      "display_name": "Winter Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "winter dresses"
+      ]
+    },
+    {
+      "id": "6669e0307c39f65c573dbe1f",
+      "canonical_name": "play",
+      "display_name": "Play",
+      "category": "occasion",
+      "aliases": [
+        "play"
+      ]
+    },
+    {
+      "id": "6625af82ad37e67c64575493",
+      "canonical_name": "evening",
+      "display_name": "Evening",
+      "category": "occasion",
+      "aliases": [
+        "evening"
+      ]
+    },
+    {
+      "id": "67c3d12063a7b31977e7db61",
+      "canonical_name": "dressy-dress",
+      "display_name": "Dressy Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "dressy dress"
+      ]
+    },
+    {
+      "id": "67c3d0af63a7b31977e7d9ac",
+      "canonical_name": "fun-dress",
+      "display_name": "Fun Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "fun dress"
+      ]
+    },
+    {
+      "id": "67c3d037f118e6041af62803",
+      "canonical_name": "work-dress",
+      "display_name": "Work Dresses",
+      "category": "garment_type",
+      "aliases": [
+        "work dress"
+      ]
+    },
+    {
+      "id": "67c3d1cb9320f03a81e035ed",
+      "canonical_name": "dress-top",
+      "display_name": "Dress Tops",
+      "category": "garment_type",
+      "aliases": [
+        "dress top"
+      ]
+    },
+    {
+      "id": "67c3cfdaf118e6041af627a6",
+      "canonical_name": "boot",
+      "display_name": "Boots",
+      "category": "garment_type",
+      "aliases": [
+        "boots"
+      ]
+    },
+    {
+      "id": "67c3d20b9320f03a81e03713",
+      "canonical_name": "open-toe",
+      "display_name": "Open Toe",
+      "category": "garment_type",
+      "aliases": [
+        "open toe"
+      ]
+    },
+    {
+      "id": "67c3d2a563a7b31977e7e1ac",
+      "canonical_name": "flat",
+      "display_name": "Flats",
+      "category": "garment_type",
+      "aliases": [
+        "flats"
+      ]
+    },
+    {
+      "id": "67c3d012f118e6041af627c8",
+      "canonical_name": "turtleneck",
+      "display_name": "Turtlenecks",
+      "category": "garment_type",
+      "aliases": [
+        "turtleneck"
+      ]
+    },
+    {
+      "id": "64b1a6a96fbf3d0f9abc9c8f",
+      "canonical_name": "business-professional",
+      "display_name": "Business Professional",
+      "category": "occasion",
+      "aliases": [
+        "business professional"
+      ]
+    },
+    {
+      "id": "6865502c75f02a54f6954bc0",
+      "canonical_name": "sana-archive-closet",
+      "display_name": "Sana's Archive Closet",
+      "category": "noise",
+      "aliases": [
+        "sana's archive closet"
+      ]
+    },
+    {
+      "id": "680ba21f05ac9167167ade80",
+      "canonical_name": "wish-list",
+      "display_name": "Wish List",
+      "category": "workflow_status",
+      "aliases": [
+        "wish list"
+      ]
+    },
+    {
+      "id": "6941e79ef8f60a0b06dc037f",
+      "canonical_name": "shawl",
+      "display_name": "Shawls",
+      "category": "garment_type",
+      "aliases": [
+        "shawl"
+      ]
+    },
+    {
+      "id": "66f1a410ba316418687b4302",
+      "canonical_name": "undergarment",
+      "display_name": "Undergarments",
+      "category": "garment_type",
+      "aliases": [
+        "undergarments"
+      ]
+    },
+    {
+      "id": "6526cc6eacaaf20a8bc06552",
+      "canonical_name": "fall-winter",
+      "display_name": "Fall Winter",
+      "category": "season",
+      "aliases": [
+        "fall winter"
+      ]
+    }
+  ],
+  "original_tags": [
+    {
+      "id": "680fbf021d137d602848f348",
+      "name": "jumpsuits",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 2
+    },
+    {
+      "id": "672ab3fbabb8eb41dc61ce01",
+      "name": "hats",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5deb45487b90ef3d2140a",
+      "name": "pants",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 14
+    },
+    {
+      "id": "641b5167bf5dee0ef5c7fe7b",
+      "name": "shoe",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 1
+    },
+    {
+      "id": "661ea7949e9cd6146699306e",
+      "name": "top",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 2
+    },
+    {
+      "id": "66ec4035fcbca50aecfef29c",
+      "name": "transition",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666b05b4e53af40aeb0ddf01",
+      "name": "bags",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 15
+    },
+    {
+      "id": "66672eb66a126a5bb3811337",
+      "name": "skirt",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66672e326a126a5bb38112c6",
+      "name": "pant",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "640a132c48fb470eec737c8f",
+      "name": "dresses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 20
+    },
+    {
+      "id": "67fe627fbecab45fe566a92d",
+      "name": "denim",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 6
+    },
+    {
+      "id": "641b50f5bf5dee0ef5c7fe3e",
+      "name": "dress",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6746027f3f3aae20c599f672",
+      "name": "sunglasses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6669ccb37c39f65c573db438",
+      "name": "cardigan",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b5b1354af9f0eb8b372ff",
+      "name": "jacket",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e05b5487b90ef3d21525",
+      "name": "shorts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5defc2bf9360ef81c1457",
+      "name": "skirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 10
+    },
+    {
+      "id": "64a5e0182bf9360ef81c1525",
+      "name": "jeans",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 6
+    },
+    {
+      "id": "64a5e2142bf9360ef81c167d",
+      "name": "sweaters",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 12
+    },
+    {
+      "id": "640a06c648fb470eec7379c0",
+      "name": "shoes",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 48
+    },
+    {
+      "id": "64a5df0c2bf9360ef81c145f",
+      "name": "tops",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 57
+    },
+    {
+      "id": "6807ea45e756507cc288d22b",
+      "name": "cardigans",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 7
+    },
+    {
+      "id": "64a5df5a5487b90ef3d21445",
+      "name": "jackets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 15
+    },
+    {
+      "id": "64a5e1365487b90ef3d21607",
+      "name": "blazers",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "668d5b6270f08f2949eb13dd",
+      "name": "coat",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6855d6c35f98b7427bc87927",
+      "name": "at home",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "687faacb0f469819a2f660aa",
+      "name": "weekend/vacation dresses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6966be79842c4b0af2a34b7b",
+      "name": "furs",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "677ed8bc813e140aee22542b",
+      "name": "activewear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68373be10538577f0611b6f6",
+      "name": "suits",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666c6b6f9664a83d8cb3b4ab",
+      "name": "outerwear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 1
+    },
+    {
+      "id": "66672faee3a4a658c07302d1",
+      "name": "belt",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e7cd5487b90ef3d219d1",
+      "name": "handbags",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b51cc54af9f0eb8b37113",
+      "name": "blazer",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e4845487b90ef3d21726",
+      "name": "belts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 2
+    },
+    {
+      "id": "6669ba6e7c39f65c573daa80",
+      "name": "swim",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691c826c0295072e0e7fdac9",
+      "name": "fur collar",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666c807f4bace966a651b7e7",
+      "name": "accessories",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6699203a618ec666cdf14d2f",
+      "name": "undergarment",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66676e19940aa20aeae6672d",
+      "name": "scarf",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e52c2bf9360ef81c18b9",
+      "name": "scarves",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 1
+    },
+    {
+      "id": "64a5e29d2bf9360ef81c16f6",
+      "name": "coats",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 1
+    },
+    {
+      "id": "66e492e47e216e0dee9a3bcb",
+      "name": "spring summer",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69c1822850564f090a175c61",
+      "name": "rompers",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6668a6ca92e3f73f5cb11b45",
+      "name": "suit",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66672ea86a126a5bb3811321",
+      "name": "short",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b50fa54af9f0eb8b370b4",
+      "name": "sweater",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6824e9718aeec85d5f794afc",
+      "name": "bodysuits",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67855c4099c7262c71b5bb72",
+      "name": "intimates",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 2
+    },
+    {
+      "id": "680a4eff6f914f153673df75",
+      "name": "vests",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691c7d000295072e0e7fd694",
+      "name": "dickeys",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68e6a37d7598fc7873bd646c",
+      "name": "jackets/blazers",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 10
+    },
+    {
+      "id": "682b891140aeb437ab93e4bf",
+      "name": "swimwear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67460427e37cb250dde518f9",
+      "name": "dickey",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69c190aabd3149090dd5ed25",
+      "name": "ss 26 work",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69c190ccbd3149090dd5ed3e",
+      "name": "ss 26 weekend",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e7eace2a7675d559a8db27",
+      "name": "tanks and short sleeve tees",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e91f3781c56f0002039f28",
+      "name": "university of texas",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e7cf81c63e91093a4d77bc",
+      "name": "shorts and skorts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e7eaba65eb751a09f22f8d",
+      "name": "long sleeve tops",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e159988343f6091c127df2",
+      "name": "hiking",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69e65591c63e91093a4c78a9",
+      "name": "hunting",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691cdddb18532f0af6312c10",
+      "name": "blazer/jacket",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a68347d6e591080b44898e",
+      "name": "sandal",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69b9bfc14504b6090b5ca14b",
+      "name": "trying to return",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "663389d0c6cb780af3729a60",
+      "name": "blouses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66338aeb43ae3c7fcd6e7dc8",
+      "name": "base layer",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "668309b9a8be45604b69b6af",
+      "name": "outer wear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "668306640b9ee45c9a0fb661",
+      "name": "inspo",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69495b3eda635e0b053464a8",
+      "name": "too big",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66672e6ae3a4a658c0730288",
+      "name": "accessory",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a3dea41e41d54778a4580d",
+      "name": "la",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "681bb5d39d34201a56728e23",
+      "name": "glasses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66e3475f22fb444533c3ffb4",
+      "name": "sacramento",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a683aadb41862c7f3d578f",
+      "name": "boot",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691f44bb67236b34bcb56847",
+      "name": "knitwear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69ef868582c2dc9b4b81ef7c",
+      "name": "do not use - we need to replace",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67067b5b2884d50fb0aeffcf",
+      "name": "s/s",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698bb73f5e80f366427b3782",
+      "name": "tank tops",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66c513a5e02fc002f4ffacbb",
+      "name": "resort",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "681b72930c9b060e00dffabc",
+      "name": "ties",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682f3aa9893a270afa445a14",
+      "name": "shirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "667476783f99c60bc539df35",
+      "name": "heel",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66759b01c5397f166e452568",
+      "name": "pajamas",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6977b6242898db0af358d855",
+      "name": "eveningwear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64ad80378c270538ecd770dc",
+      "name": "casual",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68484276d9c9c5232bb17be5",
+      "name": "sets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66688205634be73416025c36",
+      "name": "set",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69a87967cd971176ed885c73",
+      "name": "beach robes",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698bbb0e5e80f366427b39b8",
+      "name": "longsleeve tops",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698baf525e80f366427b326c",
+      "name": "camisoles",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698bad1d18d32f0950ba4f93",
+      "name": "mini skirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698bacaf5e80f366427b2fa9",
+      "name": "knee skirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "698baaff18d32f0950ba4e04",
+      "name": "dress jackets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6785549a99c7262c71b5b364",
+      "name": "sportsbra",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "677edcd4813e140aee227380",
+      "name": "legging",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "681bbf6d9d34201a567295da",
+      "name": "hat",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691f88c83b025a2d1cdcd886",
+      "name": "blazers/jackets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69f3b14fcab763d8227b43b9",
+      "name": "matching set",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682f3abbcd7fad0af3731ffb",
+      "name": "socks",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66afa26ea4f96b0aeb7fd267",
+      "name": "flat",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66afa299a4f96b0aeb7fd284",
+      "name": "necklace",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66afa79ca4f96b0aeb7fd357",
+      "name": "lingere/hosiery",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a6838dd6e591080b448a2b",
+      "name": "sneaker",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66aa9dd6cde5fe08e46b534a",
+      "name": "2024",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68ae7c15f979a103a1e65998",
+      "name": "eyewear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682f3aee893a270afa445a6c",
+      "name": "polos",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682f3c79cd7fad0af3732161",
+      "name": "t-shirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682f3c6fcd7fad0af373214f",
+      "name": "watches",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "668d5c7770f08f2949eb1405",
+      "name": "romper",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab143abb8eb41dc61c7bf",
+      "name": "tights",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68a722ed2fa5aa6a5abad38b",
+      "name": "sneaker jeans",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68a722442fa5aa6a5abad36d",
+      "name": "heel jeans",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "691cbe98e5cd3a0af46fe7c5",
+      "name": "gown",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68ed619e17f8950d439f12a7",
+      "name": "to style",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "680a5c3dee6bba245d864150",
+      "name": "masks",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d10063a7b31977e7daa7",
+      "name": "button up",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "674f2e37890b5e480c7068a4",
+      "name": "swimsuit",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "652d5eaed2c4470a79191cd4",
+      "name": "spring",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "667475832730890af04662ef",
+      "name": "trouser",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "692484ce2edeb90b05b0a27d",
+      "name": "kimonos",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "681e42a2d200020afa62a9eb",
+      "name": "sweatshirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5de932bf9360ef81c143a",
+      "name": "jewelry",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 24
+    },
+    {
+      "id": "641b5125bf5dee0ef5c7fe4f",
+      "name": "blouse",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "668d5b6a70f08f2949eb13e7",
+      "name": "jumpsuit",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66743421ad60f85397d53115",
+      "name": "robe",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67770b3acbb7485ee2667eb2",
+      "name": "tight",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6717d5acf0df3d20ab557ea0",
+      "name": "ski",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "669037a59ca3200bd83d260c",
+      "name": "lake house",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e3665487b90ef3d2169e",
+      "name": "lounge",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6536a307840941039f30b101",
+      "name": "travel",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69cd801b9d3a689194652c3d",
+      "name": "athletic jackets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69989e417f0bfe091be98929",
+      "name": "athletic tops",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69cc0c17255f7a090afb40fa",
+      "name": "clutch/pouch",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6998a60f7f0bfe091be98fcc",
+      "name": "athletic vests",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6998af043d3f4c09348e3d7a",
+      "name": "athletic onepiece",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69989e373d3f4c09348e2b1a",
+      "name": "athletic pants",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6998a7743d3f4c09348e3408",
+      "name": "sweater drawer",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6998a6f97f0bfe091be990f8",
+      "name": "athletic skirts",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69989e2a7f0bfe091be98912",
+      "name": "athletic shoes",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "697cfc989a73783e205311b5",
+      "name": "cl",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "697bc7adbdaa1c0b21ebc869",
+      "name": "tank",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6977a9852898db0af358ce2e",
+      "name": "do not style",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b51d454af9f0eb8b37120",
+      "name": "leggings",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b511a54af9f0eb8b370c6",
+      "name": "athleisure",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b50ec54af9f0eb8b370a5",
+      "name": "t-shirt",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a26fb73f27d80aeb7197f7",
+      "name": "bodysuit",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "682ce9799491f00af6e0ae41",
+      "name": "gloves",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69c6ecfc59a302121a9176d4",
+      "name": "underpinnings",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68d6e9fac8d32d420a0c8512",
+      "name": "transition when in person",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "678ec5f90ad9c80aeff67f33",
+      "name": "jeans with flats",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "678ec56d1b2df70af1cee61e",
+      "name": "jeans with heel",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "678ec5d41b2df70af1cee67c",
+      "name": "jeans cropped no boot",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69af0d2c58887e092a1e67a9",
+      "name": "chicago studio",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "696a603ba576490af8de838d",
+      "name": "coverups",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666b348b055bc91dd5f3efe2",
+      "name": "winter",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "674f372789b00a0aed1718f7",
+      "name": "vest",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66a26ec03f27d80aeb7196b1",
+      "name": "heels",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6894c86485fc040b245a41a1",
+      "name": "sleepwear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6894c6db85fc040b245a40a8",
+      "name": "hair accessories",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a5e18f2bf9360ef81c15fd",
+      "name": "maternity",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab02aabb8eb41dc61c260",
+      "name": "bottoms",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab01babb8eb41dc61c214",
+      "name": "tops/blouses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab1b83a5403348195b450",
+      "name": "spring 2023",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "676b23ef0f15820aeff9a0b2",
+      "name": "handmade",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672aae5aabb8eb41dc61b653",
+      "name": "personal purchase",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab04e3a5403348195af49",
+      "name": "necklaces",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab2d2abb8eb41dc61cc2b",
+      "name": "earrings",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab00babb8eb41dc61c1dd",
+      "name": "coats/jackets",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672aafd23a5403348195ac64",
+      "name": "winter 2024",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67425b7e19c24a0461b2b91e",
+      "name": "purse",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab03f3a5403348195af3b",
+      "name": "spring 2024",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab11cabb8eb41dc61c749",
+      "name": "winter 2023",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "672ab098abb8eb41dc61c500",
+      "name": "lingerie",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666b2992055bc91dd5f3ecb4",
+      "name": "shapewear",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64a83a927a6e5d7fd2367077",
+      "name": "weekend",
+      "features": [
+        "client_looks",
+        "boards",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "68b6ee908d6d13409bd5d486",
+      "name": "dickies",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6717d5bc2870ad5b20b02479",
+      "name": "active",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "69d56f996cc3ae19517af4f0",
+      "name": "fave",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66672e6e6a126a5bb38112de",
+      "name": "bag",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "641b50e3bf5dee0ef5c7fe32",
+      "name": "jean",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6668857b634be73416025d96",
+      "name": "seperates",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6668751df762e70aea6dfa44",
+      "name": "summer dresses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6995f9b06a98f9fb61fa2866",
+      "name": "needs brand",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "666864c5eb522d2de4bb91b4",
+      "name": "winter dresses",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6669e0307c39f65c573dbe1f",
+      "name": "play",
+      "features": [
+        "client_owned",
+        "client_looks"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6625af82ad37e67c64575493",
+      "name": "evening",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d12063a7b31977e7db61",
+      "name": "dressy dress",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d0af63a7b31977e7d9ac",
+      "name": "fun dress",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d037f118e6041af62803",
+      "name": "work dress",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d1cb9320f03a81e035ed",
+      "name": "dress top",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3cfdaf118e6041af627a6",
+      "name": "boots",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d20b9320f03a81e03713",
+      "name": "open toe",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d2a563a7b31977e7e1ac",
+      "name": "flats",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "67c3d012f118e6041af627c8",
+      "name": "turtleneck",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "64b1a6a96fbf3d0f9abc9c8f",
+      "name": "business professional",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6865502c75f02a54f6954bc0",
+      "name": "sana's archive closet",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "680ba21f05ac9167167ade80",
+      "name": "wish list",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6941e79ef8f60a0b06dc037f",
+      "name": "shawl",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "66f1a410ba316418687b4302",
+      "name": "undergarments",
+      "features": [
+        "client_owned"
+      ],
+      "item_count": 0
+    },
+    {
+      "id": "6526cc6eacaaf20a8bc06552",
+      "name": "fall winter",
+      "features": [
+        "client_looks",
+        "client_owned"
+      ],
+      "item_count": 0
+    }
+  ]
+}

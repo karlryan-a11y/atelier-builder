@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/img-proxy/:path*",
+      "destination": "https://goodpix-co.s3.amazonaws.com/:path*"
+    }
+  ]
+}

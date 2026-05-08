@@ -30,6 +30,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^24.12.2",
@@ -41,6 +42,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
+    "openai": "^6.37.0",
+    "pg": "^8.20.0",
     "postgres": "^3.4.9",
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",

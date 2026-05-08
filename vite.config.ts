@@ -10,4 +10,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/img-proxy': {
+        target: 'https://goodpix-co.s3.amazonaws.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/img-proxy/, ''),
+      },
+    },
+  },
 })
