@@ -32,7 +32,7 @@ interface UseIntakeItemsResult {
   counts: { pending: number; approved: number; rejected: number }
 }
 
-export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected' | 'all' = 'pending_review'): UseIntakeItemsResult {
+export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected_final' | 'all' = 'pending_review'): UseIntakeItemsResult {
   const [items, setItems] = useState<IntakeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
       const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
         supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'pending_review'),
         supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'rejected'),
+        supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'rejected_final'),
       ])
 
       setCounts({

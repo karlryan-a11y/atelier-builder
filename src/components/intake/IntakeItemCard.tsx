@@ -17,6 +17,7 @@ export function IntakeItemCard({ item, onClick }: IntakeItemCardProps) {
     pending_review: { icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', label: 'Pending' },
     approved: { icon: Check, color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Approved' },
     rejected: { icon: X, color: 'text-red-500', bg: 'bg-red-50', label: 'Rejected' },
+    rejected_final: { icon: X, color: 'text-red-500', bg: 'bg-red-50', label: 'Rejected' },
   }[item.status] ?? { icon: Clock, color: 'text-[#888]', bg: 'bg-[#E8E4DF]', label: item.status }
 
   const StatusIcon = statusConfig.icon

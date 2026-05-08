@@ -1,4 +1,4 @@
-import { LogOut, Shield, ChevronDown } from 'lucide-react'
+import { LogOut, Shield, ChevronDown, Inbox } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
 interface HeaderProps {
@@ -9,9 +9,10 @@ interface HeaderProps {
   }
   onSignOut: () => void
   onOpenAdmin?: () => void
+  onOpenInbox?: () => void
 }
 
-export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
+export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -59,6 +60,15 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
               <p className="text-[10px] text-text-muted mt-0.5">{user.email}</p>
               <p className="text-[10px] tracking-[0.2em] uppercase text-blush mt-1">{user.role}</p>
             </div>
+            {onOpenInbox && (
+              <button
+                onClick={() => { onOpenInbox(); setMenuOpen(false) }}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-[#1A1A1A]"
+              >
+                <Inbox className="h-3.5 w-3.5" />
+                Intake Inbox
+              </button>
+            )}
             {onOpenAdmin && (
               <button
                 onClick={() => { onOpenAdmin(); setMenuOpen(false) }}

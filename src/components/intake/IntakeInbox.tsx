@@ -9,14 +9,14 @@ interface IntakeInboxProps {
 }
 
 export function IntakeInbox({ onClose }: IntakeInboxProps) {
-  const [filter, setFilter] = useState<'pending_review' | 'approved' | 'rejected' | 'all'>('pending_review')
+  const [filter, setFilter] = useState<'pending_review' | 'approved' | 'rejected_final' | 'all'>('pending_review')
   const { items, loading, error, refresh, counts } = useIntakeItems(filter)
   const [selectedItem, setSelectedItem] = useState<IntakeItem | null>(null)
 
   const tabs = [
     { key: 'pending_review' as const, label: 'Pending', count: counts.pending },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
-    { key: 'rejected' as const, label: 'Rejected', count: counts.rejected },
+    { key: 'rejected_final' as const, label: 'Rejected', count: counts.rejected },
   ]
 
   return (

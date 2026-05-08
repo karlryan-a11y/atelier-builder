@@ -8,17 +8,22 @@ import { LookCanvas } from '@/components/canvas/LookCanvas'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AdminPanel } from '@/components/admin/AdminPanel'
 import { SearchDebug } from '@/components/admin/SearchDebug'
+import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { useCanvasStore } from '@/stores/canvasStore'
 import type { ClosetItemNode } from '@/types/canvas'
 
 function App() {
   const { user, loading, signOut } = useAuth()
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showInbox, setShowInbox] = useState(() => window.location.hash === '#inbox')
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const { addNode, state } = useCanvasStore()
 
   useEffect(() => {
-    const onHash = () => setShowSearch(window.location.hash === '#search')
+    const onHash = () => {
+      setShowSearch(window.location.hash === '#search')
+      setShowInbox(window.location.hash === '#inbox')
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -82,6 +87,7 @@ function App() {
           user={user}
           onSignOut={signOut}
           onOpenAdmin={user.role === 'admin' ? () => setShowAdmin(true) : undefined}
+          onOpenInbox={() => setShowInbox(true)}
         />
         <div className="flex flex-1 overflow-hidden">
           <ClosetPanel />
@@ -89,6 +95,7 @@ function App() {
           <ChatPanel />
         </div>
         {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+        {showInbox && <IntakeInbox onClose={() => { setShowInbox(false); window.location.hash = '' }} />}
         {showSearch && (
           <div className="fixed inset-0 bg-white z-50 overflow-auto">
             <div className="flex justify-between items-center p-4 border-b border-[#E8E4DF]">
