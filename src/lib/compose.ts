@@ -186,7 +186,6 @@ interface LayoutSlot {
 }
 
 const CANVAS_W = 1200
-const CANVAS_H = 1500
 
 // Each layout defines slots by category priority
 const LAYOUTS: Record<LayoutName, { slots: LayoutSlot[]; label: string }> = {

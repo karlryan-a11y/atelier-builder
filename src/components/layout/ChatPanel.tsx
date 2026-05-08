@@ -213,7 +213,7 @@ export function ChatPanel() {
 
   async function placeOnCanvas(
     nodes: import('@/types/canvas').CanvasNode[],
-    resolvedItems: ResolvedItem[]
+    _resolvedItems: ResolvedItem[]
   ) {
     // Fetch image URLs for placed closet items
     const closetItemIds = nodes
