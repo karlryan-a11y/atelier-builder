@@ -18,7 +18,7 @@ const CATEGORIES = [
   'Activewear', 'Intimates',
 ]
 
-export function IntakeItemDetail({ item, onBack, onAction }: IntakeItemDetailProps) {
+export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
   const [editing, setEditing] = useState(false)
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')

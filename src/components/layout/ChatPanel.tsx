@@ -440,17 +440,10 @@ export function ChatPanel() {
                   rows={3}
                   className="w-full bg-tile rounded-sm px-3 py-2 text-[11px] tracking-[0.05em] placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
                 />
-                <p className="text-[9px] text-text-muted/50">
-                  client: {activeClient?.id ?? 'NONE'} | input: {input.length} chars | composing: {String(composing)}
-                </p>
                 <button
                   type="button"
                   onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    console.log('[Compose] CLICK FIRED', { input, clientId: activeClient?.id, composing })
-                    alert('Button clicked! input=' + input.length + ' client=' + (activeClient?.id ?? 'none'))
-                    handleCompose()
-                  }}
+                  onClick={handleCompose}
                   className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase hover:bg-[#333] transition-colors cursor-pointer"
                 >
                   <Send className="h-3 w-3" />
