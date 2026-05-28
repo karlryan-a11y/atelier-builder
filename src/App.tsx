@@ -9,7 +9,9 @@ import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AdminPanel } from '@/components/admin/AdminPanel'
 import { SearchDebug } from '@/components/admin/SearchDebug'
 import { IntakeInbox } from '@/components/intake/IntakeInbox'
+import { ShopView } from '@/components/shopping/ShopView'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useViewStore } from '@/stores/viewStore'
 import type { ClosetItemNode } from '@/types/canvas'
 
 function App() {
@@ -18,6 +20,7 @@ function App() {
   const [showInbox, setShowInbox] = useState(() => window.location.hash === '#inbox')
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const { addNode, state } = useCanvasStore()
+  const activeView = useViewStore((s) => s.activeView)
 
   useEffect(() => {
     const onHash = () => {
@@ -89,11 +92,15 @@ function App() {
           onOpenAdmin={user.role === 'admin' ? () => setShowAdmin(true) : undefined}
           onOpenInbox={() => setShowInbox(true)}
         />
-        <div className="flex flex-1 overflow-hidden">
-          <ClosetPanel />
-          <LookCanvas />
-          <ChatPanel />
-        </div>
+        {activeView === 'style' ? (
+          <div className="flex flex-1 overflow-hidden">
+            <ClosetPanel />
+            <LookCanvas />
+            <ChatPanel />
+          </div>
+        ) : (
+          <ShopView />
+        )}
         {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
         {showInbox && <IntakeInbox onClose={() => { setShowInbox(false); window.location.hash = '' }} />}
         {showSearch && (

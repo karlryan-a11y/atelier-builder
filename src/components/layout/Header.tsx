@@ -1,5 +1,6 @@
 import { LogOut, Shield, ChevronDown, Inbox } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import { useViewStore } from '@/stores/viewStore'
 
 interface HeaderProps {
   user: {
@@ -15,6 +16,7 @@ interface HeaderProps {
 export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { activeView, setActiveView } = useViewStore()
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -35,11 +37,35 @@ export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProp
 
   return (
     <header className="h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
-      <img
-        src="/brand/atelier-logo-inverse.svg"
-        alt="Atelier by Watson"
-        className="h-10"
-      />
+      <div className="flex items-center gap-6">
+        <img
+          src="/brand/atelier-logo-inverse.svg"
+          alt="Atelier by Watson"
+          className="h-10"
+        />
+        <nav className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveView('style')}
+            className={`px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors ${
+              activeView === 'style'
+                ? 'text-white bg-white/10'
+                : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+            }`}
+          >
+            Style
+          </button>
+          <button
+            onClick={() => setActiveView('shop')}
+            className={`px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors ${
+              activeView === 'shop'
+                ? 'text-white bg-white/10'
+                : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+            }`}
+          >
+            Shop
+          </button>
+        </nav>
+      </div>
 
       <div className="relative" ref={menuRef}>
         <button
