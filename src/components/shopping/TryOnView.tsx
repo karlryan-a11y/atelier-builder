@@ -43,6 +43,17 @@ function TryOnCard({
     <div className={`border rounded-sm overflow-hidden transition-all ${config.border} ${config.bg}`}>
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
+          {option.image_url && (
+            <img
+              src={option.image_url}
+              alt={option.product_name}
+              className="w-12 h-16 object-cover rounded-sm shrink-0 bg-tile"
+              loading="lazy"
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+              }}
+            />
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-[10px] tracking-[0.15em] uppercase text-text-muted/60 mb-0.5">
               {slotDescription}
@@ -186,6 +197,7 @@ export function TryOnView() {
             retailer: option.retailer,
             price: option.price,
             url: option.url,
+            image_url: option.image_url,
             size: option.size_override || option.recommended_size,
             color: option.color_override || option.recommended_color,
           },

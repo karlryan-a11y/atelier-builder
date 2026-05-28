@@ -12,6 +12,7 @@ export interface ParsedOption {
   recommended_color: string
   ship_timeline: string
   return_policy: string
+  image_url: string
   confidence: 'high' | 'medium' | 'low'
 }
 
@@ -44,6 +45,26 @@ function cleanPrice(raw: string): string {
   return raw.replace(/[^0-9.,]/g, '').trim()
 }
 
+function extractImageUrl(block: string): string {
+  // Try explicit Image: field first (may be a markdown image or bare URL)
+  const field = extractField(block, 'Image')
+  const candidate = field || block
+
+  // Markdown image: ![alt](url)
+  const mdImage = candidate.match(/!\[[^\]]*\]\(([^)\s]+)\)/)
+  if (mdImage) return mdImage[1].trim()
+
+  // Markdown link wrapping an image url: [text](url.jpg)
+  const mdLink = candidate.match(/\]\((https?:\/\/[^)\s]+\.(?:png|jpe?g|webp|gif|avif)[^)\s]*)\)/i)
+  if (mdLink) return mdLink[1].trim()
+
+  // Bare image URL anywhere in the field
+  const bare = candidate.match(/https?:\/\/[^\s)]+\.(?:png|jpe?g|webp|gif|avif)[^\s)]*/i)
+  if (bare) return bare[0].trim()
+
+  return field.trim()
+}
+
 export function parseCoworkOutput(raw: string): ParsedSlot[] {
   const slots: ParsedSlot[] = []
 
@@ -70,6 +91,7 @@ export function parseCoworkOutput(raw: string): ParsedSlot[] {
       recommended_color: extractField(block, 'Recommended Color'),
       ship_timeline: extractField(block, 'Ship Timeline'),
       return_policy: extractField(block, 'Return Policy'),
+      image_url: extractImageUrl(block),
       confidence: parseConfidence(extractField(block, 'Confidence')),
     }))
 
@@ -101,6 +123,7 @@ export function parseCoworkOutput(raw: string): ParsedSlot[] {
         recommended_color: extractField(block, 'Recommended Color'),
         ship_timeline: extractField(block, 'Ship Timeline'),
         return_policy: extractField(block, 'Return Policy'),
+        image_url: extractImageUrl(block),
         confidence: parseConfidence(extractField(block, 'Confidence')),
       }))
 

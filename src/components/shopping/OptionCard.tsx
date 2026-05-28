@@ -54,7 +54,17 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
     >
       {/* Image placeholder */}
       <div className="aspect-[3/4] bg-tile flex items-center justify-center relative">
-        {option.url ? (
+        {option.image_url ? (
+          <img
+            src={option.image_url}
+            alt={option.product_name}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        ) : option.url ? (
           <div className="absolute inset-0 flex items-center justify-center text-text-muted/20">
             <span className="text-[10px] tracking-[0.15em] uppercase">Product Image</span>
           </div>

@@ -253,16 +253,29 @@ export function ShopView() {
               </Section>
             )}
 
-            {hasClient && hasSlots && slotsWithDescription.length > 0 && (
-              <div className="pt-4 space-y-4">
-                <button
-                  onClick={handleGenerate}
-                  className="w-full py-4 bg-text text-white text-[11px] tracking-[0.25em] uppercase hover:bg-text/90 transition-colors rounded-sm"
-                >
-                  Generate Cowork Prompt ({slotsWithDescription.length} items)
-                </button>
-              </div>
-            )}
+            {(() => {
+              const ready = hasClient && hasSlots && slotsWithDescription.length > 0
+              const label = !hasClient
+                ? 'Select a client to begin'
+                : slotsWithDescription.length === 0
+                ? 'Add a shopping list item to generate'
+                : `Generate Cowork Prompt (${slotsWithDescription.length} items)`
+              return (
+                <div className="pt-4 space-y-4">
+                  <button
+                    onClick={handleGenerate}
+                    disabled={!ready}
+                    className={`w-full py-4 text-[11px] tracking-[0.25em] uppercase rounded-sm transition-colors ${
+                      ready
+                        ? 'bg-text text-white hover:bg-text/90 cursor-pointer'
+                        : 'bg-tile text-text-muted/40 border border-wsg-border cursor-not-allowed'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                </div>
+              )
+            })()}
 
             {session.cowork_prompt && (
               <Section title="Import Cowork Results" icon={Upload} defaultOpen={false}>
