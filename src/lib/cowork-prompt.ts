@@ -1,0 +1,204 @@
+import type { ClientProfileDraft, ShoppingSlot } from '@/stores/shoppingStore'
+
+export function generateCoworkPrompt(profile: ClientProfileDraft, slots: ShoppingSlot[]): string {
+  const activeSlots = slots.filter((s) => s.description.trim())
+  const today = new Date().toISOString().split('T')[0]
+
+  const sections: string[] = []
+
+  sections.push(`# Shopping Brief — ${profile.client_name}`)
+  sections.push(`**Generated:** ${today}`)
+  sections.push(`**Items to source:** ${activeSlots.length}`)
+  sections.push('')
+
+  // Instructions for Cowork
+  sections.push(`## Instructions`)
+  sections.push('')
+  sections.push(`You are shopping for a Watson Style Group client. For each item on the shopping list below, find **3 options** from online retailers. Prioritize the client's preferred brands and size requirements.`)
+  sections.push('')
+  sections.push(`For each option you find, capture:`)
+  sections.push(`- Product name`)
+  sections.push(`- Brand`)
+  sections.push(`- Retailer (website name)`)
+  sections.push(`- Price`)
+  sections.push(`- Product URL (full link to the product page)`)
+  sections.push(`- Available sizes (list what's in stock)`)
+  sections.push(`- Available colors`)
+  sections.push(`- Recommended size for this client (based on their sizing info below)`)
+  sections.push(`- Recommended color`)
+  sections.push(`- Estimated ship timeline`)
+  sections.push(`- Return policy summary`)
+  sections.push(`- Confidence level: **High** (client has bought this brand + size + silhouette before), **Medium** (brand OR silhouette match), or **Low** (net-new)`)
+  sections.push('')
+  sections.push(`**Save a screenshot of each product's hero image.**`)
+  sections.push('')
+  sections.push('---')
+  sections.push('')
+
+  // Client profile
+  sections.push(`## Client Profile`)
+  sections.push('')
+
+  // Sizes
+  const sizes = [
+    profile.size_top && `- **Top:** ${profile.size_top}`,
+    profile.size_bottom && `- **Bottom:** ${profile.size_bottom}`,
+    profile.size_dress && `- **Dress:** ${profile.size_dress}`,
+    profile.size_outerwear && `- **Outerwear:** ${profile.size_outerwear}`,
+    profile.size_shoe && `- **Shoe:** ${profile.size_shoe}`,
+    profile.size_intimates && `- **Intimates:** ${profile.size_intimates}`,
+    profile.size_accessories && `- **Accessories:** ${profile.size_accessories}`,
+  ].filter(Boolean)
+
+  if (sizes.length > 0) {
+    sections.push(`### Default Sizes`)
+    sections.push('')
+    sections.push(sizes.join('\n'))
+    sections.push('')
+  }
+
+  // Style story
+  if (profile.style_story) {
+    sections.push(`### Style Story`)
+    sections.push('')
+    sections.push(profile.style_story)
+    sections.push('')
+  }
+
+  // Occasions
+  if (profile.occasions.length > 0) {
+    sections.push(`### Occasions`)
+    sections.push('')
+    sections.push(profile.occasions.join(', '))
+    sections.push('')
+  }
+
+  // Colors
+  if (profile.color_likes || profile.color_dislikes) {
+    sections.push(`### Color Palette`)
+    sections.push('')
+    if (profile.color_likes) sections.push(`- **Yes:** ${profile.color_likes}`)
+    if (profile.color_dislikes) sections.push(`- **No:** ${profile.color_dislikes}`)
+    sections.push('')
+  }
+
+  // Fabrics
+  if (profile.fabric_likes || profile.fabric_dislikes) {
+    sections.push(`### Fabric Preferences`)
+    sections.push('')
+    if (profile.fabric_likes) sections.push(`- **Yes:** ${profile.fabric_likes}`)
+    if (profile.fabric_dislikes) sections.push(`- **No:** ${profile.fabric_dislikes}`)
+    sections.push('')
+  }
+
+  // Brand preferences
+  if (profile.brand_preferred.length > 0 || profile.brand_blocked.length > 0) {
+    sections.push(`### Brand Preferences`)
+    sections.push('')
+    if (profile.brand_preferred.length > 0) {
+      sections.push(`- **Preferred:** ${profile.brand_preferred.join(', ')}`)
+    }
+    if (profile.brand_blocked.length > 0) {
+      sections.push(`- **Never:** ${profile.brand_blocked.join(', ')}`)
+    }
+    sections.push('')
+  }
+
+  // No-fly list
+  if (profile.no_fly_list) {
+    sections.push(`### No-Fly List`)
+    sections.push('')
+    sections.push(profile.no_fly_list)
+    sections.push('')
+  }
+
+  // Gap notes
+  if (profile.gap_notes) {
+    sections.push(`### What Client Already Owns`)
+    sections.push('')
+    sections.push(profile.gap_notes)
+    sections.push('')
+  }
+
+  // General notes
+  if (profile.general_notes) {
+    sections.push(`### Stylist Notes`)
+    sections.push('')
+    sections.push(profile.general_notes)
+    sections.push('')
+  }
+
+  sections.push('---')
+  sections.push('')
+
+  // Shopping list
+  sections.push(`## Shopping List`)
+  sections.push('')
+  sections.push(`Find **3 options** for each item below.`)
+  sections.push('')
+
+  activeSlots.forEach((slot, i) => {
+    const num = i + 1
+    const parts = [`### ${num}. ${slot.description}`]
+    const details: string[] = []
+    if (slot.category) details.push(`**Category:** ${slot.category}`)
+    if (slot.quality_bar === 'hero_piece') details.push(`**Quality:** Hero piece — invest in quality, this is a statement item`)
+    if (slot.budget_guidance) details.push(`**Budget:** ~${slot.budget_guidance}`)
+    if (slot.notes) details.push(`**Notes:** ${slot.notes}`)
+
+    sections.push(parts[0])
+    sections.push('')
+    if (details.length > 0) {
+      sections.push(details.join('\n'))
+      sections.push('')
+    }
+  })
+
+  sections.push('---')
+  sections.push('')
+
+  // Budget & logistics
+  if (profile.budget_total || profile.deliver_by || profile.ship_to_address) {
+    sections.push(`## Logistics`)
+    sections.push('')
+    if (profile.budget_total) sections.push(`- **Total budget:** ${profile.budget_total}`)
+    if (profile.deliver_by) sections.push(`- **Deliver by:** ${profile.deliver_by}`)
+    if (profile.ship_to_address) sections.push(`- **Ship to:** ${profile.ship_to_address}`)
+    sections.push(`- **Return tolerance:** ${profile.return_tolerance}`)
+    sections.push('')
+  }
+
+  sections.push('---')
+  sections.push('')
+
+  // Output format instructions
+  sections.push(`## Output Format`)
+  sections.push('')
+  sections.push(`After shopping, provide your results in this exact format for each item:`)
+  sections.push('')
+  sections.push('```')
+  sections.push(`## Slot: [item description from shopping list]`)
+  sections.push('')
+  sections.push(`### Option 1`)
+  sections.push(`- **Product:** [product name]`)
+  sections.push(`- **Brand:** [brand]`)
+  sections.push(`- **Retailer:** [retailer name]`)
+  sections.push(`- **Price:** $[price]`)
+  sections.push(`- **URL:** [full product URL]`)
+  sections.push(`- **Sizes Available:** [list]`)
+  sections.push(`- **Colors Available:** [list]`)
+  sections.push(`- **Recommended Size:** [size]`)
+  sections.push(`- **Recommended Color:** [color]`)
+  sections.push(`- **Ship Timeline:** [estimate]`)
+  sections.push(`- **Return Policy:** [summary]`)
+  sections.push(`- **Confidence:** [High/Medium/Low]`)
+  sections.push('')
+  sections.push(`### Option 2`)
+  sections.push(`...`)
+  sections.push('')
+  sections.push(`### Option 3`)
+  sections.push(`...`)
+  sections.push('```')
+
+  return sections.join('\n')
+}
