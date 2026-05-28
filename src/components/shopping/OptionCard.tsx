@@ -6,7 +6,7 @@ const REJECTION_REASONS = [
   'Color', 'Silhouette', 'Brand', 'Price', 'Fit risk', 'Off-vibe',
 ]
 
-export function OptionCard({ option, round }: { option: BoardOption; round: number }) {
+export function OptionCard({ option }: { option: BoardOption; round: number }) {
   const { reviewOption } = useBoardStore()
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [showSwapForm, setShowSwapForm] = useState(false)

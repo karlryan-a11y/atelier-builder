@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { ExternalLink, Check, Copy, ClipboardList, ShoppingCart, Package } from 'lucide-react'
-import { useBoardStore, type BoardOption, type BoardSlot } from '@/stores/boardStore'
+import { useBoardStore, type BoardOption } from '@/stores/boardStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 
 interface QAChecks {

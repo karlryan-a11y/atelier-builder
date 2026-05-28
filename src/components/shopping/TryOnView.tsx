@@ -134,7 +134,7 @@ function TryOnCard({
 }
 
 export function TryOnView() {
-  const { slots, setTryonStatus, markAddedToCloset, getApprovedOptions } = useBoardStore()
+  const { slots, setTryonStatus, markAddedToCloset } = useBoardStore()
   const { session, setStatus } = useShoppingStore()
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
