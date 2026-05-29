@@ -12,7 +12,7 @@
 -- References gp_clients via the clients compatibility view
 create table if not exists client_profiles (
   id uuid primary key default gen_random_uuid(),
-  client_id text references clients(id) on delete cascade,
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
 
   -- Default sizes per category
   size_top text,
@@ -23,8 +23,19 @@ create table if not exists client_profiles (
   size_intimates text,
   size_accessories text,
 
-  -- Measurements (optional, captured when available)
+  -- Measurements: CURRENT snapshot for convenience. Full dated history lives
+  -- in client_measurements (see below). On a new measurement, write a row there
+  -- AND refresh this snapshot.
   measurements jsonb default '{}',
+
+  -- Body identity (lead fields on every Cheat Sheet — drive sourcing)
+  body_type text,
+  color_season text,
+
+  -- Per-category fit preferences keyed by category, e.g.
+  -- {"top": {"size": "M", "fit": "relaxed through shoulder"}, ...}
+  -- Default sizes above are the quick denormalized view; this holds the nuance.
+  fit_notes jsonb default '{}',
 
   -- Style identity
   style_story text,
@@ -45,17 +56,42 @@ create table if not exists client_profiles (
   -- Return tolerance (WSG-set)
   return_tolerance text default 'standard' check (return_tolerance in ('standard', 'aggressive', 'conservative')),
 
+  -- Provenance — where this profile data came from
+  source text default 'intake_form' check (source in ('intake_form', 'historical_import', 'session', 'manual')),
+
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
 
   unique(client_id)
 );
 
+-- Dated measurement snapshots — the Style Profiles carry versioned measurements
+-- (bodies change; we keep history rather than overwrite). The latest row also
+-- refreshes client_profiles.measurements for quick reads.
+create table if not exists client_measurements (
+  id uuid primary key default gen_random_uuid(),
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
+
+  -- Date the measurements were taken (not the row insert time)
+  measured_on date not null,
+
+  -- Structured measurements, e.g.
+  -- {"bust": 36, "waist": 28, "hips": 38, "inseam": 30, "height": "5'6\"", ...}
+  measurements jsonb not null default '{}',
+
+  measured_by uuid,
+  source text default 'intake_form' check (source in ('intake_form', 'historical_import', 'session', 'manual')),
+  note text,
+  created_at timestamptz default now(),
+
+  unique(client_id, measured_on)
+);
+
 -- Brand-specific sizing map — the core of the styling intelligence moat
 -- Updates on every keep/return cycle
 create table if not exists client_brand_sizing (
   id uuid primary key default gen_random_uuid(),
-  client_id text references clients(id) on delete cascade,
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
   brand text not null,
   category text not null check (category in ('top', 'bottom', 'dress', 'outerwear', 'shoe', 'intimates', 'accessory')),
   size text not null,
@@ -69,7 +105,7 @@ create table if not exists client_brand_sizing (
 -- Structured brand preferences — allowlist, neutral, blocklist
 create table if not exists client_brand_preferences (
   id uuid primary key default gen_random_uuid(),
-  client_id text references clients(id) on delete cascade,
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
   brand text not null,
   preference text not null check (preference in ('preferred', 'neutral', 'blocked')),
   note text,
@@ -82,7 +118,7 @@ create table if not exists client_brand_preferences (
 -- This is the "stylist talking out loud" data that builds intelligence over time
 create table if not exists client_notes (
   id uuid primary key default gen_random_uuid(),
-  client_id text references clients(id) on delete cascade,
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
   stylist_id uuid,
   note_type text default 'general' check (note_type in ('general', 'style', 'fit', 'preference', 'session', 'shopping')),
   content text not null,
@@ -94,10 +130,37 @@ create table if not exists client_notes (
 -- Shopping Workflow Tables (shopping_ prefix)
 -- ============================================================
 
+-- A buying season for a client (e.g. "FW23", "SS26"). Tracks the seasonal
+-- budget and open-to-buy (OTB) carried over from the prior season — the
+-- Client Notes track both, and carryover can't be expressed on a single session.
+create table if not exists shopping_seasons (
+  id uuid primary key default gen_random_uuid(),
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
+
+  label text not null,              -- "FW23", "SS26", etc.
+  season_type text check (season_type in ('SS', 'FW', 'resort', 'pre_fall', 'other')),
+  year int,
+
+  -- Budgeting
+  budget_total numeric,             -- planned spend for the season
+  otb_carryover numeric default 0,  -- open-to-buy carried in from prior season
+  spent_to_date numeric default 0,  -- rolling actual, updated as orders land
+
+  status text default 'planning' check (status in ('planning', 'active', 'closed')),
+  notes text,
+  source text default 'intake_form' check (source in ('intake_form', 'historical_import', 'session', 'manual')),
+
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+
+  unique(client_id, label)
+);
+
 -- A shopping session tied to a client + stylist
 create table if not exists shopping_sessions (
   id uuid primary key default gen_random_uuid(),
-  client_id text references clients(id) on delete cascade,
+  client_id text not null,  -- soft ref to clients (a view over gp_clients; FK to a view is not allowed)
+  season_id uuid references shopping_seasons(id) on delete set null,
   stylist_id uuid,
   assistant_stylist_id uuid,
 
@@ -268,7 +331,7 @@ create table if not exists shopping_tryon (
   exchange_details text,
 
   -- When kept, this links to the closet item created
-  closet_item_id text references closet_items(id),
+  closet_item_id text,  -- soft ref to closet_items (a view; FK to a view is not allowed)
 
   reviewed_by uuid,
   reviewed_at timestamptz default now()
@@ -309,6 +372,10 @@ create table if not exists shopping_brand_commissions (
 -- ============================================================
 
 create index if not exists idx_client_profiles_client on client_profiles(client_id);
+create index if not exists idx_client_measurements_client on client_measurements(client_id);
+create index if not exists idx_client_measurements_date on client_measurements(client_id, measured_on desc);
+create index if not exists idx_shopping_seasons_client on shopping_seasons(client_id);
+create index if not exists idx_shopping_sessions_season on shopping_sessions(season_id);
 create index if not exists idx_client_brand_sizing_client on client_brand_sizing(client_id);
 create index if not exists idx_client_brand_sizing_brand on client_brand_sizing(brand);
 create index if not exists idx_client_brand_prefs_client on client_brand_preferences(client_id);
@@ -331,6 +398,8 @@ create index if not exists idx_shopping_tryon_option on shopping_tryon(option_id
 -- ============================================================
 
 alter table client_profiles enable row level security;
+alter table client_measurements enable row level security;
+alter table shopping_seasons enable row level security;
 alter table client_brand_sizing enable row level security;
 alter table client_brand_preferences enable row level security;
 alter table client_notes enable row level security;
@@ -346,6 +415,8 @@ alter table shopping_brand_commissions enable row level security;
 
 -- Open SELECT for all authenticated users (matches existing pattern)
 create policy "Allow authenticated read" on client_profiles for select using (true);
+create policy "Allow authenticated read" on client_measurements for select using (true);
+create policy "Allow authenticated read" on shopping_seasons for select using (true);
 create policy "Allow authenticated read" on client_brand_sizing for select using (true);
 create policy "Allow authenticated read" on client_brand_preferences for select using (true);
 create policy "Allow authenticated read" on client_notes for select using (true);
@@ -361,6 +432,8 @@ create policy "Allow authenticated read" on shopping_brand_commissions for selec
 
 -- Allow authenticated users to insert/update/delete (internal tool, all stylists trusted)
 create policy "Allow authenticated write" on client_profiles for all using (true) with check (true);
+create policy "Allow authenticated write" on client_measurements for all using (true) with check (true);
+create policy "Allow authenticated write" on shopping_seasons for all using (true) with check (true);
 create policy "Allow authenticated write" on client_brand_sizing for all using (true) with check (true);
 create policy "Allow authenticated write" on client_brand_preferences for all using (true) with check (true);
 create policy "Allow authenticated write" on client_notes for all using (true) with check (true);
@@ -387,6 +460,9 @@ end;
 $$ language plpgsql;
 
 create trigger set_updated_at before update on client_profiles
+  for each row execute function update_updated_at();
+
+create trigger set_updated_at before update on shopping_seasons
   for each row execute function update_updated_at();
 
 create trigger set_updated_at before update on shopping_sessions
