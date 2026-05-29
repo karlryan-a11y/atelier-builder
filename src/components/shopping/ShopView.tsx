@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { ChevronDown, ShoppingBag, Clipboard, Sparkles, Copy, Check, FileText, Upload, ArrowLeft } from 'lucide-react'
+import { ChevronDown, ShoppingBag, Clipboard, Sparkles, Copy, Check, FileText, Upload, ArrowLeft, Palette } from 'lucide-react'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
 import { generateCoworkPrompt } from '@/lib/cowork-prompt'
 import { ClientSelector } from './ClientSelector'
 import { SizeForm } from './SizeForm'
+import { ColorAnalysis } from './ColorAnalysis'
 import { StylePreferences } from './StylePreferences'
 import { ShoppingList } from './ShoppingList'
 import { CoworkImport } from './CoworkImport'
@@ -226,6 +227,12 @@ export function ShopView() {
             {hasClient && (
               <Section title="Default Sizes" icon={Clipboard} defaultOpen={true}>
                 <SizeForm />
+              </Section>
+            )}
+
+            {hasClient && (
+              <Section title="Color Analysis" icon={Palette} defaultOpen={true}>
+                <ColorAnalysis />
               </Section>
             )}
 

@@ -1,4 +1,11 @@
 import type { ClientProfileDraft, ShoppingSlot } from '@/stores/shoppingStore'
+import {
+  SEASON_LABEL,
+  SEASON_PALETTE,
+  SEASON_ATTRS,
+  WATSON_COLOR_RULES,
+  type Season,
+} from '@/lib/color-analysis'
 
 export function generateCoworkPrompt(profile: ClientProfileDraft, slots: ShoppingSlot[]): string {
   const activeSlots = slots.filter((s) => s.description.trim())
@@ -61,6 +68,25 @@ export function generateCoworkPrompt(profile: ClientProfileDraft, slots: Shoppin
     sections.push(`### Style Story`)
     sections.push('')
     sections.push(profile.style_story)
+    sections.push('')
+  }
+
+  // Color analysis (WSG Color Analysis SOP) — drives precise, season-locked sourcing
+  const season = profile.color_season as Season
+  if (season || profile.color_temperature || profile.color_chroma) {
+    sections.push(`### Color Analysis (Critical)`)
+    sections.push('')
+    if (season) {
+      sections.push(`- **Season:** ${SEASON_LABEL[season]} (${SEASON_ATTRS[season]})`)
+      sections.push(`- **Palette to favor:** ${SEASON_PALETTE[season]}`)
+    }
+    if (profile.color_temperature) sections.push(`- **Temperature:** ${profile.color_temperature}`)
+    if (profile.color_chroma) sections.push(`- **Chroma:** ${profile.color_chroma}`)
+    if (profile.color_depth) sections.push(`- **Depth:** ${profile.color_depth}`)
+    if (profile.color_analysis_notes) sections.push(`- **Notes:** ${profile.color_analysis_notes}`)
+    sections.push('')
+    sections.push(`**Shopping rules (apply to every option):**`)
+    WATSON_COLOR_RULES.forEach((rule) => sections.push(`- ${rule}`))
     sections.push('')
   }
 

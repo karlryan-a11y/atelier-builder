@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Temperature, Chroma, Depth, Season } from '@/lib/color-analysis'
 
 export interface ShoppingSlot {
   id: string
@@ -28,6 +29,13 @@ export interface ClientProfileDraft {
   color_dislikes: string
   fabric_likes: string
   fabric_dislikes: string
+
+  // Color analysis (WSG Color Analysis SOP)
+  color_temperature: Temperature
+  color_chroma: Chroma
+  color_depth: Depth
+  color_season: Season
+  color_analysis_notes: string
 
   brand_preferred: string[]
   brand_blocked: string[]
@@ -68,6 +76,11 @@ const emptyProfile: ClientProfileDraft = {
   color_dislikes: '',
   fabric_likes: '',
   fabric_dislikes: '',
+  color_temperature: '',
+  color_chroma: '',
+  color_depth: '',
+  color_season: '',
+  color_analysis_notes: '',
   brand_preferred: [],
   brand_blocked: [],
   no_fly_list: '',
