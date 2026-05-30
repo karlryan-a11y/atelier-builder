@@ -558,7 +558,7 @@ def build_rows(client_id: str, data: dict[str, Any]) -> dict[str, list[dict[str,
         meas = m.get("measurements") or {}
         if not meas:
             continue
-        d = safe_str(m.get("measured_on")) or "2020-01-01"   # undated historical fallback
+        d = normalize_date(safe_str(m.get("measured_on")))   # undated/partial historical fallback
         # de-dup measured_on within a client (unique constraint)
         while d in seen_dates:
             # nudge the day to keep multiple undated snapshots distinct
@@ -647,6 +647,29 @@ def num(v: Any) -> float | None:
             except ValueError:
                 return None
     return None
+
+
+def normalize_date(s: str | None) -> str:
+    """Coerce an LLM-provided date into a strict YYYY-MM-DD.
+
+    The model sometimes returns partial values ("2026", "2025-09") or junk,
+    which Postgres rejects for a `date` column. Pad missing month/day to 01,
+    clamp ranges, and fall back to the undated-historical sentinel otherwise.
+    """
+    fallback = "2020-01-01"
+    if not s:
+        return fallback
+    m = re.match(r"\s*(\d{4})(?:[-/](\d{1,2}))?(?:[-/](\d{1,2}))?", s)
+    if not m:
+        return fallback
+    y = int(m.group(1))
+    mo = int(m.group(2)) if m.group(2) else 1
+    day = int(m.group(3)) if m.group(3) else 1
+    if not (1900 <= y <= 2100):
+        return fallback
+    mo = min(max(mo, 1), 12)
+    day = min(max(day, 1), 28)   # clamp to 28 to stay valid for every month
+    return f"{y:04d}-{mo:02d}-{day:02d}"
 
 
 def bump_date(d: str) -> str:
