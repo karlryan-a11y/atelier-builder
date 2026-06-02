@@ -20,6 +20,14 @@ export function CoworkImport() {
     setParsed(result)
   }
 
+  async function handleFile(file: File | undefined) {
+    if (!file) return
+    const text = await file.text()
+    setRawInput(text)
+    setParsed(parseCoworkOutput(text))
+    setImported(false)
+  }
+
   async function handleImport() {
     if (!parsed || parsed.length === 0) return
     setCoworkOutput(rawInput)
@@ -51,9 +59,21 @@ export function CoworkImport() {
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-[10px] tracking-[0.2em] uppercase text-text-muted/60 mb-2">
-          Paste Cowork Output
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-[10px] tracking-[0.2em] uppercase text-text-muted/60">
+            Paste Cowork Output
+          </label>
+          <label className="flex items-center gap-1.5 text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text transition-colors cursor-pointer">
+            <Upload className="h-3 w-3" />
+            Upload .md file
+            <input
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+          </label>
+        </div>
         <textarea
           value={rawInput}
           onChange={(e) => {

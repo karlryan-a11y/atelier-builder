@@ -5,6 +5,23 @@
 import { supabase } from '@/lib/supabase'
 import type { ShoppingSession } from '@/stores/shoppingStore'
 import type { BoardSlot } from '@/stores/boardStore'
+import { detectCategory } from '@/lib/categorize'
+
+// Map compose categories → client_brand_sizing enum (top|bottom|dress|outerwear|
+// shoe|intimates|accessory). Returns null for categories with no sizing bucket.
+const SIZING_CATEGORY: Record<string, string> = {
+  top: 'top',
+  bottom: 'bottom',
+  dress: 'dress',
+  outerwear: 'outerwear',
+  shoes: 'shoe',
+  bag: 'accessory',
+  jewelry: 'accessory',
+  belt: 'accessory',
+  scarf: 'accessory',
+  hat: 'accessory',
+  accessory: 'accessory',
+}
 
 function parseNum(v: string | null | undefined): number | null {
   if (!v) return null
@@ -288,5 +305,53 @@ export async function persistTryon(
   if (rows.length > 0) {
     const { error } = await supabase.from('shopping_tryon').insert(rows as Record<string, unknown>[])
     if (error) throw new Error(`tryon save failed: ${error.message}`)
+  }
+}
+
+/**
+ * Learning loop: when a client KEEPS an item, record the proven brand+size into
+ * client_brand_sizing at confirmed_keeper confidence. This is what makes future
+ * briefs smarter. Best-effort, idempotent (upsert on client_id,brand,category).
+ */
+export async function recordKeptSizing(
+  clientId: string,
+  boardSlots: BoardSlot[]
+): Promise<void> {
+  if (!clientId || clientId.startsWith('new_')) return
+
+  const seen = new Set<string>()
+  const rows: Record<string, unknown>[] = []
+  for (const slot of boardSlots) {
+    for (const o of slot.options) {
+      if (o.tryon_status !== 'kept') continue
+      const brand = (o.brand || '').trim()
+      const size = (o.size_override || o.recommended_size || '').trim()
+      if (!brand || !size) continue
+      // Detect category from the slot description first, then the product name
+      const detected =
+        detectCategory(slot.description) !== 'other'
+          ? detectCategory(slot.description)
+          : detectCategory(o.product_name || '')
+      const category = SIZING_CATEGORY[detected]
+      if (!category) continue
+      const key = `${brand.toLowerCase()}|${category}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      rows.push({
+        client_id: clientId,
+        brand,
+        category,
+        size,
+        confidence: 'confirmed_keeper',
+        last_updated: new Date().toISOString(),
+      })
+    }
+  }
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('client_brand_sizing')
+      .upsert(rows, { onConflict: 'client_id,brand,category' })
+    if (error) throw new Error(`kept sizing save failed: ${error.message}`)
   }
 }

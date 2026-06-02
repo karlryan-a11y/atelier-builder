@@ -7,7 +7,11 @@ import {
   type Season,
 } from '@/lib/color-analysis'
 
-export function generateCoworkPrompt(profile: ClientProfileDraft, slots: ShoppingSlot[]): string {
+export function generateCoworkPrompt(
+  profile: ClientProfileDraft,
+  slots: ShoppingSlot[],
+  opts: { playbook?: string; learnings?: string } = {}
+): string {
   const activeSlots = slots.filter((s) => s.description.trim())
   const today = new Date().toISOString().split('T')[0]
 
@@ -38,12 +42,31 @@ export function generateCoworkPrompt(profile: ClientProfileDraft, slots: Shoppin
   sections.push(`- Confidence level: **High** (client has bought this brand + size + silhouette before), **Medium** (brand OR silhouette match), or **Low** (net-new)`)
   sections.push(`- Direct image URL for the product's hero image (the full https link to the image file, ending in .jpg/.png/.webp)`)
   sections.push('')
+
+  // WSG sourcing standards (embedded playbook — no external macro/repo needed)
+  if (opts.playbook && opts.playbook.trim()) {
+    sections.push('---')
+    sections.push('')
+    sections.push(`## WSG Sourcing Standards`)
+    sections.push('')
+    sections.push(opts.playbook.trim())
+    sections.push('')
+  }
+
   sections.push('---')
   sections.push('')
 
   // Client profile
   sections.push(`## Client Profile`)
   sections.push('')
+
+  // What we've learned about this client from past WSG shopping
+  if (opts.learnings && opts.learnings.trim()) {
+    sections.push(`### What We've Learned About This Client (from past WSG shopping)`)
+    sections.push('')
+    sections.push(opts.learnings.trim())
+    sections.push('')
+  }
 
   // Sizes
   const sizes = [

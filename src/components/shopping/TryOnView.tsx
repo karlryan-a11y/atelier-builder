@@ -4,7 +4,7 @@ import { Check, RotateCcw, ArrowLeftRight, Shirt, PackageCheck, AlertCircle } fr
 import { useBoardStore, type BoardOption } from '@/stores/boardStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useAuth } from '@/hooks/useAuth'
-import { persistReviews, persistTryon, updateSessionMeta } from '@/lib/shopping-persistence'
+import { persistReviews, persistTryon, updateSessionMeta, recordKeptSizing } from '@/lib/shopping-persistence'
 import { supabase } from '@/lib/supabase'
 
 function getOrderSize(opt: BoardOption) {
@@ -161,9 +161,12 @@ export function TryOnView() {
     const sid = useShoppingStore.getState().session.id
     if (!sid) return
     const boardSlots = useBoardStore.getState().slots
+    const clientId = useShoppingStore.getState().session.profile.client_id
     try {
       await persistReviews(sid, boardSlots, user?.id ?? null)
       await persistTryon(sid, boardSlots, user?.id ?? null)
+      // Learning loop: kept items become proven brand sizes for this client
+      await recordKeptSizing(clientId, boardSlots)
       if (markComplete) {
         await updateSessionMeta(sid, { status: 'complete', completed_at: new Date().toISOString() })
       }

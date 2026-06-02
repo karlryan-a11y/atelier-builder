@@ -6,6 +6,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { generateCoworkPrompt } from '@/lib/cowork-prompt'
 import { saveBrief } from '@/lib/shopping-persistence'
 import { saveClientData } from '@/lib/client-data'
+import { loadPlaybook } from '@/lib/shopping-playbook'
+import { loadClientLearnings, formatLearnings } from '@/lib/client-learnings'
 import { ClientSelector } from './ClientSelector'
 import { SizeForm } from './SizeForm'
 import { MeasurementsForm } from './MeasurementsForm'
@@ -151,7 +153,13 @@ export function ShopView() {
   const slotsWithDescription = session.slots.filter((s) => s.description.trim())
 
   async function handleGenerate() {
-    const prompt = generateCoworkPrompt(session.profile, session.slots)
+    // Pull the embedded WSG playbook + this client's past learnings so the brief
+    // is self-contained (no macro/repo) and gets smarter over time.
+    const [playbook, learnings] = await Promise.all([
+      loadPlaybook().catch(() => ''),
+      loadClientLearnings(session.profile.client_id).then(formatLearnings).catch(() => ''),
+    ])
+    const prompt = generateCoworkPrompt(session.profile, session.slots, { playbook, learnings })
     setCoworkPrompt(prompt)
     setShowPrompt(true)
     // Persist the brief (durable, resumable session) — best-effort
