@@ -45,24 +45,32 @@ function cleanPrice(raw: string): string {
   return raw.replace(/[^0-9.,]/g, '').trim()
 }
 
-function extractImageUrl(block: string): string {
-  // Try explicit Image: field first (may be a markdown image or bare URL)
-  const field = extractField(block, 'Image')
-  const candidate = field || block
+// Undo Markdown escaping ("w2000\_q60" -> "w2000_q60") that breaks URLs.
+export function cleanUrl(u: string): string {
+  return (u || '').replace(/\\([_*()\[\]~`.#-])/g, '$1').trim()
+}
 
-  // Markdown image: ![alt](url)
-  const mdImage = candidate.match(/!\[[^\]]*\]\(([^)\s]+)\)/)
-  if (mdImage) return mdImage[1].trim()
+export function extractImageUrl(block: string): string {
+  // Take the explicit Image: field; unescape Markdown ("\_" -> "_") first.
+  const candidate = cleanUrl(extractField(block, 'Image')) || block
 
-  // Markdown link wrapping an image url: [text](url.jpg)
-  const mdLink = candidate.match(/\]\((https?:\/\/[^)\s]+\.(?:png|jpe?g|webp|gif|avif)[^)\s]*)\)/i)
-  if (mdLink) return mdLink[1].trim()
+  // Markdown image: ![alt](url) — alt has no URL, so the image is in parens.
+  const mdImage = candidate.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/)
+  if (mdImage) return cleanUrl(mdImage[1])
 
-  // Bare image URL anywhere in the field
-  const bare = candidate.match(/https?:\/\/[^\s)]+\.(?:png|jpe?g|webp|gif|avif)[^\s)]*/i)
-  if (bare) return bare[0].trim()
+  // Otherwise take the LEFTMOST URL, stopping at whitespace + markdown
+  // delimiters ( ) [ ] " \ — this grabs the image in `imageURL](productURL)`
+  // and `[imageURL](productURL)`, not the product page.
+  const bareImg = candidate.match(
+    /https?:\/\/[^\s)\]["[(\\]+\.(?:png|jpe?g|webp|gif|avif)[^\s)\]["[(\\]*/i
+  )
+  if (bareImg) return cleanUrl(bareImg[0])
 
-  return field.trim()
+  // Retailer CDN images often have no file extension
+  const bare = candidate.match(/https?:\/\/[^\s)\]["[(\\]+/i)
+  if (bare) return cleanUrl(bare[0])
+
+  return ''
 }
 
 export function parseCoworkOutput(raw: string): ParsedSlot[] {
@@ -84,7 +92,7 @@ export function parseCoworkOutput(raw: string): ParsedSlot[] {
       brand: extractField(block, 'Brand'),
       retailer: extractField(block, 'Retailer'),
       price: cleanPrice(extractField(block, 'Price')),
-      url: extractField(block, 'URL'),
+      url: cleanUrl(extractField(block, 'URL')),
       sizes_available: extractField(block, 'Sizes Available'),
       colors_available: extractField(block, 'Colors Available'),
       recommended_size: extractField(block, 'Recommended Size'),
@@ -116,7 +124,7 @@ export function parseCoworkOutput(raw: string): ParsedSlot[] {
         brand: extractField(block, 'Brand'),
         retailer: extractField(block, 'Retailer'),
         price: cleanPrice(extractField(block, 'Price')),
-        url: extractField(block, 'URL'),
+        url: cleanUrl(extractField(block, 'URL')),
         sizes_available: extractField(block, 'Sizes Available'),
         colors_available: extractField(block, 'Colors Available'),
         recommended_size: extractField(block, 'Recommended Size'),

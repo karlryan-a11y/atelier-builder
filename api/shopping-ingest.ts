@@ -81,14 +81,19 @@ function field(block: string, label: string): string {
   }
   return ''
 }
+function cleanUrl(u: string): string {
+  return (u || '').replace(/\\([_*()\[\]~`.#-])/g, '$1').trim()
+}
 function imageFrom(block: string): string {
-  const f = field(block, 'Image')
-  const cand = f || block
-  const md = cand.match(/!\[[^\]]*\]\(([^)\s]+)\)/)
-  if (md) return md[1].trim()
-  const bare = cand.match(/https?:\/\/[^\s)]+\.(?:png|jpe?g|webp|gif|avif)[^\s)]*/i)
-  if (bare) return bare[0].trim()
-  return f.trim()
+  const cand = cleanUrl(field(block, 'Image')) || block
+  let m = cand.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/)
+  if (m) return cleanUrl(m[1])
+  // Leftmost URL, stopping at whitespace + markdown delimiters ( ) [ ] " \
+  m = cand.match(/https?:\/\/[^\s)\]["[(\\]+\.(?:png|jpe?g|webp|gif|avif)[^\s)\]["[(\\]*/i)
+  if (m) return cleanUrl(m[0])
+  m = cand.match(/https?:\/\/[^\s)\]["[(\\]+/i)
+  if (m) return cleanUrl(m[0])
+  return ''
 }
 function parseRaw(raw: string): IngestOption[] {
   const out: IngestOption[] = []
@@ -103,7 +108,7 @@ function parseRaw(raw: string): IngestOption[] {
         brand: field(block, 'Brand'),
         retailer: field(block, 'Retailer'),
         price: field(block, 'Price'),
-        url: field(block, 'URL'),
+        url: cleanUrl(field(block, 'URL')),
         sizes_available: field(block, 'Sizes Available'),
         colors_available: field(block, 'Colors Available'),
         recommended_size: field(block, 'Recommended Size'),
