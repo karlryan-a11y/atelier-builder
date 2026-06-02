@@ -4,6 +4,7 @@ import { Check, RotateCcw, ArrowLeftRight, Shirt, PackageCheck, AlertCircle } fr
 import { useBoardStore, type BoardOption } from '@/stores/boardStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useAuth } from '@/hooks/useAuth'
+import { ProductImage } from './ProductImage'
 import { persistReviews, persistTryon, updateSessionMeta, recordKeptSizing } from '@/lib/shopping-persistence'
 import { supabase } from '@/lib/supabase'
 
@@ -46,17 +47,9 @@ function TryOnCard({
     <div className={`border rounded-sm overflow-hidden transition-all ${config.border} ${config.bg}`}>
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
-          {option.image_url && (
-            <img
-              src={option.image_url}
-              alt={option.product_name}
-              className="w-12 h-16 object-cover rounded-sm shrink-0 bg-tile"
-              loading="lazy"
-              onError={(e) => {
-                ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-              }}
-            />
-          )}
+          <div className="relative w-12 h-16 shrink-0 rounded-sm overflow-hidden">
+            <ProductImage src={option.image_url} alt={option.product_name} brand={option.brand} compact />
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] tracking-[0.15em] uppercase text-text-muted/60 mb-0.5">
               {slotDescription}

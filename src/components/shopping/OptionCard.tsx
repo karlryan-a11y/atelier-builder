@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, X, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react'
 import { useBoardStore, type BoardOption } from '@/stores/boardStore'
+import { ProductImage } from './ProductImage'
 
 const REJECTION_REASONS = [
   'Color', 'Silhouette', 'Brand', 'Price', 'Fit risk', 'Off-vibe',
@@ -52,25 +53,14 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
           : 'border-wsg-border bg-white'
       }`}
     >
-      {/* Image placeholder */}
-      <div className="aspect-[3/4] bg-tile flex items-center justify-center relative">
-        {option.image_url ? (
-          <img
-            src={option.image_url}
-            alt={option.product_name}
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="lazy"
-            onError={(e) => {
-              ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-            }}
-          />
-        ) : option.url ? (
-          <div className="absolute inset-0 flex items-center justify-center text-text-muted/20">
-            <span className="text-[10px] tracking-[0.15em] uppercase">Product Image</span>
-          </div>
-        ) : (
-          <span className="text-[10px] tracking-[0.15em] uppercase text-text-muted/30">No image</span>
-        )}
+      {/* Product image (branded fallback on load failure) */}
+      <div className="aspect-[3/4] relative">
+        <ProductImage
+          src={option.image_url}
+          alt={option.product_name}
+          brand={option.brand}
+          url={option.url}
+        />
 
         {/* Confidence badge */}
         <div

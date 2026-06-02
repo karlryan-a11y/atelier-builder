@@ -20,9 +20,15 @@ const STATUS_LABEL: Record<string, string> = {
 
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
   } catch {
-    return iso.slice(0, 10)
+    return iso.slice(0, 16).replace('T', ' ')
   }
 }
 
