@@ -55,8 +55,14 @@ const VALID_SEASONS = ['spring', 'summer', 'autumn', 'winter']
 
 function normalizeSeason(raw: unknown): Season {
   if (typeof raw !== 'string') return ''
-  let s = raw.trim().toLowerCase()
-  if (s === 'fall') s = 'autumn'
+  const s = raw.trim().toLowerCase()
+  if (!s) return ''
+  // Match exact words and 12-season sub-types ("warm autumn", "soft summer",
+  // "deep winter", "true spring", "cool winter", "fall", etc.) by substring.
+  if (s.includes('spring')) return 'spring'
+  if (s.includes('summer')) return 'summer'
+  if (s.includes('autumn') || s.includes('fall')) return 'autumn'
+  if (s.includes('winter')) return 'winter'
   return (VALID_SEASONS.includes(s) ? s : '') as Season
 }
 
