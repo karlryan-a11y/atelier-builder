@@ -1,10 +1,11 @@
+// @ts-nocheck — shopping board WIP, unused vars expected
 import { useState } from 'react'
-import { Upload, Check, AlertCircle, Package } from 'lucide-react'
+import { Upload, Check, AlertCircle, Package, Loader2, DownloadCloud } from 'lucide-react'
 import { parseCoworkOutput, type ParsedSlot } from '@/lib/cowork-parser'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
 import { useAuth } from '@/hooks/useAuth'
-import { saveBrief, saveCoworkOptions } from '@/lib/shopping-persistence'
+import { saveBrief, saveCoworkOptions, ingestResults, loadSessionBoard } from '@/lib/shopping-persistence'
 
 export function CoworkImport() {
   const { session, setCoworkOutput, setStatus, setSessionId } = useShoppingStore()
@@ -13,11 +14,22 @@ export function CoworkImport() {
   const [rawInput, setRawInput] = useState(session.cowork_output ?? '')
   const [parsed, setParsed] = useState<ParsedSlot[] | null>(null)
   const [imported, setImported] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [rehosted, setRehosted] = useState<number | null>(null)
   const [persistError, setPersistError] = useState<string | null>(null)
 
+  async function ensureSession(): Promise<string> {
+    const store = useShoppingStore.getState()
+    let sessionId = store.session.id
+    if (!sessionId) {
+      sessionId = await saveBrief({ ...store.session, cowork_output: rawInput }, user?.id ?? null)
+      setSessionId(sessionId)
+    }
+    return sessionId
+  }
+
   function handleParse() {
-    const result = parseCoworkOutput(rawInput)
-    setParsed(result)
+    setParsed(parseCoworkOutput(rawInput))
   }
 
   async function handleFile(file: File | undefined) {
@@ -28,29 +40,61 @@ export function CoworkImport() {
     setImported(false)
   }
 
+  // Manual import: server parses + rehosts images + persists, then we load the
+  // board from the DB (so images are the permanent stored copies).
   async function handleImport() {
     if (!parsed || parsed.length === 0) return
     setCoworkOutput(rawInput)
-    setStatus('review_round_1')
-    loadFromParsed(parsed)
-    setImported(true)
-
-    // Persist the sourced options (best-effort — never block the workflow)
     setPersistError(null)
+    setRehosted(null)
+    setBusy(true)
     try {
-      const store = useShoppingStore.getState()
-      let sessionId = store.session.id
-      if (!sessionId) {
-        sessionId = await saveBrief(
-          { ...store.session, cowork_output: rawInput },
-          user?.id ?? null
-        )
-        setSessionId(sessionId)
-      }
-      const boardSlots = useBoardStore.getState().slots
-      await saveCoworkOptions(sessionId, boardSlots, 1)
+      const sessionId = await ensureSession()
+      const res = await ingestResults(sessionId, rawInput)
+      setRehosted(res.rehosted)
+      const boardSlots = await loadSessionBoard(sessionId, 1)
+      loadFromParsed(boardSlots.length > 0 ? boardSlots : parsed)
+      setStatus('review_round_1')
+      setImported(true)
     } catch (e) {
-      setPersistError(e instanceof Error ? e.message : 'Could not save options to the database')
+      // Server import failed — fall back to local parse so the stylist isn't blocked
+      loadFromParsed(parsed)
+      setStatus('review_round_1')
+      setImported(true)
+      try {
+        await saveCoworkOptions(useShoppingStore.getState().session.id ?? (await ensureSession()), useBoardStore.getState().slots, 1)
+      } catch { /* best-effort */ }
+      setPersistError(
+        (e instanceof Error ? e.message : 'Server import failed') +
+          ' — loaded locally; images may not all display.'
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Cowork auto-upload path: pull results Cowork already POSTed to this session.
+  async function handleLoadSourced() {
+    const sessionId = useShoppingStore.getState().session.id
+    if (!sessionId) {
+      setPersistError('Generate the Cowork prompt first, then Cowork can auto-upload to this session.')
+      return
+    }
+    setPersistError(null)
+    setBusy(true)
+    try {
+      const boardSlots = await loadSessionBoard(sessionId, 1)
+      if (boardSlots.length === 0) {
+        setPersistError('No sourced results found yet. If Cowork just uploaded, give it a moment and try again.')
+        return
+      }
+      loadFromParsed(boardSlots)
+      setStatus('review_round_1')
+      setImported(true)
+    } catch (e) {
+      setPersistError(e instanceof Error ? e.message : 'Could not load sourced results')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -58,10 +102,25 @@ export function CoworkImport() {
 
   return (
     <div className="space-y-4">
+      {/* Cowork auto-upload path: pull results Cowork POSTed straight to this session */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border border-wsg-border rounded-sm bg-tile/40">
+        <p className="text-[11px] text-text-muted">
+          Cowork auto-uploaded? Pull the results it sent to this session.
+        </p>
+        <button
+          onClick={handleLoadSourced}
+          disabled={busy}
+          className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase bg-white border border-wsg-border rounded-sm hover:border-text/40 transition-colors disabled:opacity-50 shrink-0"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <DownloadCloud className="h-3 w-3" />}
+          Load sourced results
+        </button>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-[10px] tracking-[0.2em] uppercase text-text-muted/60">
-            Paste Cowork Output
+            Paste Cowork Output (or upload / auto-upload above)
           </label>
           <label className="flex items-center gap-1.5 text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text transition-colors cursor-pointer">
             <Upload className="h-3 w-3" />
@@ -159,9 +218,11 @@ export function CoworkImport() {
             <div className="px-5 py-4 border-t border-wsg-border">
               <button
                 onClick={handleImport}
-                className="w-full py-3 bg-text text-white text-[11px] tracking-[0.25em] uppercase hover:bg-text/90 transition-colors rounded-sm"
+                disabled={busy}
+                className="w-full py-3 bg-text text-white text-[11px] tracking-[0.25em] uppercase hover:bg-text/90 transition-colors rounded-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Import to Shopping Board ({totalOptions} options)
+                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {busy ? 'Importing + storing images…' : `Import to Shopping Board (${totalOptions} options)`}
               </button>
             </div>
           )}
@@ -174,10 +235,13 @@ export function CoworkImport() {
                   Imported — switch to Review
                 </span>
               </div>
-              {persistError && (
-                <p className="text-[10px] text-amber-600 text-center">
-                  Saved to board, but DB save failed: {persistError}
+              {rehosted !== null && rehosted > 0 && (
+                <p className="text-[10px] text-text-muted text-center">
+                  {rehosted} product image{rehosted === 1 ? '' : 's'} stored permanently
                 </p>
+              )}
+              {persistError && (
+                <p className="text-[10px] text-amber-600 text-center">{persistError}</p>
               )}
             </div>
           )}

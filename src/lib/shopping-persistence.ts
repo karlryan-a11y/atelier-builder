@@ -5,7 +5,11 @@
 import { supabase } from '@/lib/supabase'
 import type { ShoppingSession } from '@/stores/shoppingStore'
 import type { BoardSlot } from '@/stores/boardStore'
+import type { ParsedSlot, ParsedOption } from '@/lib/cowork-parser'
 import { detectCategory } from '@/lib/categorize'
+
+// The auto-upload / rehost ingest endpoint (Vercel serverless function).
+export const INGEST_URL = '/api/shopping-ingest'
 
 // Map compose categories → client_brand_sizing enum (top|bottom|dress|outerwear|
 // shoe|intimates|accessory). Returns null for categories with no sizing bucket.
@@ -306,6 +310,73 @@ export async function persistTryon(
     const { error } = await supabase.from('shopping_tryon').insert(rows as Record<string, unknown>[])
     if (error) throw new Error(`tryon save failed: ${error.message}`)
   }
+}
+
+/**
+ * Send raw Cowork output (or pre-parsed options) to the ingest function, which
+ * parses, rehosts every image into permanent storage, and persists slots +
+ * options. Used by the in-app importer so the manual path also gets rehosting.
+ */
+export async function ingestResults(sessionId: string, raw: string): Promise<{ ok: boolean; rehosted: number; options: number }> {
+  const resp = await fetch(INGEST_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, raw }),
+  })
+  const json = await resp.json().catch(() => ({}))
+  if (!resp.ok) throw new Error(json?.error || `ingest failed (${resp.status})`)
+  return { ok: !!json.ok, rehosted: json.rehosted ?? 0, options: json.options ?? 0 }
+}
+
+/**
+ * Load a session's persisted slots + options from the DB into the board shape
+ * (ParsedSlot[]). The single source of truth for the board — used after an
+ * import and to pull in results that Cowork auto-uploaded.
+ */
+export async function loadSessionBoard(sessionId: string, round: 1 | 2 = 1): Promise<ParsedSlot[]> {
+  const [slotsRes, optsRes] = await Promise.all([
+    supabase
+      .from('shopping_slots')
+      .select('id, description, display_order')
+      .eq('session_id', sessionId)
+      .order('display_order'),
+    supabase
+      .from('shopping_options')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('round', round),
+  ])
+  const slots = slotsRes.data ?? []
+  const opts = (optsRes.data ?? []) as Record<string, any>[]
+  if (slots.length === 0 || opts.length === 0) return []
+
+  const bySlot = new Map<string, ParsedOption[]>()
+  for (const o of opts) {
+    const arr = bySlot.get(o.slot_id) ?? []
+    const slotDesc = slots.find((s) => s.id === o.slot_id)?.description ?? ''
+    arr.push({
+      slot_description: slotDesc,
+      option_number: arr.length + 1,
+      product_name: o.product_name ?? '',
+      brand: o.brand ?? '',
+      retailer: o.retailer ?? '',
+      price: o.price != null ? String(o.price) : '',
+      url: o.product_url ?? '',
+      sizes_available: Array.isArray(o.sizes_available) ? o.sizes_available.join(', ') : '',
+      colors_available: Array.isArray(o.colors_available) ? o.colors_available.join(', ') : '',
+      recommended_size: o.selected_size ?? '',
+      recommended_color: o.selected_color ?? '',
+      ship_timeline: o.ship_timeline ?? '',
+      return_policy: o.return_policy ?? '',
+      image_url: o.image_url ?? '',
+      confidence: (['high', 'medium', 'low'].includes(o.confidence) ? o.confidence : 'low') as ParsedOption['confidence'],
+    })
+    bySlot.set(o.slot_id, arr)
+  }
+
+  return slots
+    .filter((s) => bySlot.has(s.id))
+    .map((s) => ({ description: s.description, options: bySlot.get(s.id)! }))
 }
 
 /**

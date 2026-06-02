@@ -4,7 +4,7 @@ import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
 import { useAuth } from '@/hooks/useAuth'
 import { generateCoworkPrompt } from '@/lib/cowork-prompt'
-import { saveBrief } from '@/lib/shopping-persistence'
+import { saveBrief, updateSessionMeta } from '@/lib/shopping-persistence'
 import { saveClientData } from '@/lib/client-data'
 import { loadPlaybook } from '@/lib/shopping-playbook'
 import { loadClientLearnings, formatLearnings } from '@/lib/client-learnings'
@@ -153,23 +153,30 @@ export function ShopView() {
   const slotsWithDescription = session.slots.filter((s) => s.description.trim())
 
   async function handleGenerate() {
+    const store = useShoppingStore.getState()
     // Pull the embedded WSG playbook + this client's past learnings so the brief
     // is self-contained (no macro/repo) and gets smarter over time.
     const [playbook, learnings] = await Promise.all([
       loadPlaybook().catch(() => ''),
-      loadClientLearnings(session.profile.client_id).then(formatLearnings).catch(() => ''),
+      loadClientLearnings(store.session.profile.client_id).then(formatLearnings).catch(() => ''),
     ])
-    const prompt = generateCoworkPrompt(session.profile, session.slots, { playbook, learnings })
+    // Persist the session first so we have an id to embed as the auto-upload
+    // target in the brief (Cowork POSTs results straight back to this session).
+    let sessionId = store.session.id
+    try {
+      sessionId = await saveBrief(store.session, user?.id ?? null)
+      setSessionId(sessionId)
+    } catch {
+      sessionId = store.session.id
+    }
+    const prompt = generateCoworkPrompt(store.session.profile, store.session.slots, {
+      playbook,
+      learnings,
+      ingestSessionId: sessionId || undefined,
+    })
     setCoworkPrompt(prompt)
     setShowPrompt(true)
-    // Persist the brief (durable, resumable session) — best-effort
-    try {
-      const store = useShoppingStore.getState()
-      const id = await saveBrief({ ...store.session, cowork_prompt: prompt }, user?.id ?? null)
-      setSessionId(id)
-    } catch {
-      // non-blocking — the prompt is already generated locally
-    }
+    if (sessionId) updateSessionMeta(sessionId, { cowork_prompt_md: prompt }).catch(() => {})
   }
 
   async function handleSaveProfile() {

@@ -10,7 +10,7 @@ import {
 export function generateCoworkPrompt(
   profile: ClientProfileDraft,
   slots: ShoppingSlot[],
-  opts: { playbook?: string; learnings?: string } = {}
+  opts: { playbook?: string; learnings?: string; ingestSessionId?: string } = {}
 ): string {
   const activeSlots = slots.filter((s) => s.description.trim())
   const today = new Date().toISOString().split('T')[0]
@@ -248,6 +248,36 @@ export function generateCoworkPrompt(
   sections.push(`### Option 3`)
   sections.push(`...`)
   sections.push('```')
+
+  // Delivery — auto-upload straight onto the stylist's board (with manual fallback)
+  if (opts.ingestSessionId) {
+    sections.push('')
+    sections.push('---')
+    sections.push('')
+    sections.push(`## Delivering Your Results`)
+    sections.push('')
+    sections.push(
+      `**Preferred — auto-upload to the stylist's board.** When finished, send a single HTTP POST:`
+    )
+    sections.push('')
+    sections.push('```')
+    sections.push(`POST https://atelier-builder.vercel.app/api/shopping-ingest`)
+    sections.push(`Content-Type: application/json`)
+    sections.push('')
+    sections.push(`{`)
+    sections.push(`  "session_id": "${opts.ingestSessionId}",`)
+    sections.push(`  "raw": "<your full Markdown results from the format above, as a string>"`)
+    sections.push(`}`)
+    sections.push('```')
+    sections.push('')
+    sections.push(
+      `The server parses your results, permanently stores every product image, and drops the options straight onto the stylist's Shopping Board — no copy-paste needed. A 200 response with \`"ok": true\` means it worked.`
+    )
+    sections.push('')
+    sections.push(
+      `**Fallback:** if you can't POST, just return the Markdown results above and the stylist will paste or upload them.`
+    )
+  }
 
   return sections.join('\n')
 }
