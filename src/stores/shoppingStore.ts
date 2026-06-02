@@ -138,6 +138,7 @@ interface ShoppingState extends ClientDataState {
   session: ShoppingSession
   setProfile: (updates: Partial<ClientProfileDraft>) => void
   addSlot: () => void
+  addSlots: (items: Partial<ShoppingSlot>[]) => void
   updateSlot: (id: string, updates: Partial<ShoppingSlot>) => void
   removeSlot: (id: string) => void
   setCoworkPrompt: (prompt: string) => void
@@ -205,6 +206,24 @@ export const useShoppingStore = create<ShoppingState>((set) => ({
             budget_guidance: '',
             notes: '',
           },
+        ],
+      },
+    })),
+
+  addSlots: (items) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        slots: [
+          ...state.session.slots,
+          ...items.map((it, i) => ({
+            id: `slot_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+            description: it.description ?? '',
+            category: it.category ?? '',
+            quality_bar: it.quality_bar ?? ('daily_rotation' as const),
+            budget_guidance: it.budget_guidance ?? '',
+            notes: it.notes ?? '',
+          })),
         ],
       },
     })),
