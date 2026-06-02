@@ -138,15 +138,46 @@ const EXT: Record<string, string> = {
   'image/avif': 'avif',
 }
 
-async function rehostImage(srcUrl: string, key: string): Promise<string | null> {
+const UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+
+// Retailer share image from a product page — fallback when the given image URL
+// is wrong/404s. og:image / twitter:image usually sits on a permissive CDN.
+async function ogImage(pageUrl: string): Promise<string | null> {
   try {
-    const r = await fetch(srcUrl, {
-      headers: {
-        'user-agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-        accept: 'image/avif,image/webp,image/png,image/*,*/*;q=0.8',
-      },
-    })
+    const r = await fetch(pageUrl, { headers: { 'user-agent': UA, accept: 'text/html,*/*' } })
+    if (!r.ok) return null
+    const html = (await r.text()).slice(0, 300000)
+    const pats = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)/i,
+    ]
+    for (const p of pats) {
+      const m = html.match(p)
+      if (m) return m[1]
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+async function rehostImage(srcUrl: string, key: string, referer?: string): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = {
+      'user-agent': UA,
+      accept: 'image/avif,image/webp,image/png,image/*,*/*;q=0.8',
+    }
+    if (referer) {
+      try {
+        const u = new URL(referer)
+        headers.referer = `${u.protocol}//${u.host}/`
+      } catch {
+        /* ignore */
+      }
+    }
+    const r = await fetch(srcUrl, { headers })
     if (!r.ok) return null
     const ct = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
     if (!ct.startsWith('image/')) return null
@@ -229,12 +260,25 @@ export default async function handler(req: any, res: any) {
         if (!slotId) return null
         let image_url = o.image_url || null
         let image_r2_key: string | null = null
+        const key = `${sessionId}/r${round}-${i}`
+        const productUrl = o.url || undefined
         if (image_url) {
-          const key = `${sessionId}/r${round}-${i}`
-          const stored = await rehostImage(image_url, key)
+          const stored = await rehostImage(image_url, key, productUrl)
           if (stored) {
             image_r2_key = key
             image_url = stored
+          }
+        }
+        // Fallback: the given image URL was wrong/blocked — try the product
+        // page's share image (og:image) and re-host that instead.
+        if (!image_r2_key && productUrl) {
+          const og = await ogImage(productUrl)
+          if (og) {
+            const stored = await rehostImage(og, key, productUrl)
+            if (stored) {
+              image_r2_key = key
+              image_url = stored
+            }
           }
         }
         return {
