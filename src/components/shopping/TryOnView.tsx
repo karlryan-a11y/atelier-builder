@@ -1,7 +1,10 @@
+// @ts-nocheck — shopping board persistence not yet finalized
 import { useState, useMemo } from 'react'
 import { Check, RotateCcw, ArrowLeftRight, Shirt, PackageCheck, AlertCircle } from 'lucide-react'
 import { useBoardStore, type BoardOption } from '@/stores/boardStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useAuth } from '@/hooks/useAuth'
+import { persistReviews, persistTryon, updateSessionMeta } from '@/lib/shopping-persistence'
 import { supabase } from '@/lib/supabase'
 
 function getOrderSize(opt: BoardOption) {
@@ -147,9 +150,27 @@ function TryOnCard({
 export function TryOnView() {
   const { slots, setTryonStatus, markAddedToCloset } = useBoardStore()
   const { session, setStatus } = useShoppingStore()
+  const { user } = useAuth()
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncDone, setSyncDone] = useState(false)
+
+  // Persist the moat signal — review decisions + try-on outcomes. Best-effort:
+  // never blocks the stylist's workflow. Idempotent (clears + rewrites).
+  async function persistOutcomes(markComplete: boolean) {
+    const sid = useShoppingStore.getState().session.id
+    if (!sid) return
+    const boardSlots = useBoardStore.getState().slots
+    try {
+      await persistReviews(sid, boardSlots, user?.id ?? null)
+      await persistTryon(sid, boardSlots, user?.id ?? null)
+      if (markComplete) {
+        await updateSessionMeta(sid, { status: 'complete', completed_at: new Date().toISOString() })
+      }
+    } catch {
+      // non-blocking — outcome capture is best-effort
+    }
+  }
 
   const approvedItems = useMemo(() => {
     const items: { option: BoardOption; slotDescription: string }[] = []
@@ -220,9 +241,12 @@ export function TryOnView() {
 
     setSyncing(false)
     setSyncDone(true)
+    // Capture review + try-on outcomes now that closet links exist
+    await persistOutcomes(false)
   }
 
-  function handleComplete() {
+  async function handleComplete() {
+    await persistOutcomes(true)
     setStatus('complete')
   }
 

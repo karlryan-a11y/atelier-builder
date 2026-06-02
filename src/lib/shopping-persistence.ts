@@ -179,3 +179,114 @@ export async function saveCoworkOptions(
     if (error) throw new Error(`option save failed: ${error.message}`)
   }
 }
+
+function optionKey(slotDesc: string, productName: string, brand: string): string {
+  return `${norm(slotDesc)}|${norm(productName)}|${norm(brand)}`
+}
+
+/**
+ * Resolve persisted shopping_options ids for a session, keyed by
+ * slotDescription|productName|brand. Lets us attach reviews/tryon to options
+ * without tracking DB ids through the transient board store.
+ */
+async function fetchOptionIdMap(sessionId: string): Promise<Map<string, string>> {
+  const [optRes, slotRes] = await Promise.all([
+    supabase
+      .from('shopping_options')
+      .select('id, slot_id, product_name, brand')
+      .eq('session_id', sessionId),
+    supabase.from('shopping_slots').select('id, description').eq('session_id', sessionId),
+  ])
+  const slotDescById = new Map<string, string>()
+  for (const s of slotRes.data ?? []) slotDescById.set(s.id, s.description)
+
+  const map = new Map<string, string>()
+  for (const o of optRes.data ?? []) {
+    const desc = slotDescById.get(o.slot_id) ?? ''
+    map.set(optionKey(desc, o.product_name ?? '', o.brand ?? ''), o.id)
+  }
+  return map
+}
+
+const REVIEW_ACTION: Record<string, 'approve' | 'reject' | 'swap'> = {
+  approved: 'approve',
+  rejected: 'reject',
+  swapped: 'swap',
+}
+
+/**
+ * Persist the stylist's review decisions (approve/reject/swap + reasons) for a
+ * session. Idempotent: clears prior reviews for the session first. This is the
+ * moat signal — why options were accepted or rejected.
+ */
+export async function persistReviews(
+  sessionId: string,
+  boardSlots: BoardSlot[],
+  reviewerId: string | null
+): Promise<void> {
+  const idMap = await fetchOptionIdMap(sessionId)
+
+  const rows = boardSlots.flatMap((slot) =>
+    slot.options
+      .filter((o) => o.status !== 'pending')
+      .map((o) => {
+        const optionId = idMap.get(optionKey(slot.description, o.product_name, o.brand))
+        if (!optionId) return null
+        return {
+          option_id: optionId,
+          session_id: sessionId,
+          action: REVIEW_ACTION[o.status],
+          round: 1,
+          rejection_reasons: o.rejection_reasons?.length ? o.rejection_reasons : null,
+          feedback_note: o.feedback_note || null,
+          size_override: o.size_override || null,
+          color_override: o.color_override || null,
+          reviewed_by: reviewerId,
+        }
+      })
+      .filter(Boolean)
+  )
+
+  await supabase.from('shopping_reviews').delete().eq('session_id', sessionId)
+  if (rows.length > 0) {
+    const { error } = await supabase.from('shopping_reviews').insert(rows as Record<string, unknown>[])
+    if (error) throw new Error(`review save failed: ${error.message}`)
+  }
+}
+
+/**
+ * Persist try-on outcomes (kept/returned/exchanged + closet link). Idempotent:
+ * clears prior tryon rows for the session first.
+ */
+export async function persistTryon(
+  sessionId: string,
+  boardSlots: BoardSlot[],
+  reviewerId: string | null
+): Promise<void> {
+  const idMap = await fetchOptionIdMap(sessionId)
+
+  const rows = boardSlots.flatMap((slot) =>
+    slot.options
+      .filter((o) => o.tryon_status === 'kept' || o.tryon_status === 'returned' || o.tryon_status === 'exchanged')
+      .map((o) => {
+        const optionId = idMap.get(optionKey(slot.description, o.product_name, o.brand))
+        if (!optionId) return null
+        return {
+          option_id: optionId,
+          session_id: sessionId,
+          result: o.tryon_status,
+          reason: o.tryon_status === 'returned' ? o.exchange_notes || null : null,
+          exchange_details: o.tryon_status === 'exchanged' ? o.exchange_notes || null : null,
+          closet_item_id: o.closet_item_id || null,
+          reviewed_by: reviewerId,
+        }
+      })
+      .filter(Boolean)
+  )
+
+  await supabase.from('shopping_tryon').delete().eq('session_id', sessionId)
+  if (rows.length > 0) {
+    const { error } = await supabase.from('shopping_tryon').insert(rows as Record<string, unknown>[])
+    if (error) throw new Error(`tryon save failed: ${error.message}`)
+  }
+}
