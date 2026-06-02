@@ -5,7 +5,7 @@ import { parseCoworkOutput, type ParsedSlot } from '@/lib/cowork-parser'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
 import { useAuth } from '@/hooks/useAuth'
-import { saveBrief, saveCoworkOptions, ingestResults, loadSessionBoard } from '@/lib/shopping-persistence'
+import { saveBrief, saveCoworkOptions, storeOptionImages } from '@/lib/shopping-persistence'
 
 export function CoworkImport() {
   const { session, setCoworkOutput, setStatus, setSessionId } = useShoppingStore()
@@ -16,6 +16,7 @@ export function CoworkImport() {
   const [imported, setImported] = useState(false)
   const [busy, setBusy] = useState(false)
   const [rehosted, setRehosted] = useState<number | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [persistError, setPersistError] = useState<string | null>(null)
 
   async function ensureSession(): Promise<string> {
@@ -40,8 +41,9 @@ export function CoworkImport() {
     setImported(false)
   }
 
-  // Manual import: server parses + rehosts images + persists, then we load the
-  // board from the DB (so images are the permanent stored copies).
+  // Manual import: resolve each option's image (base64 data URI → decoded &
+  // stored permanently; plain URL → fetched/og-fallback) one at a time, then
+  // persist the stored URLs and load the board.
   async function handleImport() {
     if (!parsed || parsed.length === 0) return
     setCoworkOutput(rawInput)
@@ -50,23 +52,30 @@ export function CoworkImport() {
     setBusy(true)
     try {
       const sessionId = await ensureSession()
-      const res = await ingestResults(sessionId, rawInput)
-      setRehosted(res.rehosted)
-      const boardSlots = await loadSessionBoard(sessionId, 1)
-      loadFromParsed(boardSlots.length > 0 ? boardSlots : parsed)
+      const { slots, stored } = await storeOptionImages(parsed, sessionId, (done, total) =>
+        setProgress({ done, total })
+      )
+      setRehosted(stored)
+      setProgress(null)
+      loadFromParsed(slots)
+      await saveCoworkOptions(sessionId, useBoardStore.getState().slots, 1)
       setStatus('review_round_1')
       setImported(true)
     } catch (e) {
-      // Server import failed — fall back to local parse so the stylist isn't blocked
+      // Don't block the stylist — load what we parsed locally
       loadFromParsed(parsed)
       setStatus('review_round_1')
       setImported(true)
+      setProgress(null)
       try {
-        await saveCoworkOptions(useShoppingStore.getState().session.id ?? (await ensureSession()), useBoardStore.getState().slots, 1)
+        await saveCoworkOptions(
+          useShoppingStore.getState().session.id ?? (await ensureSession()),
+          useBoardStore.getState().slots,
+          1
+        )
       } catch { /* best-effort */ }
       setPersistError(
-        (e instanceof Error ? e.message : 'Server import failed') +
-          ' — loaded locally; images may not all display.'
+        (e instanceof Error ? e.message : 'Import failed') + ' — loaded locally; some images may not display.'
       )
     } finally {
       setBusy(false)
@@ -228,7 +237,11 @@ export function CoworkImport() {
                 className="w-full py-3 bg-text text-white text-[11px] tracking-[0.25em] uppercase hover:bg-text/90 transition-colors rounded-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {busy ? 'Importing + storing images…' : `Import to Shopping Board (${totalOptions} options)`}
+                {busy
+                  ? progress
+                    ? `Storing images… ${progress.done}/${progress.total}`
+                    : 'Importing…'
+                  : `Import to Shopping Board (${totalOptions} options)`}
               </button>
             </div>
           )}

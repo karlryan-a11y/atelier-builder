@@ -239,7 +239,7 @@ export function generateCoworkPrompt(
   sections.push(`- **Recommended Color:** [color]`)
   sections.push(`- **Ship Timeline:** [estimate]`)
   sections.push(`- **Return Policy:** [summary]`)
-  sections.push(`- **Image:** [direct https URL to the product hero image, ending in .jpg/.png/.webp]`)
+  sections.push(`- **Image:** [REQUIRED — download the hero image in your browser and embed it as a base64 data URI, e.g. \`data:image/jpeg;base64,/9j/4AAQ...\`. Embedding the actual bytes is what guarantees the image displays — retailer image URLs usually cannot be re-fetched. Keep the long edge ~1000px so the file stays manageable. Only if you truly cannot embed it, give a direct https image URL as a fallback.]`)
   sections.push(`- **Confidence:** [High/Medium/Low]`)
   sections.push('')
   sections.push(`### Option 2`)
@@ -275,7 +275,7 @@ export function generateCoworkPrompt(
     )
     sections.push('')
     sections.push(
-      `**Fallback:** if you can't POST, just return the Markdown results above and the stylist will paste or upload them.`
+      `**Recommended:** because the images are embedded as base64, save your full results to a **downloadable .md file** and hand that to the stylist to upload (the file will be large — that's expected). The importer decodes and permanently stores every embedded image. Pasting also works but a file is cleaner for large outputs.`
     )
   }
 

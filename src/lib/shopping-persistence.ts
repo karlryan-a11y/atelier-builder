@@ -10,6 +10,59 @@ import { detectCategory } from '@/lib/categorize'
 
 // The auto-upload / rehost ingest endpoint (Vercel serverless function).
 export const INGEST_URL = '/api/shopping-ingest'
+const STORE_IMAGE_URL = '/api/store-image'
+
+/**
+ * Resolve each option's image to a permanently-stored URL, one at a time.
+ * A base64 data URI (Cowork-embedded bytes) is decoded + stored; a plain URL is
+ * fetched server-side (with og:image fallback). Returns parsed slots with image
+ * URLs swapped to the stored copies, and how many were stored. Bounded
+ * concurrency keeps each request small (no giant batch → no body-limit issues).
+ */
+export async function storeOptionImages(
+  parsed: ParsedSlot[],
+  sessionId: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<{ slots: ParsedSlot[]; stored: number }> {
+  const slots: ParsedSlot[] = parsed.map((s) => ({ ...s, options: s.options.map((o) => ({ ...o })) }))
+  const tasks: ParsedOption[] = []
+  for (const s of slots) for (const o of s.options) tasks.push(o)
+
+  const total = tasks.length
+  let done = 0
+  let stored = 0
+  let idx = 0
+
+  async function worker() {
+    while (idx < tasks.length) {
+      const o = tasks[idx++]
+      if (o.image_url) {
+        try {
+          const r = await fetch(STORE_IMAGE_URL, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, image: o.image_url, referer: o.url }),
+          })
+          const j = await r.json().catch(() => ({}))
+          if (j.url) {
+            o.image_url = j.url
+            if (j.stored) stored++
+          } else if (o.image_url.startsWith('data:')) {
+            // store failed and we can't keep a giant data URI in the DB
+            o.image_url = ''
+          }
+        } catch {
+          if (o.image_url.startsWith('data:')) o.image_url = ''
+        }
+      }
+      done++
+      onProgress?.(done, total)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(4, total) }, () => worker()))
+  return { slots, stored }
+}
 
 // Map compose categories → client_brand_sizing enum (top|bottom|dress|outerwear|
 // shoe|intimates|accessory). Returns null for categories with no sizing bucket.

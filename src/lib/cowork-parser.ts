@@ -51,8 +51,13 @@ export function cleanUrl(u: string): string {
 }
 
 export function extractImageUrl(block: string): string {
-  // Take the explicit Image: field; unescape Markdown ("\_" -> "_") first.
-  const candidate = cleanUrl(extractField(block, 'Image')) || block
+  const rawField = extractField(block, 'Image')
+  // base64 data URI (Cowork embeds the real image bytes) — use as-is.
+  const dataMatch = rawField.match(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/i)
+  if (dataMatch) return dataMatch[0]
+
+  // Otherwise treat as a URL; unescape Markdown ("\_" -> "_") first.
+  const candidate = cleanUrl(rawField) || block
 
   // Markdown image: ![alt](url) — alt has no URL, so the image is in parens.
   const mdImage = candidate.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/)
