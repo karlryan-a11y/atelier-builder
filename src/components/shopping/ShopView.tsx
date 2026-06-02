@@ -1,11 +1,16 @@
 import { useState } from 'react'
-import { ChevronDown, ShoppingBag, Clipboard, Sparkles, Copy, Check, FileText, Upload, ArrowLeft, Palette } from 'lucide-react'
+import { ChevronDown, ShoppingBag, Clipboard, Sparkles, Copy, Check, FileText, Upload, ArrowLeft, Palette, Ruler, Tags, Save, Loader2 } from 'lucide-react'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
+import { useAuth } from '@/hooks/useAuth'
 import { generateCoworkPrompt } from '@/lib/cowork-prompt'
+import { saveBrief } from '@/lib/shopping-persistence'
+import { saveClientData } from '@/lib/client-data'
 import { ClientSelector } from './ClientSelector'
 import { SizeForm } from './SizeForm'
+import { MeasurementsForm } from './MeasurementsForm'
 import { ColorAnalysis } from './ColorAnalysis'
+import { BrandIntelligence } from './BrandIntelligence'
 import { StylePreferences } from './StylePreferences'
 import { ShoppingList } from './ShoppingList'
 import { CoworkImport } from './CoworkImport'
@@ -128,22 +133,57 @@ function NotesForm() {
 }
 
 export function ShopView() {
-  const { session, setCoworkPrompt, setStatus } = useShoppingStore()
+  const { session, setCoworkPrompt, setStatus, setSessionId, profileSaving, profileSavedAt, setProfileSaving, markProfileSaved } = useShoppingStore()
+  const { user } = useAuth()
   const boardSlots = useBoardStore((s) => s.slots)
   const [showPrompt, setShowPrompt] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const isReviewMode = session.status.startsWith('review') && boardSlots.length > 0
   const isTryonMode = session.status === 'tryon' && boardSlots.length > 0
   const isCheckoutMode = (session.status === 'checkout' || session.status === 'ordered') && boardSlots.length > 0
   const hasClient = !!session.profile.client_id
+  // Profile persistence only applies to real (existing) clients — a brand-new
+  // client isn't in gp_clients, so there's no stable client_id to attach to yet.
+  const canSaveProfile = hasClient && !session.profile.is_new_client
   const hasSlots = session.slots.length > 0
   const slotsWithDescription = session.slots.filter((s) => s.description.trim())
 
-  function handleGenerate() {
+  async function handleGenerate() {
     const prompt = generateCoworkPrompt(session.profile, session.slots)
     setCoworkPrompt(prompt)
     setShowPrompt(true)
+    // Persist the brief (durable, resumable session) — best-effort
+    try {
+      const store = useShoppingStore.getState()
+      const id = await saveBrief({ ...store.session, cowork_prompt: prompt }, user?.id ?? null)
+      setSessionId(id)
+    } catch {
+      // non-blocking — the prompt is already generated locally
+    }
+  }
+
+  async function handleSaveProfile() {
+    const s = useShoppingStore.getState()
+    setSaveError(null)
+    setProfileSaving(true)
+    try {
+      await saveClientData({
+        clientId: s.session.profile.client_id,
+        draft: s.session.profile,
+        measurements: s.measurements,
+        brandSizing: s.brandSizing,
+        brandPrefs: s.brandPrefs,
+        originalSizingIds: s.originalSizingIds,
+        originalPrefIds: s.originalPrefIds,
+        originalMeasurements: s.originalMeasurements,
+      })
+      markProfileSaved()
+    } catch (e) {
+      setProfileSaving(false)
+      setSaveError(e instanceof Error ? e.message : 'Failed to save profile')
+    }
   }
 
   function handleCopy() {
@@ -231,6 +271,12 @@ export function ShopView() {
             )}
 
             {hasClient && (
+              <Section title="Measurements" icon={Ruler} defaultOpen={false}>
+                <MeasurementsForm />
+              </Section>
+            )}
+
+            {hasClient && (
               <Section title="Color Analysis" icon={Palette} defaultOpen={true}>
                 <ColorAnalysis />
               </Section>
@@ -240,6 +286,44 @@ export function ShopView() {
               <Section title="Style & Preferences" icon={Sparkles} defaultOpen={true}>
                 <StylePreferences />
               </Section>
+            )}
+
+            {hasClient && (
+              <Section title="Brand Intelligence" icon={Tags} defaultOpen={false}>
+                <BrandIntelligence />
+              </Section>
+            )}
+
+            {canSaveProfile && (
+              <div className="flex items-center justify-between gap-4 px-1">
+                <p className="text-[11px] text-text-muted/60">
+                  Save edits to this client's profile, measurements, and brand data.
+                </p>
+                <div className="flex items-center gap-3">
+                  {saveError && (
+                    <span className="text-[10px] text-red-600 max-w-[200px] truncate" title={saveError}>
+                      {saveError}
+                    </span>
+                  )}
+                  {profileSavedAt && !profileSaving && !saveError && (
+                    <span className="flex items-center gap-1 text-[10px] tracking-[0.15em] uppercase text-green-600">
+                      <Check className="h-3 w-3" /> Saved
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={profileSaving}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-text text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-text/90 transition-colors disabled:opacity-40"
+                  >
+                    {profileSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    {profileSaving ? 'Saving…' : 'Save Profile'}
+                  </button>
+                </div>
+              </div>
             )}
 
             {hasClient && (

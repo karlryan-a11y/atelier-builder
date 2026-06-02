@@ -1,14 +1,24 @@
 import { useState, useMemo } from 'react'
-import { Search, Plus, User } from 'lucide-react'
+import { Search, Plus, User, Loader2 } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { loadClientData } from '@/lib/client-data'
 
 export function ClientSelector() {
   const { clients, loading } = useClients()
-  const { session, setProfile } = useShoppingStore()
+  const {
+    session,
+    setProfile,
+    profileLoading,
+    profileExists,
+    setProfileLoading,
+    hydrateClientData,
+    clearClientData,
+  } = useShoppingStore()
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!search.trim()) return clients.slice(0, 20)
@@ -16,20 +26,51 @@ export function ClientSelector() {
     return clients.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 20)
   }, [clients, search])
 
+  async function selectExisting(id: string, name: string) {
+    setLoadError(null)
+    setProfile({ client_id: id, client_name: name, is_new_client: false })
+    setProfileLoading(true)
+    try {
+      const bundle = await loadClientData(id)
+      hydrateClientData(bundle)
+    } catch (e) {
+      setProfileLoading(false)
+      setLoadError(e instanceof Error ? e.message : 'Failed to load client data')
+    }
+  }
+
+  function changeClient() {
+    clearClientData()
+    setProfile({ client_id: '', client_name: '', is_new_client: false })
+  }
+
   if (session.profile.client_id) {
     return (
       <div className="flex items-center gap-3 p-4 bg-tile rounded-sm">
         <div className="w-10 h-10 rounded-full bg-blush/30 flex items-center justify-center">
-          <User className="h-4 w-4 text-text/50" />
+          {profileLoading ? (
+            <Loader2 className="h-4 w-4 text-text/50 animate-spin" />
+          ) : (
+            <User className="h-4 w-4 text-text/50" />
+          )}
         </div>
         <div className="flex-1">
           <p className="text-sm font-medium text-text">{session.profile.client_name}</p>
           <p className="text-[10px] tracking-[0.2em] uppercase text-text-muted">
-            {session.profile.is_new_client ? 'New client' : 'Existing client'}
+            {session.profile.is_new_client
+              ? 'New client'
+              : profileLoading
+              ? 'Loading profile…'
+              : profileExists
+              ? 'Existing client · profile loaded'
+              : 'Existing client · no profile yet'}
           </p>
+          {loadError && (
+            <p className="mt-0.5 text-[10px] text-red-600">{loadError}</p>
+          )}
         </div>
         <button
-          onClick={() => setProfile({ client_id: '', client_name: '', is_new_client: false })}
+          onClick={changeClient}
           className="text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text transition-colors"
         >
           Change
@@ -98,13 +139,7 @@ export function ClientSelector() {
           {filtered.map((client) => (
             <button
               key={client.id}
-              onClick={() =>
-                setProfile({
-                  client_id: client.id,
-                  client_name: client.name,
-                  is_new_client: false,
-                })
-              }
+              onClick={() => selectExisting(client.id, client.name)}
               className="w-full text-left px-3 py-2 text-sm hover:bg-tile rounded-sm transition-colors text-text"
             >
               {client.name}

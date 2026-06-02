@@ -3,25 +3,47 @@ import { Upload, Check, AlertCircle, Package } from 'lucide-react'
 import { parseCoworkOutput, type ParsedSlot } from '@/lib/cowork-parser'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
+import { useAuth } from '@/hooks/useAuth'
+import { saveBrief, saveCoworkOptions } from '@/lib/shopping-persistence'
 
 export function CoworkImport() {
-  const { session, setCoworkOutput, setStatus } = useShoppingStore()
+  const { session, setCoworkOutput, setStatus, setSessionId } = useShoppingStore()
   const { loadFromParsed } = useBoardStore()
+  const { user } = useAuth()
   const [rawInput, setRawInput] = useState(session.cowork_output ?? '')
   const [parsed, setParsed] = useState<ParsedSlot[] | null>(null)
   const [imported, setImported] = useState(false)
+  const [persistError, setPersistError] = useState<string | null>(null)
 
   function handleParse() {
     const result = parseCoworkOutput(rawInput)
     setParsed(result)
   }
 
-  function handleImport() {
+  async function handleImport() {
     if (!parsed || parsed.length === 0) return
     setCoworkOutput(rawInput)
     setStatus('review_round_1')
     loadFromParsed(parsed)
     setImported(true)
+
+    // Persist the sourced options (best-effort — never block the workflow)
+    setPersistError(null)
+    try {
+      const store = useShoppingStore.getState()
+      let sessionId = store.session.id
+      if (!sessionId) {
+        sessionId = await saveBrief(
+          { ...store.session, cowork_output: rawInput },
+          user?.id ?? null
+        )
+        setSessionId(sessionId)
+      }
+      const boardSlots = useBoardStore.getState().slots
+      await saveCoworkOptions(sessionId, boardSlots, 1)
+    } catch (e) {
+      setPersistError(e instanceof Error ? e.message : 'Could not save options to the database')
+    }
   }
 
   const totalOptions = parsed?.reduce((sum, s) => sum + s.options.length, 0) ?? 0
@@ -125,13 +147,18 @@ export function CoworkImport() {
           )}
 
           {imported && (
-            <div className="px-5 py-4 border-t border-wsg-border">
+            <div className="px-5 py-4 border-t border-wsg-border space-y-1.5">
               <div className="flex items-center gap-2 justify-center text-green-600">
                 <Check className="h-4 w-4" />
                 <span className="text-[11px] tracking-[0.2em] uppercase">
                   Imported — switch to Review
                 </span>
               </div>
+              {persistError && (
+                <p className="text-[10px] text-amber-600 text-center">
+                  Saved to board, but DB save failed: {persistError}
+                </p>
+              )}
             </div>
           )}
         </div>
