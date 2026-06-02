@@ -53,8 +53,8 @@ export function ShoppingBoard() {
 
       {/* Round 1 complete + has swaps = can advance */}
       {round === 1 && allReviewed && hasSwaps && (
-        <div className="flex items-center gap-3 p-4 border border-amber-200 bg-amber-50/30 rounded-sm">
-          <MessageSquare className="h-5 w-5 text-amber-600 shrink-0" />
+        <div className="flex items-center gap-3 p-4 border border-wsg-border bg-blush/30 rounded-sm">
+          <MessageSquare className="h-5 w-5 text-text-muted shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-text font-medium">Round 1 complete</p>
             <p className="text-[11px] text-text-muted mt-0.5">
@@ -83,8 +83,8 @@ export function ShoppingBoard() {
 
       {/* All approved = cart ready */}
       {allReviewed && !hasSwaps && approvedCount > 0 && (
-        <div className="flex items-center gap-3 p-4 border border-green-200 bg-green-50/30 rounded-sm">
-          <ShoppingCart className="h-5 w-5 text-green-600 shrink-0" />
+        <div className="flex items-center gap-3 p-4 border border-text/30 bg-tile rounded-sm">
+          <ShoppingCart className="h-5 w-5 text-text shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-text font-medium">Ready for checkout</p>
             <p className="text-[11px] text-text-muted mt-0.5">
@@ -93,7 +93,7 @@ export function ShoppingBoard() {
           </div>
           <button
             onClick={() => setView('cart')}
-            className="px-4 py-2 bg-green-600 text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-green-700 transition-colors shrink-0"
+            className="px-4 py-2 bg-text text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-text/90 transition-colors shrink-0"
           >
             View Cart
           </button>
@@ -110,7 +110,7 @@ export function ShoppingBoard() {
                 <h3 className="text-sm font-medium text-text">{slot.description}</h3>
                 <div className="flex items-center gap-2">
                   {slot.status === 'escalated' && (
-                    <span className="px-2 py-0.5 text-[9px] tracking-[0.1em] uppercase bg-amber-100 text-amber-700 rounded">
+                    <span className="px-2 py-0.5 text-[9px] tracking-[0.1em] uppercase bg-blush text-text rounded-sm">
                       Escalated
                     </span>
                   )}

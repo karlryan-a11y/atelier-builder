@@ -33,9 +33,9 @@ function TryOnCard({
   const [showExchange, setShowExchange] = useState(false)
 
   const statusConfig = {
-    kept: { bg: 'bg-green-50/50', border: 'border-green-300', label: 'Kept', color: 'text-green-700' },
-    returned: { bg: 'bg-red-50/30', border: 'border-red-200', label: 'Returned', color: 'text-red-600' },
-    exchanged: { bg: 'bg-amber-50/30', border: 'border-amber-200', label: 'Exchange', color: 'text-amber-700' },
+    kept: { bg: 'bg-tile/60', border: 'border-text/30', label: 'Kept', color: 'text-text' },
+    returned: { bg: 'bg-white', border: 'border-wsg-border', label: 'Returned', color: 'text-text-muted' },
+    exchanged: { bg: 'bg-blush/20', border: 'border-blush', label: 'Exchange', color: 'text-text' },
     pending: { bg: 'bg-white', border: 'border-wsg-border', label: '', color: '' },
   }
 
@@ -77,7 +77,7 @@ function TryOnCard({
         </div>
 
         {option.closet_item_id && (
-          <div className="flex items-center gap-1.5 text-[10px] text-green-600">
+          <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
             <PackageCheck className="h-3 w-3" />
             <span className="tracking-[0.1em] uppercase">Added to closet</span>
           </div>
@@ -93,7 +93,7 @@ function TryOnCard({
           <div className="flex gap-1.5 pt-1">
             <button
               onClick={onKeep}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-green-600 text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-green-700 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1 py-2 bg-text text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-text/90 transition-colors"
             >
               <Check className="h-3 w-3" />
               Keep
@@ -129,7 +129,7 @@ function TryOnCard({
                 onExchange(exchangeNotes)
                 setShowExchange(false)
               }}
-              className="w-full py-1.5 bg-amber-500 text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-amber-600 transition-colors"
+              className="w-full py-1.5 bg-text text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-text/90 transition-colors"
             >
               Confirm Exchange
             </button>
@@ -268,17 +268,17 @@ export function TryOnView() {
       {/* Summary bar when all decided */}
       {allDecided && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="px-4 py-3 border border-green-200 bg-green-50/30 rounded-sm text-center">
-            <p className="text-lg font-serif text-green-700">{keptItems.length}</p>
-            <p className="text-[9px] tracking-[0.15em] uppercase text-green-600">Kept</p>
+          <div className="px-4 py-3 border border-text/30 bg-tile rounded-sm text-center">
+            <p className="text-lg font-serif text-text">{keptItems.length}</p>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted">Kept</p>
           </div>
           <div className="px-4 py-3 border border-wsg-border bg-white rounded-sm text-center">
             <p className="text-lg font-serif text-text-muted">{returnedItems.length}</p>
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted">Returned</p>
           </div>
-          <div className="px-4 py-3 border border-amber-200 bg-amber-50/30 rounded-sm text-center">
-            <p className="text-lg font-serif text-amber-700">{exchangedItems.length}</p>
-            <p className="text-[9px] tracking-[0.15em] uppercase text-amber-600">Exchanged</p>
+          <div className="px-4 py-3 border border-blush bg-blush/20 rounded-sm text-center">
+            <p className="text-lg font-serif text-text">{exchangedItems.length}</p>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted">Exchanged</p>
           </div>
         </div>
       )}
@@ -311,7 +311,7 @@ export function TryOnView() {
             <button
               onClick={handleAddToCloset}
               disabled={syncing}
-              className="w-full py-4 bg-green-600 text-white text-[11px] tracking-[0.25em] uppercase rounded-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="w-full py-4 bg-text text-white text-[11px] tracking-[0.25em] uppercase rounded-sm hover:bg-text/90 transition-colors disabled:opacity-50"
             >
               {syncing
                 ? 'Adding to Closet...'
@@ -319,9 +319,9 @@ export function TryOnView() {
             </button>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-center gap-2 py-4 border border-green-200 bg-green-50/30 rounded-sm">
-                <PackageCheck className="h-4 w-4 text-green-600" />
-                <span className="text-[11px] tracking-[0.2em] uppercase text-green-600">
+              <div className="flex items-center justify-center gap-2 py-4 border border-text/30 bg-tile rounded-sm">
+                <PackageCheck className="h-4 w-4 text-text" />
+                <span className="text-[11px] tracking-[0.2em] uppercase text-text">
                   {keptItems.length} items added to {session.profile.client_name}'s closet
                 </span>
               </div>

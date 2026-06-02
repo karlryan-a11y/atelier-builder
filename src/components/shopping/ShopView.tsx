@@ -213,6 +213,12 @@ export function ShopView() {
   return (
     <div className="flex-1 overflow-y-auto bg-tile">
       <div className="max-w-3xl mx-auto py-8 px-6 space-y-4">
+        {/* WSG brand lockup */}
+        <div className="mb-5 flex items-baseline gap-3">
+          <span className="font-serif italic text-2xl text-text leading-none">Atelier</span>
+          <span className="h-px w-8 bg-wsg-border self-center" />
+          <span className="text-[9px] tracking-[0.4em] uppercase text-text-muted/70">By Watson</span>
+        </div>
         {/* Page header */}
         <div className="mb-6">
           <div className="flex items-center justify-between">

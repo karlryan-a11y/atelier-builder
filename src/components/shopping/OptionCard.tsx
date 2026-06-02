@@ -45,11 +45,11 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
     <div
       className={`border rounded-sm overflow-hidden transition-all ${
         option.status === 'approved'
-          ? 'border-green-300 bg-green-50/30'
+          ? 'border-text/40 bg-tile/50'
           : option.status === 'rejected'
-          ? 'border-red-200 bg-red-50/20 opacity-60'
+          ? 'border-wsg-border bg-white opacity-50'
           : option.status === 'swapped'
-          ? 'border-amber-200 bg-amber-50/20'
+          ? 'border-blush bg-blush/20'
           : 'border-wsg-border bg-white'
       }`}
     >
@@ -64,12 +64,12 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
 
         {/* Confidence badge */}
         <div
-          className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] tracking-[0.1em] uppercase font-medium ${
+          className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-sm text-[9px] tracking-[0.1em] uppercase ${
             option.confidence === 'high'
-              ? 'bg-green-100 text-green-700'
+              ? 'bg-text text-white'
               : option.confidence === 'medium'
-              ? 'bg-amber-100 text-amber-700'
-              : 'bg-gray-100 text-gray-500'
+              ? 'bg-blush text-text'
+              : 'bg-white/80 text-text-muted'
           }`}
         >
           {option.confidence}
@@ -78,12 +78,12 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
         {/* Status badge */}
         {isReviewed && (
           <div
-            className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] tracking-[0.1em] uppercase font-medium ${
+            className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-sm text-[9px] tracking-[0.1em] uppercase ${
               option.status === 'approved'
-                ? 'bg-green-600 text-white'
+                ? 'bg-text text-white'
                 : option.status === 'rejected'
-                ? 'bg-red-500 text-white'
-                : 'bg-amber-500 text-white'
+                ? 'bg-white border border-wsg-border text-text-muted'
+                : 'bg-blush text-text'
             }`}
           >
             {option.status}
@@ -170,7 +170,7 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
           <div className="flex gap-1.5 pt-1">
             <button
               onClick={handleApprove}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-green-600 text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-green-700 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1 py-2 bg-text text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-text/90 transition-colors"
             >
               <Check className="h-3 w-3" />
               Approve
@@ -207,7 +207,7 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
                   }}
                   className={`px-2 py-1 text-[10px] rounded-sm border transition-colors ${
                     selectedReasons.includes(reason)
-                      ? 'bg-red-100 border-red-300 text-red-700'
+                      ? 'bg-text text-white border-text'
                       : 'bg-transparent border-wsg-border text-text-muted hover:border-text/30'
                   }`}
                 >
@@ -217,7 +217,7 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
             </div>
             <button
               onClick={handleReject}
-              className="w-full py-1.5 bg-red-500 text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-red-600 transition-colors"
+              className="w-full py-1.5 bg-text text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-text/90 transition-colors"
             >
               Confirm Reject
             </button>
@@ -236,7 +236,7 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
             />
             <button
               onClick={handleSwap}
-              className="w-full py-1.5 bg-amber-500 text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-amber-600 transition-colors"
+              className="w-full py-1.5 bg-text text-white text-[10px] tracking-[0.1em] uppercase rounded-sm hover:bg-text/90 transition-colors"
             >
               Request Swap
             </button>
