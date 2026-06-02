@@ -25,6 +25,9 @@ export interface ClosetItemNode {
   flipped: boolean
   z_index: number
   locked: boolean
+  /** When set by compose, the render layer computes scale = target_height / image.naturalHeight.
+   *  Cleared on manual transform so user edits stick. */
+  target_height?: number
 }
 
 export interface TextNode {

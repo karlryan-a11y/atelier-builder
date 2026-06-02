@@ -6,6 +6,17 @@
 
 /* WSG Brand Fonts */
 @font-face {
+  font-family: 'Amalfi Coast';
+  src: url('/fonts/AmalfiCoast.woff2') format('woff2'),
+       url('/fonts/AmalfiCoast.woff') format('woff'),
+       url('/fonts/AmalfiCoast.otf') format('opentype'),
+       url('/fonts/AmalfiCoast.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Schnyder';
   src: url('/fonts/SchnyderM-Light.woff2') format('woff2');
   font-weight: 300;

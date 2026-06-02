@@ -16,6 +16,12 @@ export interface IntakeItem {
   ai_image_primary_r2_key: string | null
   ai_image_generated_at: string | null
   metadata_extracted_at: string | null
+  qc_score: number | null
+  qc_issues: string[] | null
+  qc_notes: string | null
+  qc_checked_at: string | null
+  qc_attempt: number
+  auto_restyle_instructions: string | null
   created_at: string
   // Joined fields
   garment_photo?: { id: string; r2_key: string }
@@ -29,14 +35,17 @@ interface UseIntakeItemsResult {
   loading: boolean
   error: string | null
   refresh: () => void
-  counts: { pending: number; approved: number; rejected: number }
+  counts: { qc_passed: number; pending: number; approved: number; rejected: number }
 }
 
-export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected_final' | 'all' = 'pending_review'): UseIntakeItemsResult {
+export function useIntakeItems(
+  filter: 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all' = 'qc_passed',
+  clientId?: string | null,
+): UseIntakeItemsResult {
   const [items, setItems] = useState<IntakeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 })
+  const [counts, setCounts] = useState({ qc_passed: 0, pending: 0, approved: 0, rejected: 0 })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -51,6 +60,7 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
           extracted_category, extracted_material, extracted_metadata,
           ai_image_primary_r2_key, ai_image_generated_at,
           metadata_extracted_at, created_at,
+          qc_score, qc_issues, qc_notes, qc_checked_at, qc_attempt, auto_restyle_instructions,
           garment_photo:intake_photos!garment_photo_id(id, r2_key),
           tag_photo:intake_photos!tag_photo_id(id, r2_key)
         `)
@@ -58,6 +68,11 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
 
       if (filter !== 'all') {
         query = query.eq('status', filter)
+      }
+
+      // Filter by client if specified
+      if (clientId) {
+        query = query.eq('client_id', clientId)
       }
 
       const { data, error: fetchError } = await query
@@ -73,7 +88,7 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
 
       if (clientIds.length > 0) {
         const { data: clients } = await supabase
-          .from('clients')
+          .from('gp_clients')
           .select('id, name')
           .in('id', clientIds)
 
@@ -89,14 +104,22 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
 
       setItems(items)
 
-      // Get counts for all statuses
-      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
-        supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'pending_review'),
-        supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'rejected_final'),
+      // Get counts — also filtered by client if specified
+      const buildCountQuery = (status: string) => {
+        let q = supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', status)
+        if (clientId) q = q.eq('client_id', clientId)
+        return q
+      }
+
+      const [qcPassedRes, pendingRes, approvedRes, rejectedRes] = await Promise.all([
+        buildCountQuery('qc_passed'),
+        buildCountQuery('pending_review'),
+        buildCountQuery('approved'),
+        buildCountQuery('rejected_final'),
       ])
 
       setCounts({
+        qc_passed: qcPassedRes.count ?? 0,
         pending: pendingRes.count ?? 0,
         approved: approvedRes.count ?? 0,
         rejected: rejectedRes.count ?? 0,
@@ -106,7 +129,7 @@ export function useIntakeItems(filter: 'pending_review' | 'approved' | 'rejected
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [filter, clientId])
 
   useEffect(() => {
     load()

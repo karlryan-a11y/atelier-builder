@@ -64,6 +64,15 @@ export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProp
           >
             Shop
           </button>
+          {onOpenInbox && (
+            <button
+              onClick={onOpenInbox}
+              className="px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors text-white/40 hover:text-white/70 hover:bg-white/5 flex items-center gap-1.5"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              Digitize
+            </button>
+          )}
         </nav>
       </div>
 

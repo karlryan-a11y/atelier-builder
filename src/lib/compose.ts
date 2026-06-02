@@ -17,7 +17,7 @@ import type { ClosetItemNode, TextNode, CanvasNode } from '@/types/canvas'
 
 export interface ExtractedItem {
   description: string
-  category: 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'bag' | 'accessory' | 'jewelry' | 'other'
+  category: 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'bag' | 'accessory' | 'jewelry' | 'belt' | 'scarf' | 'hat' | 'other'
   brand?: string
   color?: string
 }
@@ -73,7 +73,7 @@ Return ONLY valid JSON matching this schema:
   "items": [
     {
       "description": "full text description of the item",
-      "category": "top" | "bottom" | "dress" | "outerwear" | "shoes" | "bag" | "accessory" | "jewelry" | "other",
+      "category": "top" | "bottom" | "dress" | "outerwear" | "shoes" | "bag" | "accessory" | "jewelry" | "belt" | "scarf" | "hat" | "other",
       "brand": "brand name if mentioned",
       "color": "color if mentioned"
     }
@@ -131,6 +131,46 @@ export async function extractEntities(
 
 // ── Step 2: Search for Candidates ───────────────────────────────────
 
+/**
+ * Re-rank candidates by boosting items whose name contains the requested color.
+ * A color match adds a bonus to the similarity score so the right variant wins.
+ */
+function reRankByColor(candidates: SearchResult[], color?: string): SearchResult[] {
+  if (!color || candidates.length <= 1) return candidates
+
+  const colorLower = color.toLowerCase()
+  // Also check common color synonyms (e.g., "light pink" matches "pink", "blush", "rose")
+  const colorTerms = colorLower.split(/\s+/)
+
+  return [...candidates]
+    .map((c) => {
+      const nameLower = (c.name || '').toLowerCase()
+      // Check if any color term appears in the item name
+      const colorMatch = colorTerms.some((term) => nameLower.includes(term))
+      // Boost color matches by 0.10 — enough to flip ranking among similar items
+      return { ...c, similarity: colorMatch ? c.similarity + 0.10 : c.similarity }
+    })
+    .sort((a, b) => b.similarity - a.similarity)
+}
+
+/**
+ * Detect when top candidates are from the same brand/product line and scores are
+ * clustered — disambiguation should fire even if the top score is high.
+ */
+function hasSameBrandCluster(candidates: SearchResult[], brand?: string): boolean {
+  if (candidates.length < 2 || !brand) return false
+
+  const brandLower = brand.toLowerCase()
+  const sameBrand = candidates.filter(
+    (c) => (c.brand || '').toLowerCase().includes(brandLower)
+  )
+  if (sameBrand.length < 2) return false
+
+  // If top 2+ same-brand items are within 0.08 of each other, it's a cluster
+  const gap = (sameBrand[0]?.similarity ?? 0) - (sameBrand[1]?.similarity ?? 0)
+  return gap < 0.08
+}
+
 export async function searchForItems(
   items: ExtractedItem[],
   clientId: string
@@ -152,11 +192,21 @@ export async function searchForItems(
       candidates = await textSearch(query, clientId, 5)
     }
 
+    // Part B: Re-rank by color match — boost items whose name contains the requested color
+    candidates = reRankByColor(candidates, item.color)
+
     const topScore = candidates[0]?.similarity ?? 0
     const secondScore = candidates[1]?.similarity ?? 0
 
-    // Auto-select if top result is clearly best (>0.15 gap over #2, or score >0.65)
-    const autoSelect = topScore > 0.65 || (topScore > 0.4 && topScore - secondScore > 0.15)
+    // Part A: Force disambiguation when multiple same-brand items score close together
+    const sameBrandCluster = hasSameBrandCluster(candidates, item.brand)
+
+    // Auto-select only if:
+    //  - Top result is clearly best (>0.15 gap over #2, or score >0.75 after re-ranking)
+    //  - AND we don't have a cluster of same-brand items (e.g., 3 Andiamo variants)
+    const autoSelect =
+      !sameBrandCluster &&
+      (topScore > 0.75 || (topScore > 0.4 && topScore - secondScore > 0.15))
 
     results.push({
       extraction: item,
@@ -169,100 +219,172 @@ export async function searchForItems(
   return results
 }
 
-// ── Step 3: Layout Templates ────────────────────────────────────────
+// ── Step 3: Layout — synchronous, uses target_height (render-time scaling) ───
 
-type LayoutName =
-  | 'flat_lay_outerwear'
-  | 'dress_centered'
-  | 'separates_grid'
-  | 'accessories_corner'
-  | 'mannequin_stack'
-
-interface LayoutSlot {
-  category: ExtractedItem['category'] | 'any'
-  x: number
-  y: number
-  scale: number
-}
+type LayoutName = 'dress_centered' | 'separates_stack' | 'accessories_focused'
 
 const CANVAS_W = 1200
+const CANVAS_H = 1500
 
-// Each layout defines slots by category priority
-const LAYOUTS: Record<LayoutName, { slots: LayoutSlot[]; label: string }> = {
-  flat_lay_outerwear: {
-    label: 'Flat Lay (Outerwear)',
-    slots: [
-      { category: 'outerwear', x: 600, y: 350, scale: 1.1 },
-      { category: 'top', x: 600, y: 650, scale: 0.9 },
-      { category: 'bottom', x: 600, y: 950, scale: 0.9 },
-      { category: 'shoes', x: 350, y: 1200, scale: 0.7 },
-      { category: 'bag', x: 850, y: 1200, scale: 0.7 },
-      { category: 'accessory', x: 200, y: 400, scale: 0.5 },
-      { category: 'jewelry', x: 1000, y: 400, scale: 0.5 },
-    ],
-  },
-  dress_centered: {
-    label: 'Dress Centered',
-    slots: [
-      { category: 'dress', x: 600, y: 550, scale: 1.2 },
-      { category: 'outerwear', x: 250, y: 400, scale: 0.8 },
-      { category: 'shoes', x: 600, y: 1150, scale: 0.75 },
-      { category: 'bag', x: 900, y: 800, scale: 0.7 },
-      { category: 'accessory', x: 250, y: 200, scale: 0.5 },
-      { category: 'jewelry', x: 950, y: 200, scale: 0.5 },
-    ],
-  },
-  separates_grid: {
-    label: 'Separates Grid',
-    slots: [
-      { category: 'top', x: 400, y: 350, scale: 0.9 },
-      { category: 'top', x: 800, y: 350, scale: 0.9 },
-      { category: 'bottom', x: 400, y: 800, scale: 0.9 },
-      { category: 'bottom', x: 800, y: 800, scale: 0.9 },
-      { category: 'shoes', x: 400, y: 1200, scale: 0.7 },
-      { category: 'bag', x: 800, y: 1200, scale: 0.7 },
-      { category: 'accessory', x: 200, y: 200, scale: 0.5 },
-      { category: 'jewelry', x: 1000, y: 200, scale: 0.5 },
-    ],
-  },
-  accessories_corner: {
-    label: 'Accessories Corner',
-    slots: [
-      { category: 'bag', x: 600, y: 400, scale: 1.0 },
-      { category: 'shoes', x: 350, y: 800, scale: 0.85 },
-      { category: 'jewelry', x: 850, y: 300, scale: 0.6 },
-      { category: 'accessory', x: 850, y: 700, scale: 0.6 },
-      { category: 'jewelry', x: 350, y: 300, scale: 0.5 },
-      { category: 'any', x: 600, y: 1100, scale: 0.7 },
-    ],
-  },
-  mannequin_stack: {
-    label: 'Mannequin Stack',
-    slots: [
-      { category: 'outerwear', x: 600, y: 250, scale: 1.0 },
-      { category: 'top', x: 600, y: 500, scale: 0.95 },
-      { category: 'bottom', x: 600, y: 800, scale: 0.95 },
-      { category: 'shoes', x: 600, y: 1100, scale: 0.75 },
-      { category: 'bag', x: 250, y: 700, scale: 0.65 },
-      { category: 'accessory', x: 950, y: 300, scale: 0.5 },
-      { category: 'jewelry', x: 950, y: 600, scale: 0.5 },
-    ],
-  },
+/**
+ * Target visual HEIGHT per category in pixels on the 1200×1500 canvas.
+ * Matched to Karl's 3 WSG reference look screenshots.
+ *
+ * The actual scale is computed at RENDER TIME in LookCanvas.tsx:
+ *   scale = target_height / image.naturalHeight
+ *
+ * This guarantees correct proportions regardless of source image size.
+ * No CORS, no async, no image pre-loading needed at compose time.
+ */
+const TARGET_HEIGHTS: Record<string, number> = {
+  dress:     1050,    // ~70% of canvas — hero piece, dominant
+  bottom:     780,    // ~52% — pants/skirts fill center
+  top:        440,    // ~29% — visible above pants, overlaps at waist
+  outerwear:  520,    // ~35% — flanks the top
+  bag:        340,    // ~23% — accent, right side
+  shoes:      175,    // ~12% — small but visible, bottom row
+  jewelry:     70,    // ~5%  — tiny accent
+  belt:        55,    // ~4%  — tiny at waist
+  accessory:  240,    // ~16%
+  scarf:      420,
+  hat:        240,
+  other:      270,
+}
+
+/**
+ * Estimated width:height aspect ratios per category.
+ * Used ONLY for centering the x position at compose time
+ * (since we don't know the actual image dimensions yet).
+ * Derived from measuring 6 real GoodPix items.
+ */
+const ASPECT_RATIOS: Record<string, number> = {
+  dress:      0.65,   // 884:1360
+  bottom:     0.65,   // 884:1360
+  top:        0.64,   // 790:1228
+  outerwear:  0.77,   // 387:500
+  shoes:      0.57,   // 376:662
+  bag:        1.29,   // 564:438 (landscape)
+  jewelry:    1.60,   // 948:592 (landscape)
+  belt:       2.00,   // landscape
+  accessory:  0.80,
+  scarf:      0.70,
+  hat:        1.00,
+  other:      0.75,
+}
+
+/**
+ * Placement rules tuned from Karl's 3 WSG reference looks.
+ * x_pct/y_pct are CENTER positions (not top-left).
+ * We convert to top-left at compose time using estimated width/height.
+ */
+const CATEGORY_RULES: Record<string, {
+  x_pct: number; y_pct: number; z_order: number
+}> = {
+  dress:      { x_pct: 50, y_pct: 43, z_order: 1 },   // slightly lower so label fits above
+  top:        { x_pct: 50, y_pct: 17, z_order: 2 },
+  bottom:     { x_pct: 50, y_pct: 50, z_order: 1 },
+  outerwear:  { x_pct: 30, y_pct: 17, z_order: 0 },
+  bag:        { x_pct: 78, y_pct: 45, z_order: 1 },   // higher — next to dress mid-section
+  shoes:      { x_pct: 50, y_pct: 82, z_order: 1 },   // closer to dress/pants hem
+  jewelry:    { x_pct: 80, y_pct: 15, z_order: 2 },   // near neckline area
+  belt:       { x_pct: 50, y_pct: 36, z_order: 3 },
+  accessory:  { x_pct: 82, y_pct: 25, z_order: 1 },
+  other:      { x_pct: 78, y_pct: 65, z_order: 1 },
+}
+
+/** Convert center position to top-left for Konva, using estimated item dimensions */
+function centerToTopLeft(
+  centerXPct: number,
+  centerYPct: number,
+  category: string
+): { x: number; y: number } {
+  const targetH = TARGET_HEIGHTS[category] ?? 200
+  const aspect = ASPECT_RATIOS[category] ?? 0.75
+  const estWidth = targetH * aspect
+  const estHeight = targetH
+
+  return {
+    x: Math.round((centerXPct / 100) * CANVAS_W - estWidth / 2),
+    y: Math.round((centerYPct / 100) * CANVAS_H - estHeight / 2),
+  }
+}
+
+interface PlacedItem {
+  extraction: ExtractedItem
+  selected: SearchResult
+  x: number
+  y: number
+  target_height: number
+  z_order: number
+}
+
+/** Spread multiple items of the same category into a horizontal row */
+function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }[]): PlacedItem[] {
+  // Group by category
+  const groups: Record<string, typeof items> = {}
+  for (const item of items) {
+    const cat = item.extraction.category
+    groups[cat] = groups[cat] || []
+    groups[cat].push(item)
+  }
+
+  const result: PlacedItem[] = []
+
+  for (const [_cat, group] of Object.entries(groups)) {
+    const cat = group[0].extraction.category
+    const rule = CATEGORY_RULES[cat] || CATEGORY_RULES['other']
+    const targetH = TARGET_HEIGHTS[cat] ?? 200
+
+    if (group.length === 1) {
+      const pos = centerToTopLeft(rule.x_pct, rule.y_pct, cat)
+      result.push({
+        extraction: group[0].extraction,
+        selected: group[0].selected,
+        x: pos.x,
+        y: pos.y,
+        target_height: targetH,
+        z_order: rule.z_order,
+      })
+    } else {
+      // Spread evenly in a horizontal row at the category's y position
+      const centerY = rule.y_pct
+      const totalWidth = CANVAS_W * 0.7  // 70% of canvas — matches reference shoe spread
+      const startX = (CANVAS_W - totalWidth) / 2
+      const spacing = totalWidth / group.length
+
+      for (let i = 0; i < group.length; i++) {
+        const centerX = ((startX + spacing * (i + 0.5)) / CANVAS_W) * 100
+        const pos = centerToTopLeft(centerX, centerY, cat)
+        result.push({
+          extraction: group[i].extraction,
+          selected: group[i].selected,
+          x: pos.x,
+          y: pos.y,
+          target_height: targetH,
+          z_order: rule.z_order,
+        })
+      }
+    }
+  }
+
+  return result
+}
+
+const LAYOUT_LABELS: Record<LayoutName, string> = {
+  dress_centered: 'Dress Centered',
+  separates_stack: 'Separates Stack',
+  accessories_focused: 'Accessories Focused',
 }
 
 export function pickLayout(items: ExtractedItem[], hint?: string | null): LayoutName {
-  if (hint && hint in LAYOUTS) return hint as LayoutName
-
+  if (hint && hint in LAYOUT_LABELS) return hint as LayoutName
   const cats = new Set(items.map((i) => i.category))
-
   if (cats.has('dress')) return 'dress_centered'
-  if (cats.has('outerwear')) return 'flat_lay_outerwear'
-  if (!cats.has('top') && !cats.has('bottom') && !cats.has('dress')) return 'accessories_corner'
-  if (items.length >= 4 && cats.has('top') && cats.has('bottom')) return 'separates_grid'
-  return 'mannequin_stack'
+  if (!cats.has('top') && !cats.has('bottom') && !cats.has('dress')) return 'accessories_focused'
+  return 'separates_stack'
 }
 
-// ── Step 4: Compose Canvas Nodes ────────────────────────────────────
+// ── Step 4: Compose Canvas Nodes (synchronous, render-time scaling) ──
 
 export interface ComposedResult {
   nodes: CanvasNode[]
@@ -270,83 +392,107 @@ export interface ComposedResult {
   layoutUsed: LayoutName
 }
 
+/** Brand labels use Amalfi Coast brush calligraphy (exact match to WSG styled looks). */
+const BRAND_LABEL_FONT = 'Amalfi Coast, Great Vibes, cursive'
+const BRAND_LABEL_SIZE = 32
+
 export function composeNodes(
   resolvedItems: ResolvedItem[],
   layoutName: LayoutName
 ): ComposedResult {
-  const layout = LAYOUTS[layoutName]
   const nodes: CanvasNode[] = []
   const imageUrls: Record<string, string> = {}
 
-  // Match resolved items to layout slots
-  const usedSlots = new Set<number>()
-  const itemsToPlace = resolvedItems.filter((r) => r.selected)
+  const itemsToPlace = resolvedItems
+    .filter((r) => r.selected)
+    .map((r) => ({ extraction: r.extraction, selected: r.selected! }))
 
-  for (const item of itemsToPlace) {
-    // Find best matching slot by category
-    let slotIdx = layout.slots.findIndex(
-      (s, i) => !usedSlots.has(i) && (s.category === item.extraction.category || s.category === 'any')
-    )
+  // Place items using category rules
+  const placed = placeItems(itemsToPlace)
 
-    // Fallback: use first unused slot
-    if (slotIdx === -1) {
-      slotIdx = layout.slots.findIndex((_, i) => !usedSlots.has(i))
-    }
-
-    if (slotIdx === -1) {
-      // No slots left — stack at bottom
-      const nodeId = `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-      nodes.push({
-        id: nodeId,
-        type: 'closet_item',
-        closet_item_id: item.selected!.id,
-        x: 300 + Math.random() * 600,
-        y: 1200 + Math.random() * 200,
-        scale: 0.7,
-        rotation: 0,
-        flipped: false,
-        z_index: nodes.length,
-        locked: false,
-      } as ClosetItemNode)
-      continue
-    }
-
-    usedSlots.add(slotIdx)
-    const slot = layout.slots[slotIdx]
+  // Create closet_item nodes with target_height (scale computed at render time)
+  for (const item of placed) {
     const nodeId = `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
     nodes.push({
       id: nodeId,
       type: 'closet_item',
-      closet_item_id: item.selected!.id,
-      x: slot.x,
-      y: slot.y,
-      scale: slot.scale,
+      closet_item_id: item.selected.id,
+      x: item.x,
+      y: item.y,
+      scale: 0.5,           // placeholder — overridden by target_height at render
       rotation: 0,
       flipped: false,
-      z_index: nodes.length,
+      z_index: item.z_order,
       locked: false,
+      target_height: item.target_height,
     } as ClosetItemNode)
   }
 
-  // Add brand labels as text nodes
-  let labelY = 80
-  for (const item of itemsToPlace) {
-    if (!item.selected?.brand) continue
+  // Add brand labels in script font, positioned relative to each item
+  for (let i = 0; i < placed.length; i++) {
+    const item = placed[i]
+    if (!item.selected.brand) continue
+
+    const cat = item.extraction.category
+    const th = item.target_height
+    const aspect = ASPECT_RATIOS[cat] ?? 0.75
+    const estW = th * aspect
+
+    // Position label based on category — matched to WSG reference looks
+    // Labels are 32px Great Vibes, so they need ~40px vertical clearance
+    let labelX: number
+    let labelY: number
+
+    if (cat === 'outerwear') {
+      // Above-left of the outerwear piece (like "Alexander McQueen" or "Boden")
+      labelX = item.x
+      labelY = item.y - 45
+    } else if (cat === 'top') {
+      // Above the top, offset right from outerwear label (like "Éterne" or "Khaite")
+      labelX = item.x + estW * 0.2
+      labelY = item.y - 45
+    } else if (cat === 'bottom') {
+      // Left side of the bottom, at ~30% down (like "Marni" or "Adam Lippes")
+      labelX = item.x - 40
+      labelY = item.y + th * 0.35
+    } else if (cat === 'bag') {
+      // Below the bag (like "Bottega Veneta")
+      labelX = item.x
+      labelY = item.y + th + 10
+    } else if (cat === 'shoes') {
+      // Below each shoe (like "Manolo Blahnik", "Khaite")
+      labelX = item.x
+      labelY = item.y + th + 5
+    } else if (cat === 'jewelry') {
+      // Below the jewelry (like "Bottega Veneta" under earrings)
+      labelX = item.x - 20
+      labelY = item.y + th + 5
+    } else if (cat === 'dress') {
+      // Above the dress, centered (like "Max Mara" or "Adam Lippes")
+      labelX = item.x + estW * 0.3
+      labelY = item.y - 50
+    } else {
+      labelX = item.x
+      labelY = item.y + th + 10
+    }
+
+    // Clamp to canvas with generous margin so labels don't clip
+    labelX = Math.max(40, Math.min(CANVAS_W - 160, labelX))
+    labelY = Math.max(40, Math.min(CANVAS_H - 50, labelY))
+
     const textId = `txt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     nodes.push({
       id: textId,
       type: 'text',
-      content: item.selected.brand.toUpperCase(),
-      font_family: 'Neue Haas Grotesk Display Pro',
-      font_size: 14,
+      content: item.selected.brand,
+      font_family: BRAND_LABEL_FONT,
+      font_size: BRAND_LABEL_SIZE,
       fill: '#1A1A1A',
-      x: CANVAS_W - 180,
-      y: labelY,
+      x: Math.round(labelX),
+      y: Math.round(labelY),
       rotation: 0,
-      z_index: nodes.length,
+      z_index: 100 + i,
     } as TextNode)
-    labelY += 24
   }
 
   return { nodes, imageUrls, layoutUsed: layoutName }
@@ -377,19 +523,18 @@ export async function runComposePipeline(
   const needsDisambiguation = resolvedItems.some((r) => r.needsDisambiguation)
 
   if (needsDisambiguation) {
-    // Build summary of what we found
     const lines: string[] = ['Here\'s what I found:']
     for (const r of resolvedItems) {
       if (r.selected) {
-        lines.push(`✓ **${r.extraction.description}** → ${r.selected.name} (${r.selected.brand || 'no brand'})`)
+        lines.push(`✓ ${r.extraction.description} → ${r.selected.name} (${r.selected.brand || 'no brand'})`)
       } else if (r.candidates.length > 0) {
-        lines.push(`? **${r.extraction.description}** — ${r.candidates.length} options, please pick one:`)
+        lines.push(`? ${r.extraction.description} — ${r.candidates.length} options, please pick one:`)
         for (let i = 0; i < Math.min(3, r.candidates.length); i++) {
           const c = r.candidates[i]
           lines.push(`  ${i + 1}. ${c.name} (${c.brand || 'no brand'}) — ${(c.similarity * 100).toFixed(0)}% match`)
         }
       } else {
-        lines.push(`✗ **${r.extraction.description}** — no matches found`)
+        lines.push(`✗ ${r.extraction.description} — no matches found`)
       }
     }
 
@@ -401,13 +546,12 @@ export async function runComposePipeline(
     }
   }
 
-  // Step 3: Pick layout and compose
+  // Step 3: Pick layout and compose (synchronous — scale computed at render time)
   const layoutName = pickLayout(plan.items, plan.layout)
   const composed = composeNodes(resolvedItems, layoutName)
 
-  // Build summary
   const placed = resolvedItems.filter((r) => r.selected).length
-  const summary = `Composed ${placed} item${placed !== 1 ? 's' : ''} using ${LAYOUTS[layoutName].label} layout.`
+  const summary = `Composed ${placed} item${placed !== 1 ? 's' : ''} using ${LAYOUT_LABELS[layoutName]} layout.`
 
   return {
     plan,

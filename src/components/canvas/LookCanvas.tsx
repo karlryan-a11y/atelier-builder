@@ -24,7 +24,16 @@ interface ClosetItemImageProps {
 function ClosetItemImage({ node, image, isSelected, onSelect, onDragEnd, onTransformEnd }: ClosetItemImageProps) {
   const imageRef = useRef<Konva.Image>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
-  const config = toKonvaConfig(node)
+
+  // If compose set a target_height AND the image is loaded, compute the exact scale
+  // so the item renders at the correct pixel height on the canvas.
+  // Otherwise fall back to the stored scale (for old looks or manual edits).
+  let effectiveScale = node.scale
+  if (node.target_height && image && image.naturalHeight > 0) {
+    effectiveScale = Math.min(Math.max(node.target_height / image.naturalHeight, 0.03), 3.0)
+  }
+
+  const config = toKonvaConfig({ ...node, scale: effectiveScale })
 
   const handleTransformEnd = useCallback(() => {
     const n = imageRef.current
@@ -402,7 +411,8 @@ export function LookCanvas() {
                     }}
                     onTransformEnd={(attrs) => {
                       const updates = fromKonvaTransform(cNode, attrs)
-                      updateNode(node.id, updates)
+                      // Clear target_height so user's manual resize sticks
+                      updateNode(node.id, { ...updates, target_height: undefined })
                     }}
                   />
                 )

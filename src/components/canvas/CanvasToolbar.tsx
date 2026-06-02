@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import {
   Trash2, FlipHorizontal, Lock, Unlock, RotateCcw,
   Copy, ChevronUp, ChevronDown, Type, Undo2, Redo2,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
+  Sparkles,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { styleCanvas } from '@/lib/style'
 import type { ClosetItemNode, TextNode } from '@/types/canvas'
 
 const FONT_FAMILIES = [
@@ -26,6 +29,7 @@ export function CanvasToolbar() {
     state, selectedNodeIds, updateNode, removeNodes, duplicateNodes,
     moveLayer, addNode, undo, redo, past, future, alignNodes, distributeNodes,
   } = useCanvasStore()
+  const [styling, setStyling] = useState(false)
 
   const selectedNodes = selectedNodeIds
     .map((id) => state.nodes.find((n) => n.id === id))
@@ -33,6 +37,33 @@ export function CanvasToolbar() {
 
   const singleNode = selectedNodes.length === 1 ? selectedNodes[0] : null
   const hasSelection = selectedNodes.length > 0
+
+  const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
+
+  const handleStyle = async () => {
+    if (styling || !hasClosetItems) return
+    setStyling(true)
+    try {
+      const store = useCanvasStore.getState()
+      const result = await styleCanvas(store.state.nodes, store.imageUrls)
+
+      // Clear canvas and re-add all nodes with their image URLs.
+      // This ensures each new node ID gets the correct image URL mapping.
+      store.setCanvasState({
+        ...store.state,
+        nodes: [],
+      })
+      for (const node of result.nodes) {
+        const url = result.imageUrls[node.id] ?? undefined
+        store.addNode(node, url)
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Style failed: ${message}`)
+    } finally {
+      setStyling(false)
+    }
+  }
 
   const handleAddText = () => {
     const node: TextNode = {
@@ -78,6 +109,19 @@ export function CanvasToolbar() {
         title="Add text"
       >
         <Type className="h-3.5 w-3.5 text-text-muted" />
+      </button>
+
+      <button
+        onClick={handleStyle}
+        disabled={styling || !hasClosetItems}
+        className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
+        title="Style — auto-arrange items with WSG proportions"
+      >
+        {styling ? (
+          <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5 text-text-muted" />
+        )}
       </button>
 
       {singleNode?.type === 'text' && (() => {

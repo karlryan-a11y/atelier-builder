@@ -127,6 +127,7 @@ export function ChatPanel() {
     setComposing(true)
 
     try {
+      // First pass: extract entities and search (no compose yet)
       const result = await runComposePipeline(
         userMsg.content,
         activeClient.id,
