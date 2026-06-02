@@ -12,6 +12,7 @@ import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { ShopView } from '@/components/shopping/ShopView'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
+import { resumeSession } from '@/lib/shopping-resume'
 import type { ClosetItemNode } from '@/types/canvas'
 
 function App() {
@@ -26,10 +27,19 @@ function App() {
     const onHash = () => {
       setShowSearch(window.location.hash === '#search')
       setShowInbox(window.location.hash === '#inbox')
+      const m = window.location.hash.match(/#session=([0-9a-fA-F-]{36})/)
+      if (m) resumeSession(m[1])
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  // Deep link: #session=<id> reopens that shopping session once the user is in.
+  useEffect(() => {
+    if (!user) return
+    const m = window.location.hash.match(/#session=([0-9a-fA-F-]{36})/)
+    if (m) resumeSession(m[1])
+  }, [user])
   const [dragImage, setDragImage] = useState<string | null>(null)
 
   const sensors = useSensors(

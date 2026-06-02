@@ -25,6 +25,7 @@ interface BoardState {
   round: 1 | 2
   view: 'slot' | 'look' | 'cart'
   loadFromParsed: (parsed: ParsedSlot[]) => void
+  hydrate: (slots: BoardSlot[], round?: 1 | 2) => void
   reviewOption: (optionId: string, action: 'approve' | 'reject' | 'swap', data?: {
     rejection_reasons?: string[]
     feedback_note?: string
@@ -71,6 +72,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }))
     set({ slots, round: 1, view: 'slot' })
   },
+
+  // Load fully-formed board slots (e.g. resumed from the DB with prior review +
+  // try-on decisions already applied). Slots carry their own ids/statuses.
+  hydrate: (slots, round = 1) => set({ slots, round, view: 'slot' }),
 
   reviewOption: (optionId, action, data) =>
     set((state) => ({

@@ -4,7 +4,7 @@
 
 import { supabase } from '@/lib/supabase'
 import type { ShoppingSession } from '@/stores/shoppingStore'
-import type { BoardSlot } from '@/stores/boardStore'
+import type { BoardSlot, BoardOption } from '@/stores/boardStore'
 import type { ParsedSlot, ParsedOption } from '@/lib/cowork-parser'
 import { detectCategory } from '@/lib/categorize'
 
@@ -328,6 +328,19 @@ export async function ingestResults(sessionId: string, raw: string): Promise<{ o
   return { ok: !!json.ok, rehosted: json.rehosted ?? 0, options: json.options ?? 0 }
 }
 
+/** Most recent shopping session id for a client (to resume from a cold start). */
+export async function getLatestSessionId(clientId: string): Promise<string | null> {
+  if (!clientId) return null
+  const { data } = await supabase
+    .from('shopping_sessions')
+    .select('id')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
 /**
  * Load a session's persisted slots + options from the DB into the board shape
  * (ParsedSlot[]). The single source of truth for the board — used after an
@@ -377,6 +390,102 @@ export async function loadSessionBoard(sessionId: string, round: 1 | 2 = 1): Pro
   return slots
     .filter((s) => bySlot.has(s.id))
     .map((s) => ({ description: s.description, options: bySlot.get(s.id)! }))
+}
+
+export interface ClientSessionSummary {
+  id: string
+  status: string
+  created_at: string
+  optionCount: number
+}
+
+/** List a client's shopping sessions (newest first) for the resume panel. */
+export async function getClientSessions(clientId: string): Promise<ClientSessionSummary[]> {
+  if (!clientId) return []
+  const { data } = await supabase
+    .from('shopping_sessions')
+    .select('id, status, created_at, shopping_options(count)')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+  return (data ?? []).map((s: Record<string, any>) => ({
+    id: s.id,
+    status: s.status,
+    created_at: s.created_at,
+    optionCount: Array.isArray(s.shopping_options) ? s.shopping_options[0]?.count ?? 0 : 0,
+  }))
+}
+
+const REVIEW_STATUS: Record<string, BoardOption['status']> = {
+  approve: 'approved',
+  reject: 'rejected',
+  swap: 'swapped',
+}
+
+/**
+ * Load a session's board from the DB WITH prior review + try-on decisions
+ * applied, so resuming preserves what was approved/rejected and kept/returned.
+ * Returns fully-formed BoardSlot[] (ids + statuses set) for boardStore.hydrate.
+ */
+export async function loadSessionBoardFull(sessionId: string, round: 1 | 2 = 1): Promise<BoardSlot[]> {
+  const [slotsRes, optsRes, revRes, tryRes] = await Promise.all([
+    supabase.from('shopping_slots').select('id, description, display_order').eq('session_id', sessionId).order('display_order'),
+    supabase.from('shopping_options').select('*').eq('session_id', sessionId).eq('round', round),
+    supabase.from('shopping_reviews').select('option_id, action, rejection_reasons, feedback_note, size_override, color_override').eq('session_id', sessionId),
+    supabase.from('shopping_tryon').select('option_id, result, reason, exchange_details, closet_item_id').eq('session_id', sessionId),
+  ])
+  const slots = slotsRes.data ?? []
+  const opts = (optsRes.data ?? []) as Record<string, any>[]
+  if (slots.length === 0 || opts.length === 0) return []
+
+  const reviewByOpt = new Map<string, Record<string, any>>()
+  for (const r of revRes.data ?? []) reviewByOpt.set(r.option_id, r)
+  const tryonByOpt = new Map<string, Record<string, any>>()
+  for (const t of tryRes.data ?? []) tryonByOpt.set(t.option_id, t)
+
+  const descById = new Map<string, string>()
+  for (const s of slots) descById.set(s.id, s.description)
+
+  const optsBySlot = new Map<string, BoardOption[]>()
+  for (const o of opts) {
+    const rv = reviewByOpt.get(o.id)
+    const ty = tryonByOpt.get(o.id)
+    const arr = optsBySlot.get(o.slot_id) ?? []
+    arr.push({
+      id: `opt_${o.id}`,
+      slot_description: descById.get(o.slot_id) ?? '',
+      option_number: arr.length + 1,
+      product_name: o.product_name ?? '',
+      brand: o.brand ?? '',
+      retailer: o.retailer ?? '',
+      price: o.price != null ? String(o.price) : '',
+      url: o.product_url ?? '',
+      sizes_available: Array.isArray(o.sizes_available) ? o.sizes_available.join(', ') : '',
+      colors_available: Array.isArray(o.colors_available) ? o.colors_available.join(', ') : '',
+      recommended_size: o.selected_size ?? '',
+      recommended_color: o.selected_color ?? '',
+      ship_timeline: o.ship_timeline ?? '',
+      return_policy: o.return_policy ?? '',
+      image_url: o.image_url ?? '',
+      confidence: (['high', 'medium', 'low'].includes(o.confidence) ? o.confidence : 'low') as BoardOption['confidence'],
+      status: rv ? REVIEW_STATUS[rv.action] ?? 'pending' : 'pending',
+      rejection_reasons: rv?.rejection_reasons ?? [],
+      feedback_note: rv?.feedback_note ?? '',
+      size_override: rv?.size_override ?? '',
+      color_override: rv?.color_override ?? '',
+      tryon_status: ty ? (ty.result as BoardOption['tryon_status']) : null,
+      exchange_notes: ty?.exchange_details ?? ty?.reason ?? '',
+      closet_item_id: ty?.closet_item_id ?? null,
+    })
+    optsBySlot.set(o.slot_id, arr)
+  }
+
+  return slots
+    .filter((s) => optsBySlot.has(s.id))
+    .map((s) => {
+      const options = optsBySlot.get(s.id)!
+      const status: BoardSlot['status'] = options.some((o) => o.status === 'approved') ? 'approved' : 'pending'
+      return { id: `slot_${s.id}`, description: s.description, status, options }
+    })
 }
 
 /**

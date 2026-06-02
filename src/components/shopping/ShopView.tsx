@@ -9,6 +9,7 @@ import { saveClientData } from '@/lib/client-data'
 import { loadPlaybook } from '@/lib/shopping-playbook'
 import { loadClientLearnings, formatLearnings } from '@/lib/client-learnings'
 import { ClientSelector } from './ClientSelector'
+import { SessionHistory } from './SessionHistory'
 import { SizeForm } from './SizeForm'
 import { MeasurementsForm } from './MeasurementsForm'
 import { ColorAnalysis } from './ColorAnalysis'
@@ -278,6 +279,12 @@ export function ShopView() {
             <Section title="Client" icon={ShoppingBag} defaultOpen={true}>
               <ClientSelector />
             </Section>
+
+            {hasClient && (
+              <div className="border border-wsg-border rounded-sm bg-white px-5 py-4">
+                <SessionHistory />
+              </div>
+            )}
 
             {hasClient && (
               <Section title="Default Sizes" icon={Clipboard} defaultOpen={true}>

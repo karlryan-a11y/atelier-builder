@@ -73,11 +73,17 @@ export function CoworkImport() {
     }
   }
 
-  // Cowork auto-upload path: pull results Cowork already POSTed to this session.
+  // Cowork auto-upload / resume path: pull results from this client's session.
+  // Works from a cold start — if no in-memory session, find the client's latest.
   async function handleLoadSourced() {
-    const sessionId = useShoppingStore.getState().session.id
+    const store = useShoppingStore.getState()
+    let sessionId = store.session.id
+    if (!sessionId && store.session.profile.client_id) {
+      sessionId = await getLatestSessionId(store.session.profile.client_id)
+      if (sessionId) setSessionId(sessionId)
+    }
     if (!sessionId) {
-      setPersistError('Generate the Cowork prompt first, then Cowork can auto-upload to this session.')
+      setPersistError('Select a client first (or generate a prompt), then load their sourced results.')
       return
     }
     setPersistError(null)
