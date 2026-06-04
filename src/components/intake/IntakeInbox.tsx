@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Inbox, Check, X, ChevronLeft, Edit3, RefreshCw, Upload, Camera } from 'lucide-react'
+import { Inbox, Check, X, ChevronLeft, Edit3, RefreshCw, Upload, Camera, Download } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { useClientStore } from '@/stores/clientStore'
+import { exportGoodPixXlsx } from '@/lib/goodpix-export'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -18,15 +19,71 @@ interface IntakeInboxProps {
 }
 
 export function IntakeInbox({ onClose }: IntakeInboxProps) {
-  const [filter, setFilter] = useState<'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>('qc_passed')
+  const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
+    // Default to In Progress if there are active batches
+    const saved = localStorage.getItem('atelier_active_batch')
+    return saved ? 'in_progress' : 'qc_passed'
+  })
+  const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [bulkApproving, setBulkApproving] = useState(false)
   const [bulkProgress, setBulkProgress] = useState('')
   const [showBulkConfirm, setShowBulkConfirm] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState('')
   const { activeClient } = useClientStore()
   const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
-  const { items, loading, error, refresh, counts } = useIntakeItems(filter, selectedClientId)
+  // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
+  const hookFilter = filter === 'in_progress' ? 'qc_passed' : filter
+  const { items, loading, error, refresh, counts } = useIntakeItems(hookFilter, selectedClientId)
   const [showUpload, setShowUpload] = useState(false)
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
+  const [_aiSpend, _setAiSpend] = useState<{ anthropic: number; openai: number; total: number } | null>(null)
+
+  // Sync: if stylist switches client in the Builder, update the inbox filter
+  useEffect(() => {
+    if (activeClient?.id && activeClient.id !== selectedClientId) {
+      setSelectedClientId(activeClient.id)
+    }
+  }, [activeClient?.id])
+
+  // Poll active batch count for the tab badge
+  useEffect(() => {
+    const check = async () => {
+      const { count } = await supabase
+        .from('intake_batches')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['uploading', 'verifying_order', 'processing'])
+      setActiveBatchCount(count ?? 0)
+    }
+    check()
+    const iv = setInterval(check, 10000)
+    return () => clearInterval(iv)
+  }, [])
+
+  // Load AI spend for current month
+  useEffect(() => {
+    const loadSpend = async () => {
+      const startOfMonth = new Date()
+      startOfMonth.setDate(1)
+      startOfMonth.setHours(0, 0, 0, 0)
+      const { data } = await supabase
+        .from('ai_usage_log')
+        .select('service, cost_usd_estimate')
+        .gte('created_at', startOfMonth.toISOString())
+      if (data) {
+        let anthropic = 0, openai = 0
+        for (const r of data) {
+          const cost = r.cost_usd_estimate ?? 0
+          if (r.service === 'anthropic') anthropic += cost
+          else if (r.service === 'openai') openai += cost
+        }
+        _setAiSpend({ anthropic, openai, total: anthropic + openai })
+      }
+    }
+    loadSpend()
+    const iv = setInterval(loadSpend, 30000)
+    return () => clearInterval(iv)
+  }, [])
 
   // Load clients that have intake items
   useEffect(() => {
@@ -47,6 +104,7 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
   }, [])
 
   const tabs = [
+    { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
     { key: 'qc_passed' as const, label: 'QC Passed', count: counts.qc_passed },
     { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
@@ -54,6 +112,7 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
   ]
 
   const handleBulkApprove = async () => {
+    if (bulkApproving) return
     setShowBulkConfirm(false)
     setBulkApproving(true)
     const qcItems = items.filter(i => i.status === 'qc_passed')
@@ -83,24 +142,43 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
     setTimeout(() => { setBulkApproving(false); setBulkProgress(''); refresh() }, 2000)
   }
 
+  const handleExportGoodPix = async () => {
+    if (!selectedClientId) { alert('Select a client first'); return }
+    setExporting(true)
+    setExportProgress('Preparing export...')
+    try {
+      const clientName = clientOptions.find(c => c.id === selectedClientId)?.name ?? 'Client'
+      await exportGoodPixXlsx(selectedClientId, clientName, (done, total) => {
+        setExportProgress(`Generating URLs: ${done} of ${total}...`)
+      })
+      setExportProgress('Downloaded!')
+      setTimeout(() => { setExporting(false); setExportProgress('') }, 2000)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Export failed')
+      setExporting(false)
+      setExportProgress('')
+    }
+  }
+
   return (
     <LightboxProvider>
     <div className="fixed inset-0 bg-[#F8F7F5] z-50 flex flex-col">
       {/* Header */}
-      <div className="h-14 bg-[#1A1A1A] flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="h-[120px] bg-[#050505] flex items-center justify-between px-6 shrink-0 border-b border-white/[0.06]">
+        <div className="flex items-center gap-8">
           <button
             onClick={onClose}
-            className="text-white/60 hover:text-white transition-colors flex items-center gap-1"
+            className="flex items-center gap-3 group transition-opacity duration-300 hover:opacity-80"
           >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="text-[11px] tracking-[0.15em] uppercase">Builder</span>
+            <ChevronLeft className="h-4 w-4 text-white/40 group-hover:text-white/70 transition-colors duration-300" />
+            <img
+              src="/brand/atelier-logo-inverse.svg"
+              alt="Atelier by Watson"
+              className="h-[100px]"
+            />
           </button>
-          <div className="w-px h-5 bg-white/10" />
-          <div className="flex items-center gap-2">
-            <Inbox className="h-4 w-4 text-blush" />
-            <span className="text-[11px] tracking-[0.15em] uppercase text-white">Intake Inbox</span>
-          </div>
+          <div className="w-px h-8 bg-white/[0.08]" />
+          <span className="text-[13px] tracking-[0.22em] uppercase text-white/50">Digitization Inbox</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -130,7 +208,7 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
           onRefreshItems={refresh}
           onComplete={() => {
             setShowUpload(false)
-            setFilter('qc_passed')
+            setFilter('in_progress')
             refresh()
           }}
         />
@@ -151,12 +229,19 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
               }
             `}
           >
-            {tab.label}
+            <span className="flex items-center justify-center gap-1.5">
+              {tab.key === 'in_progress' && tab.count > 0 && (
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+              )}
+              {tab.label}
+            </span>
             {tab.count > 0 && (
               <span className={`
                 ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px]
                 rounded-full text-[9px] font-medium px-1
-                ${tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]' : 'bg-[#E8E4DF] text-[#888]'}
+                ${tab.key === 'in_progress' ? 'bg-emerald-100 text-emerald-700'
+                  : tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]'
+                  : 'bg-[#E8E4DF] text-[#888]'}
               `}>
                 {tab.count}
               </span>
@@ -189,7 +274,12 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
         ))}
       </div>
 
-      {/* Content — scrollable list of inline cards */}
+      {/* Content — In Progress tab or item cards */}
+      {filter === 'in_progress' ? (
+        <div className="flex-1 overflow-y-auto">
+          <InProgressPanel onBatchCountChange={setActiveBatchCount} onRefreshItems={refresh} />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-64">
@@ -224,6 +314,24 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
           </div>
         ) : (
           <div className="max-w-5xl mx-auto py-4 md:py-6 px-4 md:px-6 space-y-4">
+            {/* GoodPix Export (Approved tab) */}
+            {filter === 'approved' && items.length > 0 && (
+              <div className="flex items-center justify-between bg-white border border-[#E8E4DF] rounded-sm px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Download className="h-4 w-4 text-[#888]" />
+                  <span className="text-sm text-[#1A1A1A]">{items.length} approved items ready for GoodPix</span>
+                </div>
+                <button
+                  onClick={handleExportGoodPix}
+                  disabled={exporting}
+                  className="flex items-center gap-2 px-5 py-2 bg-[#1A1A1A] text-white text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50 transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {exporting ? exportProgress : 'Download for GoodPix'}
+                </button>
+              </div>
+            )}
+
             {/* Bulk Approve bar (QC Passed tab only) */}
             {filter === 'qc_passed' && items.length > 0 && !bulkApproving && (
               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-sm px-4 py-3">
@@ -263,7 +371,8 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
                   <div className="flex gap-3">
                     <button
                       onClick={handleBulkApprove}
-                      className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-emerald-700"
+                      disabled={bulkApproving}
+                      className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-emerald-700 disabled:opacity-50"
                     >
                       Confirm Approve All
                     </button>
@@ -284,6 +393,7 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
           </div>
         )}
       </div>
+      )}
     </div>
     </LightboxProvider>
   )
@@ -359,6 +469,7 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
   }
 
   const handleApprove = async () => {
+    if (submitting) return
     setSubmitting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -398,6 +509,7 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
   }
 
   const handleReject = async () => {
+    if (submitting) return
     if (!selectedReason) {
       alert('Select a rejection reason')
       return
@@ -492,31 +604,28 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
 
           {/* Original + Tag side by side */}
           <div className="grid grid-cols-2 gap-2">
-            {item.garment_photo?.r2_key ? (
-              <div>
-                <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mb-1">Original</p>
+            <div>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mb-1">Original</p>
+              {item.garment_photo?.r2_key ? (
                 <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm overflow-hidden border border-[#E8E4DF]">
                   <ClickableSignedImage r2Key={item.garment_photo.r2_key} alt="Original" className="w-full h-full object-cover" label="Original iPhone Photo" />
                 </div>
-              </div>
-            ) : (
-              <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm border border-dashed border-[#ddd]" />
-            )}
-            {item.tag_photo?.r2_key ? (
-              <div>
-                <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mb-1">Tag</p>
+              ) : (
+                <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm border border-dashed border-[#ddd]" />
+              )}
+            </div>
+            <div>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mb-1">Tag</p>
+              {item.tag_photo?.r2_key ? (
                 <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm overflow-hidden border border-[#E8E4DF]">
                   <ClickableSignedImage r2Key={item.tag_photo.r2_key} alt="Tag" className="w-full h-full object-cover" label="Brand/Care Tag" />
                 </div>
-              </div>
-            ) : (
-              <div>
-                <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mb-1">Tag</p>
-                <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm border border-dashed border-[#ddd] flex items-center justify-center">
-                  <span className="text-[9px] text-[#ccc]">No tag</span>
+              ) : (
+                <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm border border-dashed border-[#E8E4DF] flex items-center justify-center">
+                  <span className="text-[9px] text-[#ddd]">No tag</span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -711,26 +820,332 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
 /**
  * Upload panel — select client, drop photos, pipeline runs automatically.
  */
-function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; onRefreshItems: () => void }) {
+/**
+ * In Progress Panel — shows all active batches from the database.
+ * Works across stylists: Chelsea's and Madeline's batches both appear.
+ * Polls every 5 seconds for real-time progress updates.
+ */
+interface ActiveBatch {
+  id: string
+  client_id: string
+  client_name: string
+  batch_label: string | null
+  status: string
+  total_photos: number
+  estimated_pairs: number | null
+  created_at: string
+  completed_at: string | null
+  photos_classified: number
+  photos_total: number
+  items_done: number
+  items_total: number
+  items_processing: number
+}
+
+function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountChange: (n: number) => void; onRefreshItems: () => void }) {
+  const [batches, setBatches] = useState<ActiveBatch[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Store callbacks in refs to avoid stale closures in the polling interval
+  const onBatchCountChangeRef = useRef(onBatchCountChange)
+  const onRefreshItemsRef = useRef(onRefreshItems)
+  onBatchCountChangeRef.current = onBatchCountChange
+  onRefreshItemsRef.current = onRefreshItems
+
+  useEffect(() => {
+    let mounted = true
+
+    const fetchBatches = async () => {
+      // Get active batches + recently completed (last 24h)
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data: activeBatches } = await supabase
+        .from('intake_batches')
+        .select('id, client_id, batch_label, status, total_photos, estimated_pairs, created_at, completed_at')
+        .in('status', ['uploading', 'verifying_order', 'processing'])
+        .order('created_at', { ascending: false })
+
+      const { data: recentDone } = await supabase
+        .from('intake_batches')
+        .select('id, client_id, batch_label, status, total_photos, estimated_pairs, created_at, completed_at')
+        .in('status', ['complete', 'partial'])
+        .gte('completed_at', yesterday)
+        .order('completed_at', { ascending: false })
+        .limit(10)
+
+      const rawBatches = [...(activeBatches ?? []), ...(recentDone ?? [])]
+
+      if (rawBatches.length === 0) {
+        if (mounted) {
+          setBatches([])
+          setLoading(false)
+          onBatchCountChangeRef.current(0)
+          localStorage.removeItem('atelier_active_batch')
+        }
+        return
+      }
+
+      // Update the tab badge with active-only count
+      const activeCount = (activeBatches ?? []).length
+      onBatchCountChangeRef.current(activeCount)
+      if (activeCount === 0) localStorage.removeItem('atelier_active_batch')
+
+      // Get client names
+      const clientIds = [...new Set(rawBatches.map(b => b.client_id))]
+      const { data: clients } = await supabase
+        .from('gp_clients')
+        .select('id, name')
+        .in('id', clientIds)
+      const clientMap = Object.fromEntries((clients ?? []).map(c => [c.id, c.name]))
+
+      // For each batch, get progress via batch-status endpoint
+      const enriched: ActiveBatch[] = await Promise.all(
+        rawBatches.map(async (b) => {
+          try {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-batch-status`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch_id: b.id }),
+            })
+            const status = resp.ok ? await resp.json() : {}
+            const items = status.items ?? {}
+            const photos = status.photos ?? {}
+            const done = (items.qc_passed ?? 0) + (items.pending_review ?? 0) + (items.approved ?? 0) + (items.rejected_final ?? 0)
+            const processing = (items.pending_metadata ?? 0) + (items.pending_image_gen ?? 0) + (items.pending_qc ?? 0) + (items.qc_failed_restyle ?? 0)
+            return {
+              id: b.id,
+              client_id: b.client_id,
+              client_name: clientMap[b.client_id] ?? 'Unknown Client',
+              batch_label: b.batch_label,
+              status: status.status ?? b.status,
+              total_photos: b.total_photos,
+              estimated_pairs: status.estimated_pairs ?? b.estimated_pairs,
+              created_at: b.created_at,
+              completed_at: b.completed_at,
+              photos_classified: photos.classified ?? 0,
+              photos_total: photos.total ?? b.total_photos,
+              items_done: done,
+              items_total: items.total ?? 0,
+              items_processing: processing,
+            }
+          } catch {
+            return {
+              id: b.id, client_id: b.client_id,
+              client_name: clientMap[b.client_id] ?? 'Unknown',
+              batch_label: b.batch_label,
+              status: b.status, total_photos: b.total_photos,
+              estimated_pairs: b.estimated_pairs, created_at: b.created_at,
+              completed_at: b.completed_at,
+              photos_classified: 0, photos_total: b.total_photos,
+              items_done: 0, items_total: 0, items_processing: 0,
+            }
+          }
+        })
+      )
+
+      if (mounted) {
+        setBatches(enriched)
+        setLoading(false)
+        if (enriched.some(b => ['uploading', 'verifying_order', 'processing'].includes(b.status))) onRefreshItemsRef.current()
+      }
+    }
+
+    fetchBatches()
+    const iv = setInterval(fetchBatches, 5000)
+    return () => { mounted = false; clearInterval(iv) }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 mx-auto border-2 border-[#E8E4DF] border-t-[#1A1A1A] rounded-full animate-spin mb-3" />
+          <p className="text-[11px] tracking-[0.15em] uppercase text-[#888]">Checking active batches...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (batches.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Check className="h-8 w-8 mx-auto text-emerald-400 mb-3" />
+          <p className="text-sm text-[#888]">No active batches</p>
+          <p className="text-xs text-[#aaa] mt-1">Upload photos to start processing</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto py-6 px-4 md:px-6 space-y-4">
+      {batches.map(batch => {
+        const isUploading = batch.status === 'uploading'
+        const isClassifying = batch.status === 'verifying_order'
+        const isProcessing = batch.status === 'processing'
+        const isComplete = batch.status === 'complete' || batch.status === 'partial'
+
+        // Display name: "Skirts — Margaux Ellery" or just "Margaux Ellery"
+        const displayName = batch.batch_label
+          ? `${batch.batch_label} — ${batch.client_name}`
+          : batch.client_name
+
+        // Calculate overall progress percentage
+        let pct = 0
+        let phase = ''
+        let detail = ''
+        let timeEst = ''
+
+        if (isComplete) {
+          pct = 100
+          phase = 'Complete'
+          const total = batch.items_total || batch.estimated_pairs || Math.ceil(batch.total_photos / 2)
+          detail = `${total} items ready for review`
+        } else if (isUploading) {
+          pct = Math.max(5, Math.round((batch.total_photos / Math.max(batch.total_photos, 1)) * 30))
+          phase = 'Uploading photos'
+          detail = `${batch.total_photos} photos uploaded so far — stay on this page until upload finishes`
+          timeEst = ''
+        } else if (isClassifying) {
+          pct = batch.photos_total > 0 ? Math.round((batch.photos_classified / batch.photos_total) * 40) : 5
+          phase = 'Classifying photos'
+          detail = `${batch.photos_classified} of ${batch.photos_total} photos identified`
+          const remaining = batch.photos_total - batch.photos_classified
+          const secLeft = Math.round(remaining * 1.5)
+          timeEst = secLeft > 60 ? `~${Math.ceil(secLeft / 60)}min left` : `~${secLeft}s left`
+        } else if (isProcessing) {
+          const total = batch.items_total || batch.estimated_pairs || Math.ceil(batch.total_photos / 2)
+          if (total > 0 && batch.items_done > 0) {
+            pct = Math.round(40 + (batch.items_done / total) * 60)
+          } else if (total > 0) {
+            pct = 45
+          }
+          phase = 'Generating AI photos + QC'
+          const remaining = total - batch.items_done
+          detail = batch.items_done > 0
+            ? `${batch.items_done} of ${total} items complete, ${batch.items_processing} processing`
+            : `${total} items queued (metadata + AI photos + quality check)`
+          const secLeft = remaining * 7
+          timeEst = secLeft > 60 ? `~${Math.ceil(secLeft / 60)}min left` : secLeft > 0 ? `~${secLeft}s left` : ''
+        }
+
+        // Age / completion time
+        const ageMin = Math.round((Date.now() - new Date(batch.created_at).getTime()) / 60000)
+        const ageStr = ageMin < 1 ? 'just started' : ageMin < 60 ? `${ageMin}m ago` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m ago`
+        const completedStr = batch.completed_at
+          ? `Finished ${Math.round((Date.now() - new Date(batch.completed_at).getTime()) / 60000)}m ago`
+          : `Started ${ageStr}`
+
+        return (
+          <div key={batch.id} className={`bg-white rounded-sm border overflow-hidden ${
+            isComplete ? 'border-emerald-200 bg-emerald-50/20' : 'border-[#E8E4DF]'
+          }`}>
+            {/* Header row */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#F0EDE9]">
+              <div className="flex items-center gap-3">
+                {isComplete ? (
+                  <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full flex items-center justify-center">
+                    <Check className="h-1.5 w-1.5 text-white" />
+                  </span>
+                ) : (
+                  <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
+                )}
+                <span className="text-sm font-medium text-[#1A1A1A]">{displayName}</span>
+                <span className="text-[10px] tracking-[0.1em] uppercase text-[#aaa]">
+                  {batch.total_photos} photos · {completedStr}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {timeEst && (
+                  <span className="text-[10px] tracking-[0.15em] uppercase text-emerald-600 font-medium">
+                    {timeEst}
+                  </span>
+                )}
+                {isComplete && (
+                  <span className="text-[10px] tracking-[0.15em] uppercase text-emerald-600 font-medium">
+                    Done
+                  </span>
+                )}
+                {!isComplete && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Cancel "${displayName}"? Items already processed will stay, but remaining items will stop.`)) return
+                      // Use batch-status endpoint to cancel — it has service role access
+                      await fetch(`${SUPABASE_URL}/functions/v1/intake-batch-status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ batch_id: batch.id, action: 'cancel' }),
+                      })
+                    }}
+                    className="px-2.5 py-1 text-[9px] tracking-[0.15em] uppercase text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Progress */}
+            <div className="px-5 py-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[11px] tracking-[0.1em] uppercase font-medium ${isComplete ? 'text-emerald-600' : 'text-[#888]'}`}>{phase}</span>
+                <span className="text-[11px] text-[#aaa]">{pct}%</span>
+              </div>
+              <div className="w-full bg-[#F0EDE9] rounded-full h-2 mb-2">
+                <div
+                  className={`h-2 rounded-full transition-all duration-1000 ease-out ${isComplete ? 'bg-emerald-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${Math.max(pct, 2)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-[#888]">{detail}</p>
+            </div>
+
+            {/* Phase dots */}
+            <div className="flex items-center gap-0 px-5 pb-4">
+              {[
+                { label: 'Upload', done: !isUploading, active: isUploading },
+                { label: 'Classify', done: !isClassifying && !isUploading, active: isClassifying },
+                { label: 'Metadata', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing && batch.items_done === 0 },
+                { label: 'AI Photo', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing },
+                { label: 'QC Check', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing },
+              ].map((step, i) => (
+                <div key={i} className="flex items-center">
+                  {i > 0 && <div className={`w-8 h-px ${step.done || step.active ? 'bg-emerald-300' : 'bg-[#E8E4DF]'}`} />}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`w-3 h-3 rounded-full flex items-center justify-center
+                      ${step.done ? 'bg-emerald-500' : step.active ? 'bg-emerald-400 animate-pulse' : 'bg-[#E8E4DF]'}
+                    `}>
+                      {step.done && <Check className="h-2 w-2 text-white" />}
+                    </div>
+                    <span className={`text-[8px] tracking-[0.1em] uppercase ${
+                      step.done ? 'text-emerald-600' : step.active ? 'text-[#1A1A1A]' : 'text-[#ccc]'
+                    }`}>{step.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      <p className="text-[10px] text-[#aaa] text-center italic pt-2">
+        You can close this panel — processing continues in the background. Items appear in QC Passed as they complete.
+      </p>
+    </div>
+  )
+}
+
+function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: () => void }) {
   const { activeClient } = useClientStore()
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([])
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id ?? '')
+  const [batchLabel, setBatchLabel] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
   const [progress, setProgress] = useState('')
   const [progressPct, setProgressPct] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Clean up polling interval on unmount
-  useEffect(() => {
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
-    }
-  }, [])
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const [clientSearch, setClientSearch] = useState('')
 
@@ -753,7 +1168,9 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
       (f.type.startsWith('image/') || f.name.toLowerCase().endsWith('.heic')) &&
       f.size <= 25 * 1024 * 1024
     )
-    setFiles(prev => [...prev, ...valid])
+    // Sort by filename to preserve camera roll order (IMG_0001, IMG_0002...)
+    valid.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    setFiles(prev => [...prev, ...valid].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })))
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -765,15 +1182,17 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
     setFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
-  // Time estimates: ~1s per photo upload, ~2s per photo classify, ~2s per item metadata
+  // Realistic time estimates including image generation + QC
   const estimateTime = (photoCount: number) => {
     const items = Math.ceil(photoCount / 2)
-    const uploadSec = Math.ceil(photoCount * 1.5) // ~1.5s per photo upload (chunked)
-    const classifySec = Math.ceil(photoCount * 2) // ~2s per photo for Haiku
-    const metadataSec = Math.ceil(items * 3) // ~3s per item for Sonnet
-    const totalSec = uploadSec + classifySec + metadataSec
+    const uploadSec = Math.ceil(photoCount * 2) // ~2s per photo upload (chunked by 2)
+    const classifySec = Math.ceil(photoCount * 0.5) // ~0.5s per photo (10 parallel)
+    const processSec = Math.ceil(items * 7) // ~35s per item but 5 concurrent = ~7s effective
+    const totalSec = uploadSec + classifySec + processSec
     const totalMin = Math.ceil(totalSec / 60)
-    return totalMin <= 1 ? '~1 min' : `~${totalMin} min`
+    if (totalMin <= 1) return '~1 min'
+    if (totalMin <= 60) return `~${totalMin} min`
+    return `~${Math.floor(totalMin / 60)}h ${totalMin % 60}m`
   }
 
   const runPipeline = async () => {
@@ -790,7 +1209,7 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
     try {
       // Upload in chunks of 2 (Edge Functions have ~6MB body limit)
       let batchId: string | null = null
-      const CHUNK = 4
+      const CHUNK = 2 // Keep small — Edge Function body limit is ~6MB, iPhone photos are 3-8MB each
       let uploadedCount = 0
 
       for (let i = 0; i < files.length; i += CHUNK) {
@@ -798,6 +1217,7 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
         const formData = new FormData()
         if (batchId) formData.append('batch_id', batchId)
         formData.append('client_id', selectedClientId)
+        if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
         chunk.forEach(f => formData.append('photos', f))
 
         const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-upload-photos`, {
@@ -835,86 +1255,35 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
         throw new Error(err.error || 'Finalize failed')
       }
 
-      // Poll for completion — items appear one by one as they finish
-      setStage('processing')
-      setProgress(`Processing ${itemCount} items — they'll appear below as they finish (~35s each)...`)
-      setProgressPct(55)
+      // Save batch to localStorage for the nav badge indicator
+      localStorage.setItem('atelier_active_batch', JSON.stringify({
+        batchId, clientId: selectedClientId, photoCount: files.length,
+      }))
 
-      let polls = 0
-      const MAX_POLLS = 240 // 20 min at 5s intervals
+      // Show brief success then reset form so stylist can upload another batch immediately
+      setStage('complete')
+      const label = batchLabel.trim() ? `"${batchLabel.trim()}"` : `${itemCount} items`
+      setProgress(`${label} submitted! Check the In Progress tab for status.`)
+      setProgressPct(100)
 
-      pollIntervalRef.current = setInterval(async () => {
-        polls++
-        if (polls > MAX_POLLS) {
-          clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-          setStage('complete')
-          setProgress('Processing is taking a while — items will appear as they finish.')
-          setTimeout(() => onComplete(), 3000)
-          return
-        }
-
-        try {
-          const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-batch-status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ batch_id: batchId }),
-          })
-
-          if (!resp.ok) return
-          const batch = await resp.json()
-
-          switch (batch.status) {
-            case 'verifying_order':
-              setProgressPct(50)
-              setProgress(`Classifying photos...`)
-              break
-            case 'processing': {
-              const items = batch.items ?? {}
-              const done = (items.qc_passed ?? 0) + (items.pending_review ?? 0)
-              const total = batch.estimated_pairs ?? itemCount
-              const pct = total > 0 ? Math.round(55 + (done / total) * 40) : 70
-              setProgressPct(pct)
-              setProgress(done > 0
-                ? `${done} of ${total} items ready — ${total - done} still processing...`
-                : `Processing ${total} items — they'll appear below as they finish...`)
-              if (done > 0) onRefreshItems()
-              break
-            }
-            case 'complete':
-              clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-              setStage('complete')
-              setProgressPct(100)
-              setProgress(`Done! ${batch.estimated_pairs ?? itemCount} items ready for review.`)
-              setTimeout(() => onComplete(), 2000)
-              break
-            case 'partial':
-              clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-              setStage('complete')
-              setProgressPct(100)
-              setProgress(`${batch.estimated_pairs ?? itemCount} items processed. Some may need review.`)
-              setTimeout(() => onComplete(), 2000)
-              break
-            case 'failed':
-              clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-              setStage('error')
-              setProgress('Processing failed. Photos are saved — contact support.')
-              break
-            case 'order_broken':
-              clearInterval(pollIntervalRef.current!); pollIntervalRef.current = null
-              setStage('error')
-              setProgress('Photo order issue detected. Ensure photos alternate: garment, tag, garment, tag. Some photos may have been misidentified.')
-              break
-          }
-        } catch { /* retry silently */ }
-      }, 5000)
+      // Reset after 2s so they can upload again
+      setTimeout(() => {
+        setStage('select')
+        setFiles([])
+        setBatchLabel('')
+        setProgress('')
+        setProgressPct(0)
+        onComplete()
+      }, 2500)
     } catch (err) {
       setStage('error')
-      setProgress(err instanceof Error ? err.message : 'Something went wrong')
+      const msg = err instanceof Error ? err.message : 'Something went wrong'
+      setProgress(`Error: ${msg}. Screenshot this and send to Karl. [Client: ${selectedClientId?.slice(0,8)}, Photos: ${files.length}, Time: ${new Date().toISOString()}]`)
     }
   }
 
   return (
-    <div className="bg-white border-b border-[#E8E4DF] px-4 md:px-6 py-4 shrink-0">
+    <div className="bg-white border-b border-[#E8E4DF] px-4 md:px-6 py-4 shrink-0 max-h-[70vh] overflow-y-auto">
       {stage === 'select' && (
         <div className="max-w-3xl mx-auto">
           {/* Client picker + file count */}
@@ -961,10 +1330,35 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
                 </div>
               )}
             </div>
+            <div className="w-48">
+              <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
+                Batch Name <span className="text-[#bbb]">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={batchLabel}
+                onChange={e => setBatchLabel(e.target.value)}
+                placeholder="e.g. Skirts, Fall Coats"
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] bg-white"
+              />
+            </div>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp,image/heic,.heic"
+              multiple
+              onChange={e => { handleFiles(Array.from(e.target.files ?? [])); e.target.value = '' }}
+              className="hidden"
+            />
+            <input
+              ref={el => {
+                (folderInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el
+                if (el) {
+                  el.setAttribute('webkitdirectory', '')
+                  el.setAttribute('directory', '')
+                }
+              }}
+              type="file"
               multiple
               onChange={e => { handleFiles(Array.from(e.target.files ?? [])); e.target.value = '' }}
               className="hidden"
@@ -976,6 +1370,66 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
               <Upload className="h-3.5 w-3.5" />
               Add Photos
             </button>
+            <button
+              onClick={() => folderInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-4 py-2 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors shrink-0"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Add Folder
+            </button>
+          </div>
+
+          {/* Instructions for stylists */}
+          <div className="bg-[#F8F7F5] rounded-sm p-4 mb-4 text-[11px] text-[#666] space-y-3">
+            <p className="font-medium text-[#1A1A1A] text-[13px]">Closet Digitization</p>
+
+            <div>
+              <p className="font-medium text-[#1A1A1A] text-[11px] mb-1">📷 Photographing</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                <li><strong>1 photo of the item</strong> — lay flat on a clean surface, full garment visible, good lighting</li>
+                <li><strong>1 photo of the brand/care tag</strong> — so AI can read the brand, size, and material</li>
+                <li>Repeat for each piece: <strong>item photo → tag photo → item photo → tag photo</strong></li>
+              </ol>
+              <p className="text-[10px] text-[#888] mt-1">No tag? That's fine — AI will still identify the brand when possible.</p>
+            </div>
+
+            <div>
+              <p className="font-medium text-[#1A1A1A] text-[11px] mb-1">💡 Tips for best results</p>
+              <ul className="space-y-0.5 text-[10px] text-[#888]">
+                <li>• Natural light or bright room — avoid harsh shadows</li>
+                <li>• Full garment visible — don't crop sleeves, hems, or straps</li>
+                <li>• Lay flat or hang — avoid bunching or folding</li>
+                <li>• One item per photo — don't photograph multiple items together</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-medium text-[#1A1A1A] text-[11px] mb-1">⬆️ Uploading</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                <li>Select the client above</li>
+                <li>Add all photos (item + tag pairs)</li>
+                <li>Click <strong>Digitize</strong> — AI processes everything automatically (~35 sec per item)</li>
+                <li>Items appear in the tabs below as they finish</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-medium text-[#1A1A1A] text-[11px] mb-1">✅ Reviewing</p>
+              <ul className="space-y-0.5 text-[10px]">
+                <li><strong className="text-emerald-700">QC Passed</strong> — AI verified these look good. Hit <strong>Approve All</strong> to add to the client's collection.</li>
+                <li><strong className="text-amber-700">Needs Review</strong> — AI flagged an issue. Check the image, use <strong>Restyle</strong> to regenerate, or <strong>Reject</strong> if unusable.</li>
+                <li><strong className="text-[#1A1A1A]">Approved</strong> — Done! Click <strong>Download for GoodPix</strong> to get the upload spreadsheet.</li>
+              </ul>
+            </div>
+
+            <div className="border-t border-[#E8E4DF] pt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-[#888]">
+              <span>📷 Max per batch: <strong className="text-[#1A1A1A]">500 photos</strong> (250 items)</span>
+              <span>⏱ Processing: <strong className="text-[#1A1A1A]">~35 sec per item</strong></span>
+              <span>📄 Formats: <strong className="text-[#1A1A1A]">JPEG, PNG, HEIC</strong></span>
+              <span>📏 Max file size: <strong className="text-[#1A1A1A]">6 MB per photo</strong></span>
+            </div>
+
+            <p className="text-[9px] text-[#aaa] italic">You can close this panel and come back — processing continues in the background. Click <strong>Digitize</strong> in the nav to check progress.</p>
           </div>
 
           {/* Drop zone / file list */}
@@ -987,7 +1441,7 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
               onClick={() => fileInputRef.current?.click()}
             >
               <Camera className="h-6 w-6 mx-auto text-[#ccc] mb-2" />
-              <p className="text-sm text-[#888]">Drop photos here or click to browse</p>
+              <p className="text-sm text-[#888]">Drop photos or a folder here</p>
               <p className="text-[10px] text-[#aaa] mt-1">Garment, tag, garment, tag — in order</p>
             </div>
           ) : (
@@ -1023,7 +1477,7 @@ function UploadPanel({ onComplete, onRefreshItems }: { onComplete: () => void; o
                   className="flex items-center gap-2 px-6 py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Digitize {Math.ceil(files.length / 2)} Items · {estimateTime(files.length)}
+                  Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(files.length / 2)} Items`} · {estimateTime(files.length)}
                 </button>
               </div>
             </>

@@ -1,4 +1,4 @@
-import { LogOut, Shield, ChevronDown, Inbox } from 'lucide-react'
+import { LogOut, Shield, ChevronDown } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useViewStore } from '@/stores/viewStore'
 
@@ -35,87 +35,92 @@ export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProp
     .toUpperCase()
     .slice(0, 2)
 
+  // Active batch indicator for Digitize tab
+  const hasBatch = typeof localStorage !== 'undefined' && localStorage.getItem('atelier_active_batch')
+
   return (
-    <header className="h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
-      <div className="flex items-center gap-6">
-        <img
-          src="/brand/atelier-logo-inverse.svg"
-          alt="Atelier by Watson"
-          className="h-10"
-        />
-        <nav className="flex items-center gap-1">
-          <button
-            onClick={() => setActiveView('style')}
-            className={`px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors ${
-              activeView === 'style'
-                ? 'text-white bg-white/10'
-                : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-            }`}
-          >
-            Style
-          </button>
-          <button
-            onClick={() => setActiveView('shop')}
-            className={`px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors ${
-              activeView === 'shop'
-                ? 'text-white bg-white/10'
-                : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-            }`}
-          >
-            Shop
-          </button>
+    <header className="h-[120px] bg-[#050505] flex items-center justify-between px-6 border-b border-white/[0.06]">
+      <div className="flex items-center gap-8">
+        <a href="/" className="transition-opacity duration-300 hover:opacity-80">
+          <img
+            src="/brand/atelier-logo-inverse.svg"
+            alt="Atelier by Watson"
+            className="h-[100px]"
+          />
+        </a>
+        <nav className="flex items-center gap-0.5">
+          {/* Order: Digitize → Style → Shop */}
           {onOpenInbox && (
             <button
               onClick={onOpenInbox}
-              className="px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase rounded transition-colors text-white/40 hover:text-white/70 hover:bg-white/5 flex items-center gap-1.5"
+              className="relative px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] text-white/50 hover:text-white/90"
             >
-              <Inbox className="h-3.5 w-3.5" />
               Digitize
+              {hasBatch && (
+                <span className="absolute top-1 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+              )}
             </button>
           )}
+          <button
+            onClick={() => setActiveView('style')}
+            className={`px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              activeView === 'style'
+                ? 'text-white'
+                : 'text-white/50 hover:text-white/90'
+            }`}
+          >
+            Style
+            {activeView === 'style' && (
+              <span className="block h-[1.5px] bg-[#F8E5E7] mt-0.5 rounded-full" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveView('shop')}
+            className={`px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              activeView === 'shop'
+                ? 'text-white'
+                : 'text-white/50 hover:text-white/90'
+            }`}
+          >
+            Shop
+            {activeView === 'shop' && (
+              <span className="block h-[1.5px] bg-[#F8E5E7] mt-0.5 rounded-full" />
+            )}
+          </button>
         </nav>
       </div>
 
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex items-center gap-2 text-[11px] tracking-[0.15em] uppercase hover:bg-white/5 rounded px-2 py-1 transition-colors"
+          className="flex items-center gap-2.5 text-[11px] tracking-[0.15em] uppercase hover:opacity-80 transition-opacity duration-300 px-2 py-1"
         >
-          <span className="text-white/60">{user.displayName}</span>
-          <div className="w-7 h-7 rounded-full bg-blush/20 flex items-center justify-center text-[10px] font-medium text-blush">
+          <span className="text-white/50 font-light">{user.displayName}</span>
+          <div className="w-7 h-7 rounded-full bg-[#F8E5E7]/15 flex items-center justify-center text-[10px] font-medium text-[#F8E5E7]">
             {initials}
           </div>
-          <ChevronDown className="h-3 w-3 text-white/40" />
+          <ChevronDown className="h-3 w-3 text-white/30" />
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-sm shadow-lg border border-[#E8E4DF] py-1 z-50">
-            <div className="px-4 py-3 border-b border-[#E8E4DF]">
-              <p className="text-[11px] font-medium text-[#1A1A1A]">{user.displayName}</p>
-              <p className="text-[10px] text-text-muted mt-0.5">{user.email}</p>
-              <p className="text-[10px] tracking-[0.2em] uppercase text-blush mt-1">{user.role}</p>
+          <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded shadow-xl border border-black/[0.06] py-1 z-50">
+            <div className="px-4 py-3 border-b border-black/[0.06]">
+              <p className="text-[11px] font-medium text-[#1A1A1A] tracking-[0.02em]">{user.displayName}</p>
+              <p className="text-[10px] text-[#6b6b6b] mt-0.5">{user.email}</p>
+              <p className="text-[10px] tracking-[0.22em] uppercase text-[#F8E5E7] mt-1.5">{user.role}</p>
             </div>
-            {onOpenInbox && (
-              <button
-                onClick={() => { onOpenInbox(); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-[#1A1A1A]"
-              >
-                <Inbox className="h-3.5 w-3.5" />
-                Intake Inbox
-              </button>
-            )}
             {onOpenAdmin && (
               <button
                 onClick={() => { onOpenAdmin(); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-[#1A1A1A]"
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-[#F8F7F5] transition-colors duration-300 text-[#1A1A1A]"
               >
-                <Shield className="h-3.5 w-3.5" />
+                <Shield className="h-3.5 w-3.5 text-[#6b6b6b]" />
                 Team Management
               </button>
             )}
             <button
               onClick={onSignOut}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-tile transition-colors text-destructive"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase hover:bg-[#F8F7F5] transition-colors duration-300 text-[#6b6b6b]"
             >
               <LogOut className="h-3.5 w-3.5" />
               Sign out

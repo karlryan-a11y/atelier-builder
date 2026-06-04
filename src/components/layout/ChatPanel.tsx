@@ -1,12 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasStore, exportCanvasImage } from '@/stores/canvasStore'
+import { styleCanvas } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useLooks } from '@/hooks/useLooks'
+import { useCapsules } from '@/hooks/useCapsules'
 import { supabase } from '@/lib/supabase'
 import { LookGallery } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
+import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
 import {
   runComposePipeline,
   resolveDisambiguation,
@@ -31,6 +34,9 @@ export function ChatPanel() {
   const { activeClient } = useClientStore()
   const { state, currentLookId, isDirty, loadLook, reset, markClean, addNode } = useCanvasStore()
   const { looks, loading, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
+  const { saveCapsule } = useCapsules(activeClient?.id ?? null)
+  const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
+  const [savingCapsule, setSavingCapsule] = useState(false)
 
   // Compose state
   const [messages, setMessages] = useState<ComposeMessage[]>([])
@@ -52,11 +58,64 @@ export function ChatPanel() {
     setSaving(true)
 
     let thumbnailUrl: string | undefined
-    const konvaContainer = document.querySelector('.konvajs-content canvas') as HTMLCanvasElement | null
-    if (konvaContainer) {
-      try {
-        thumbnailUrl = konvaContainer.toDataURL('image/jpeg', 0.7)
-      } catch {}
+    let imageBase64: string | undefined
+    let styledState = state // default: use current canvas state
+
+    try {
+      // Step 1: Auto-style the canvas before exporting.
+      // This guarantees every saved look has WSG-quality composition
+      // with items in proper proportions and brand labels.
+      const store = useCanvasStore.getState()
+      const closetItems = store.state.nodes.filter(n => n.type === 'closet_item')
+
+      if (closetItems.length > 0) {
+        try {
+          const result = await styleCanvas(store.state.nodes, store.imageUrls)
+
+          // Apply styled layout to the canvas
+          store.setCanvasState({ ...store.state, nodes: [] })
+          for (const node of result.nodes) {
+            const url = result.imageUrls[node.id] ?? undefined
+            store.addNode(node, url)
+          }
+
+          // Wait for Konva to re-render with the new layout
+          await new Promise(resolve => requestAnimationFrame(() =>
+            requestAnimationFrame(resolve)
+          ))
+
+          // Capture the styled state for saving
+          styledState = useCanvasStore.getState().state
+        } catch (styleErr) {
+          console.error('Auto-style failed, saving with current layout:', styleErr)
+          // Fall through — save with whatever's on the canvas
+        }
+      }
+
+      // Step 2: Export the styled canvas via Konva native API
+      const pngDataUrl = exportCanvasImage({ pixelRatio: 2, padding: 30 })
+      if (pngDataUrl) {
+        // JPEG thumbnail for gallery + capsule composites
+        const img = new window.Image()
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+          img.src = pngDataUrl
+        })
+        if (img.width > 0) {
+          const thumbCanvas = document.createElement('canvas')
+          thumbCanvas.width = img.width
+          thumbCanvas.height = img.height
+          const tCtx = thumbCanvas.getContext('2d')!
+          tCtx.fillStyle = '#FFFFFF'
+          tCtx.fillRect(0, 0, img.width, img.height)
+          tCtx.drawImage(img, 0, 0)
+          thumbnailUrl = thumbCanvas.toDataURL('image/jpeg', 0.85)
+        }
+        imageBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, '')
+      }
+    } catch (err) {
+      console.error('Canvas export failed:', err)
     }
 
     const { data: sessionData } = await supabase.auth.getSession()
@@ -66,10 +125,11 @@ export function ChatPanel() {
       id: currentLookId ?? undefined,
       clientId: activeClient.id,
       name: data.name,
-      canvasState: state,
+      canvasState: styledState,
       tags: data.tags,
       notesInternal: data.notes,
       thumbnailUrl,
+      imageBase64,
       createdBy: authUserId ?? undefined,
     })
 
@@ -77,6 +137,33 @@ export function ChatPanel() {
     setSaving(false)
     setShowSaveDialog(false)
   }, [activeClient, currentLookId, state, saveLook, markClean, user])
+
+  const handleCreateCapsule = useCallback(async (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => {
+    if (!activeClient) return
+    setSavingCapsule(true)
+
+    // Collect all closet_item_ids from the selected looks
+    const selectedLooks = looks.filter(l => data.lookIds.includes(l.id))
+    const allItemIds = [...new Set(
+      selectedLooks.flatMap(l =>
+        l.canvas_state?.nodes
+          ?.filter((n: any) => n.type === 'closet_item')
+          ?.map((n: any) => n.closet_item_id) ?? []
+      )
+    )]
+
+    await saveCapsule({
+      clientId: activeClient.id,
+      name: data.name,
+      description: data.description,
+      lookIds: data.lookIds,
+      closetItemIds: allItemIds,
+      imageBase64: data.compositeBase64 || undefined,
+    })
+
+    setSavingCapsule(false)
+    setShowCapsuleDialog(false)
+  }, [activeClient, looks, saveCapsule])
 
   const handleSelectLook = useCallback(async (look: LookRow) => {
     if (isDirty && !confirm('You have unsaved changes. Discard and load this look?')) return
@@ -298,6 +385,19 @@ export function ChatPanel() {
           </div>
         )}
 
+        {/* Capsule button */}
+        {activeClient && looks.length > 0 && (
+          <div className="px-3 py-1.5 border-b border-border">
+            <button
+              onClick={() => setShowCapsuleDialog(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-border text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text-muted"
+            >
+              <span>📦</span>
+              Create Capsule ({looks.length} looks available)
+            </button>
+          </div>
+        )}
+
         {/* Current look info */}
         {currentLook && (
           <div className="px-3 py-2 border-b border-border bg-tile/50">
@@ -464,6 +564,15 @@ export function ChatPanel() {
           saving={saving}
           onSave={handleSave}
           onClose={() => setShowSaveDialog(false)}
+        />
+      )}
+
+      {showCapsuleDialog && (
+        <CreateCapsuleDialog
+          looks={looks}
+          saving={savingCapsule}
+          onSave={handleCreateCapsule}
+          onClose={() => setShowCapsuleDialog(false)}
         />
       )}
     </>

@@ -44,6 +44,30 @@ interface CanvasStoreState {
   isDirty: boolean
 }
 
+// Export function registered by LookCanvas, called by ChatPanel
+type ExportCanvasFn = (opts?: { pixelRatio?: number; padding?: number }) => string | null
+
+let _registeredExportFn: ExportCanvasFn | null = null
+
+/** Called by LookCanvas on mount to register its export function */
+export function registerCanvasExport(fn: ExportCanvasFn) {
+  _registeredExportFn = fn
+}
+
+/** Called by LookCanvas on unmount */
+export function unregisterCanvasExport() {
+  _registeredExportFn = null
+}
+
+/**
+ * Export the canvas to a data URL using Konva's native API.
+ * Automatically crops to content bounds with padding.
+ * Returns null if no canvas is registered.
+ */
+export function exportCanvasImage(opts?: { pixelRatio?: number; padding?: number }): string | null {
+  return _registeredExportFn ? _registeredExportFn(opts) : null
+}
+
 interface CanvasStoreActions {
   setCanvasState: (state: LookCanvasState) => void
   addNode: (node: CanvasNode, imageUrl?: string) => void

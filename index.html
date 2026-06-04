@@ -3,13 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>atelier-builder</title>
+    <title>Atelier by Watson</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet" />
+    <style>
+      /* WSG-style preloader — W logo fade-in + gentle pulse on dark bg */
+      .atelier-preloader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: #050505;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .atelier-preloader.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .atelier-preloader__logo {
+        width: 180px;
+        height: auto;
+        opacity: 0;
+        animation:
+          preloader-fade-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+          preloader-pulse 2.5s cubic-bezier(0.45, 0, 0.55, 1) 0.6s infinite;
+      }
+      @keyframes preloader-fade-in {
+        from { opacity: 0; transform: scale(0.92); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      @keyframes preloader-pulse {
+        0%   { opacity: 1; transform: scale(1); }
+        50%  { opacity: 0.65; transform: scale(0.97); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .atelier-preloader { display: none; }
+      }
+    </style>
   </head>
   <body>
+    <!-- Preloader — dismissed by React once the app mounts -->
+    <div class="atelier-preloader" id="atelier-preloader" aria-hidden="true">
+      <img class="atelier-preloader__logo" src="/brand/w-icon-white.svg" alt="" width="60" height="60" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

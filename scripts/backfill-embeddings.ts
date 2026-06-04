@@ -10,7 +10,9 @@ const supabase = createClient(
 
 const openai = new OpenAI({ apiKey: process.env.VITE_OPENAI_API_KEY! })
 
-const BATCH_SIZE = 200
+const BATCH_SIZE = 50
+const DELAY_BETWEEN_BATCHES_MS = 2000
+const DELAY_BETWEEN_UPDATES_MS = 50
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 
 async function buildTagLookup(): Promise<Map<string, string[]>> {
@@ -104,7 +106,7 @@ async function main() {
         input: texts,
       })
 
-      // Update each item with its embedding
+      // Update each item with its embedding (with small delay to avoid saturating DB)
       for (let i = 0; i < response.data.length; i++) {
         const embedding = response.data[i].embedding
         const { error } = await supabase
@@ -116,11 +118,17 @@ async function main() {
           console.error(`  Error updating ${ids[i]}:`, error.message)
           errors++
         }
+        if (DELAY_BETWEEN_UPDATES_MS > 0) {
+          await new Promise(r => setTimeout(r, DELAY_BETWEEN_UPDATES_MS))
+        }
       }
 
       processed += batch.length
       const pct = ((processed / count!) * 100).toFixed(1)
-      process.stdout.write(`\r  ${processed}/${count} (${pct}%) — ${errors} errors`)
+      console.log(`  ${processed}/${count} (${pct}%) — ${errors} errors`)
+
+      // Pause between batches to let Supabase breathe
+      await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS))
     } catch (e: any) {
       console.error(`\nOpenAI API error:`, e.message)
       if (e.status === 429) {

@@ -1,7 +1,7 @@
 import { useRef, useMemo, useCallback, useEffect, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text as KonvaText, Line } from 'react-konva'
 import type Konva from 'konva'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasStore, registerCanvasExport, unregisterCanvasExport } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaDrag, fromKonvaTransform } from './CanvasAdapter'
@@ -11,6 +11,13 @@ import type { ClosetItemNode, TextNode } from '@/types/canvas'
 
 const CANVAS_W = 1200
 const CANVAS_H = 1500
+
+// Look Frame: the exportable region. Items should be arranged within this area.
+// Everything outside is workspace. Export captures only the frame.
+export const FRAME_X = 100
+export const FRAME_Y = 80
+export const FRAME_W = 1000
+export const FRAME_H = 1340  // ~3:4 aspect ratio (1000:1340)
 
 interface ClosetItemImageProps {
   node: ClosetItemNode
@@ -143,6 +150,52 @@ export function LookCanvas() {
   const store = useCanvasStore()
   const { state, selectedNodeIds, updateNode, setSelectedNodeIds, toggleNodeSelection } = store
   const stageRef = useRef<Konva.Stage>(null)
+
+  // Register the Konva native export function so ChatPanel can call it.
+  // Crops to content bounds WITHIN the frame — tight around items, never exceeds frame.
+  useEffect(() => {
+    registerCanvasExport((opts) => {
+      const stage = stageRef.current
+      if (!stage) return null
+      if (store.state.nodes.length === 0) return null
+
+      const pixelRatio = opts?.pixelRatio ?? 2
+
+      // Hide UI elements during export
+      const transformers = stage.find('Transformer')
+      transformers.forEach((t: any) => t.hide())
+      const allRects = stage.find('Rect')
+      const hiddenRects: any[] = []
+      allRects.forEach((rect: any) => {
+        const attrs = rect.attrs
+        if (attrs.dash && attrs.x === FRAME_X && attrs.y === FRAME_Y) { rect.hide(); hiddenRects.push(rect) }
+        if (attrs.fill === 'rgba(0,0,0,0.03)') { rect.hide(); hiddenRects.push(rect) }
+      })
+      const lines = stage.find('Line')
+      lines.forEach((l: any) => l.hide())
+
+      try {
+        // Export the full frame — consistent 1000:1340 aspect ratio every time.
+        // The Style engine arranges items within the frame, so the full frame
+        // IS the look composition.
+        return stage.toDataURL({
+          x: FRAME_X,
+          y: FRAME_Y,
+          width: FRAME_W,
+          height: FRAME_H,
+          pixelRatio,
+          mimeType: 'image/png',
+        })
+      } finally {
+        transformers.forEach((t: any) => t.show())
+        hiddenRects.forEach((r: any) => r.show())
+        lines.forEach((l: any) => l.show())
+      }
+    })
+
+    return () => unregisterCanvasExport()
+  }, [store.state.nodes])
+
   const [showGrid, setShowGrid] = useState(false)
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const selectionStart = useRef<{ x: number; y: number } | null>(null)
@@ -355,24 +408,29 @@ export function LookCanvas() {
   return (
     <main
       ref={setNodeRef}
-      className="flex-1 flex flex-col items-center justify-center relative overflow-hidden"
+      className="flex-1 flex flex-col items-center relative overflow-hidden"
       style={{ backgroundColor: 'rgba(245, 241, 234, 0.3)' }}
     >
-      <CanvasToolbar />
-      <button
-        onClick={() => setShowGrid(!showGrid)}
-        className={`absolute top-3 right-3 z-20 p-1.5 rounded-sm border transition-colors ${
-          showGrid ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-border text-text-muted hover:bg-tile'
-        }`}
-        title="Toggle grid"
-      >
-        <Grid3X3 className="h-3.5 w-3.5" />
-      </button>
+      {/* Toolbar area — sits in the gray zone above the canvas */}
+      <div className="w-full flex items-center justify-center py-3 shrink-0 relative">
+        <CanvasToolbar />
+        <button
+          onClick={() => setShowGrid(!showGrid)}
+          className={`absolute right-3 p-1.5 rounded-sm border transition-colors ${
+            showGrid ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-border text-text-muted hover:bg-tile'
+          }`}
+          title="Toggle grid"
+        >
+          <Grid3X3 className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
-      <div
-        className="relative border border-border rounded bg-white shadow-sm"
-        style={{ width: CANVAS_W * 0.45, height: CANVAS_H * 0.45 }}
-      >
+      {/* Canvas — the white look area */}
+      <div className="flex-1 flex items-center justify-center pb-4">
+        <div
+          className="relative border border-border rounded bg-white shadow-sm"
+          style={{ width: CANVAS_W * 0.45, height: CANVAS_H * 0.45 }}
+        >
         <Stage
           ref={stageRef}
           width={CANVAS_W * 0.45}
@@ -392,6 +450,18 @@ export function LookCanvas() {
               width={CANVAS_W}
               height={CANVAS_H}
               fill={state.canvas.background}
+              listening={false}
+            />
+            {/* Look Frame — subtle boundary showing the export area */}
+            {/* Dim area outside the frame */}
+            <Rect x={0} y={0} width={CANVAS_W} height={FRAME_Y} fill="rgba(0,0,0,0.03)" listening={false} />
+            <Rect x={0} y={FRAME_Y + FRAME_H} width={CANVAS_W} height={CANVAS_H - FRAME_Y - FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
+            <Rect x={0} y={FRAME_Y} width={FRAME_X} height={FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
+            <Rect x={FRAME_X + FRAME_W} y={FRAME_Y} width={CANVAS_W - FRAME_X - FRAME_W} height={FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
+            {/* Frame border — subtle dashed line */}
+            <Rect
+              x={FRAME_X} y={FRAME_Y} width={FRAME_W} height={FRAME_H}
+              stroke="#E8E4DF" strokeWidth={1.5} dash={[8, 6]}
               listening={false}
             />
             {gridLines}
@@ -446,14 +516,15 @@ export function LookCanvas() {
             )}
           </Layer>
         </Stage>
-      </div>
-      {state.nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-[10px] tracking-[0.3em] uppercase text-text-muted/30">
-            Drag pieces here to build a look
-          </p>
         </div>
-      )}
+        {state.nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <p className="text-[10px] tracking-[0.3em] uppercase text-text-muted/30">
+              Drag pieces here to build a look
+            </p>
+          </div>
+        )}
+      </div>
     </main>
   )
 }

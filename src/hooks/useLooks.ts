@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+
 export interface LookRow {
   id: string
   client_id: string
@@ -13,6 +15,7 @@ export interface LookRow {
   notes_client: string | null
   created_by: string | null
   source: string
+  raw: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -34,7 +37,7 @@ export function useLooks(clientId: string | null) {
     setLoading(true)
     const { data, error } = await supabase
       .from('looks')
-      .select('id, client_id, name, canvas_state, thumbnail_url, tags, notes_internal, notes_client, created_by, source, created_at, updated_at')
+      .select('id, client_id, name, canvas_state, thumbnail_url, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
       .eq('client_id', clientId)
       .eq('source', 'builder')
       .order('updated_at', { ascending: false })
@@ -58,12 +61,39 @@ export function useLooks(clientId: string | null) {
     notesInternal?: string
     notesClient?: string
     thumbnailUrl?: string
+    imageBase64?: string  // High-res canvas render (PNG base64, no data: prefix)
     createdBy?: string
   }) => {
     const isNew = !opts.id
     const id = opts.id || generateLookId()
 
-    const row = {
+    // Upload high-res look image to R2 if provided
+    let r2ImageKey: string | null = null
+    if (opts.imageBase64) {
+      try {
+        const key = `looks/${id}/image-${Date.now()}.png`
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/upload-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64: opts.imageBase64,
+            content_type: 'image/png',
+            key,
+          }),
+        })
+        if (resp.ok) {
+          r2ImageKey = key
+        }
+      } catch (err) {
+        console.error('Failed to upload look image:', err)
+      }
+    }
+
+    const closetItemIds = opts.canvasState.nodes
+      .filter((n) => n.type === 'closet_item')
+      .map((n) => (n as { closet_item_id: string }).closet_item_id)
+
+    const row: Record<string, unknown> = {
       id,
       client_id: opts.clientId,
       name: opts.name,
@@ -74,20 +104,24 @@ export function useLooks(clientId: string | null) {
       thumbnail_url: opts.thumbnailUrl ?? null,
       source: 'builder',
       updated_at: new Date().toISOString(),
-      ...(isNew ? {
-        created_by: opts.createdBy ?? null,
-        raw: {},
-        closet_item_ids: opts.canvasState.nodes
-          .filter((n) => n.type === 'closet_item')
-          .map((n) => (n as { closet_item_id: string }).closet_item_id),
-        description: '',
-        archived: false,
-        total_comments: 0,
-      } : {
-        closet_item_ids: opts.canvasState.nodes
-          .filter((n) => n.type === 'closet_item')
-          .map((n) => (n as { closet_item_id: string }).closet_item_id),
-      }),
+      closet_item_ids: closetItemIds,
+    }
+
+    // Store the R2 key in raw — the lookbook resolves it to a signed URL at render time
+    // Also store a direct URL as fallback (works if R2 public domain is configured)
+    if (r2ImageKey) {
+      row.raw = {
+        main_image_r2_key: r2ImageKey,
+        main_image_url: `https://images.atelierbywatson.com/${r2ImageKey}`,
+      }
+    }
+
+    if (isNew) {
+      row.created_by = opts.createdBy ?? null
+      if (!row.raw) row.raw = {}
+      row.description = ''
+      row.archived = false
+      row.total_comments = 0
     }
 
     const { data, error } = isNew

@@ -5,6 +5,9 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    assetsDir: '_builder',  // unique prefix — avoids conflicts with dashboard's /assets/
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

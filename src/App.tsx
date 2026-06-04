@@ -18,21 +18,30 @@ import type { ClosetItemNode } from '@/types/canvas'
 function App() {
   const { user, loading, signOut } = useAuth()
   const [showAdmin, setShowAdmin] = useState(false)
-  const [showInbox, setShowInbox] = useState(() => window.location.hash === '#inbox')
+  const [showInbox, setShowInbox] = useState(() => ['#inbox', '#digitize'].includes(window.location.hash))
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const { addNode, state } = useCanvasStore()
   const activeView = useViewStore((s) => s.activeView)
+  const setActiveView = useViewStore((s) => s.setActiveView)
+
+  // Handle hash-based routing for platform nav tabs
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash === '#shop') setActiveView('shop')
+    if (hash === '#digitize' || hash === '#inbox') setShowInbox(true)
+  }, [setActiveView])
 
   useEffect(() => {
     const onHash = () => {
       setShowSearch(window.location.hash === '#search')
-      setShowInbox(window.location.hash === '#inbox')
+      setShowInbox(['#inbox', '#digitize'].includes(window.location.hash))
+      if (window.location.hash === '#shop') setActiveView('shop')
       const m = window.location.hash.match(/#session=([0-9a-fA-F-]{36})/)
       if (m) resumeSession(m[1])
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
-  }, [])
+  }, [setActiveView])
 
   // Deep link: #session=<id> reopens that shopping session once the user is in.
   useEffect(() => {

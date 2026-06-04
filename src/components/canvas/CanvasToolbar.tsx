@@ -4,7 +4,7 @@ import {
   Copy, ChevronUp, ChevronDown, Type, Undo2, Redo2,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
-  Sparkles,
+  Sparkles, FilePlus,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { styleCanvas } from '@/lib/style'
@@ -28,6 +28,7 @@ export function CanvasToolbar() {
   const {
     state, selectedNodeIds, updateNode, removeNodes, duplicateNodes,
     moveLayer, addNode, undo, redo, past, future, alignNodes, distributeNodes,
+    isDirty, reset,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
 
@@ -83,7 +84,20 @@ export function CanvasToolbar() {
   }
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+    <div className="flex items-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+      <button
+        onClick={() => {
+          if (isDirty && !confirm('You have unsaved changes. Start a new look?')) return
+          reset()
+        }}
+        className="p-1.5 hover:bg-tile rounded-sm transition-colors"
+        title="New Look"
+      >
+        <FilePlus className="h-3.5 w-3.5 text-text-muted" />
+      </button>
+
+      <div className="w-px h-4 bg-border mx-0.5" />
+
       <button
         onClick={() => undo()}
         disabled={past.length === 0}

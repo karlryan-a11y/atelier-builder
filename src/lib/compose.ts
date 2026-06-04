@@ -223,8 +223,12 @@ export async function searchForItems(
 
 type LayoutName = 'dress_centered' | 'separates_stack' | 'accessories_focused'
 
-const CANVAS_W = 1200
-const CANVAS_H = 1500
+// Look Frame: items are placed within this region.
+// Matches the export frame in LookCanvas.tsx.
+const FRAME_X = 100
+const FRAME_Y = 80
+const FRAME_W = 1000
+const FRAME_H = 1340
 
 /**
  * Target visual HEIGHT per category in pixels on the 1200×1500 canvas.
@@ -236,19 +240,20 @@ const CANVAS_H = 1500
  * This guarantees correct proportions regardless of source image size.
  * No CORS, no async, no image pre-loading needed at compose time.
  */
+// Target heights scaled to FRAME_H (1340px) not full canvas
 const TARGET_HEIGHTS: Record<string, number> = {
-  dress:     1050,    // ~70% of canvas — hero piece, dominant
-  bottom:     780,    // ~52% — pants/skirts fill center
-  top:        440,    // ~29% — visible above pants, overlaps at waist
-  outerwear:  520,    // ~35% — flanks the top
-  bag:        340,    // ~23% — accent, right side
-  shoes:      175,    // ~12% — small but visible, bottom row
-  jewelry:     70,    // ~5%  — tiny accent
-  belt:        55,    // ~4%  — tiny at waist
-  accessory:  240,    // ~16%
-  scarf:      420,
-  hat:        240,
-  other:      270,
+  dress:      940,    // ~70% of frame — hero piece, dominant
+  bottom:     700,    // ~52% — pants/skirts fill center
+  top:        390,    // ~29% — visible above pants, overlaps at waist
+  outerwear:  470,    // ~35% — flanks the top
+  bag:        310,    // ~23% — accent, right side
+  shoes:      160,    // ~12% — small but visible, bottom row
+  jewelry:     65,    // ~5%  — tiny accent
+  belt:        50,    // ~4%  — tiny at waist
+  accessory:  215,    // ~16%
+  scarf:      375,
+  hat:        215,
+  other:      240,
 }
 
 /**
@@ -303,9 +308,10 @@ function centerToTopLeft(
   const estWidth = targetH * aspect
   const estHeight = targetH
 
+  // Place within the frame, not the full canvas
   return {
-    x: Math.round((centerXPct / 100) * CANVAS_W - estWidth / 2),
-    y: Math.round((centerYPct / 100) * CANVAS_H - estHeight / 2),
+    x: Math.round(FRAME_X + (centerXPct / 100) * FRAME_W - estWidth / 2),
+    y: Math.round(FRAME_Y + (centerYPct / 100) * FRAME_H - estHeight / 2),
   }
 }
 
@@ -348,12 +354,12 @@ function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }
     } else {
       // Spread evenly in a horizontal row at the category's y position
       const centerY = rule.y_pct
-      const totalWidth = CANVAS_W * 0.7  // 70% of canvas — matches reference shoe spread
-      const startX = (CANVAS_W - totalWidth) / 2
+      const totalWidth = FRAME_W * 0.7  // 70% of frame — matches reference shoe spread
+      const startX = (FRAME_W - totalWidth) / 2
       const spacing = totalWidth / group.length
 
       for (let i = 0; i < group.length; i++) {
-        const centerX = ((startX + spacing * (i + 0.5)) / CANVAS_W) * 100
+        const centerX = ((startX + spacing * (i + 0.5)) / FRAME_W) * 100
         const pos = centerToTopLeft(centerX, centerY, cat)
         result.push({
           extraction: group[i].extraction,
@@ -477,8 +483,8 @@ export function composeNodes(
     }
 
     // Clamp to canvas with generous margin so labels don't clip
-    labelX = Math.max(40, Math.min(CANVAS_W - 160, labelX))
-    labelY = Math.max(40, Math.min(CANVAS_H - 50, labelY))
+    labelX = Math.max(FRAME_X + 10, Math.min(FRAME_X + FRAME_W - 160, labelX))
+    labelY = Math.max(FRAME_Y + 10, Math.min(FRAME_Y + FRAME_H - 50, labelY))
 
     const textId = `txt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     nodes.push({

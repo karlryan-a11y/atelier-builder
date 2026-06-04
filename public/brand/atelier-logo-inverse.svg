@@ -1,6 +1,5 @@
-<svg width="290" height="120" viewBox="195 65 290 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atelier by Watson inverse logo, white on charcoal">
-  <title>Atelier by Watson — inverse logo</title>
-  <text x="340" y="125" text-anchor="middle" font-family="'Didot', 'Bodoni 72', 'Playfair Display', Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="78" fill="#F5F1EA">Atelier</text>
-  <line x1="295" y1="150" x2="385" y2="150" stroke="#F5F1EA" stroke-width="0.6"/>
-  <text x="340" y="178" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="400" font-size="13" letter-spacing="6" fill="#F5F1EA">BY WATSON</text>
+<svg width="280" height="180" viewBox="0 0 280 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atelier by Watson">
+  <text x="140" y="90" text-anchor="middle" font-family="'Didot', 'Bodoni 72', 'Playfair Display', Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="78" fill="#F5F1EA">Atelier</text>
+  <line x1="95" y1="112" x2="185" y2="112" stroke="#F5F1EA" stroke-width="0.6"/>
+  <text x="140" y="142" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="400" font-size="13" letter-spacing="6" fill="#F5F1EA">BY WATSON</text>
 </svg>
