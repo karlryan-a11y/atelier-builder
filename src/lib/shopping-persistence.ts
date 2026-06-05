@@ -381,6 +381,42 @@ export async function ingestResults(sessionId: string, raw: string): Promise<{ o
   return { ok: !!json.ok, rehosted: json.rehosted ?? 0, options: json.options ?? 0 }
 }
 
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader()
+    fr.onload = () => res(fr.result as string)
+    fr.onerror = () => rej(new Error('read failed'))
+    fr.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Upload a manually-supplied image (a dropped/pasted file) for an option:
+ * encode → store-image (permanent storage) → returns the stored URL.
+ */
+export async function uploadOptionImage(blob: Blob, sessionId: string | null): Promise<string | null> {
+  const dataUri = await blobToDataUri(blob)
+  const r = await fetch(STORE_IMAGE_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId || 'manual', image: dataUri }),
+  })
+  const j = await r.json().catch(() => ({}))
+  return j.url || null
+}
+
+/** Persist a new image URL onto the option's DB row (board option id is `opt_<dbid>`). */
+export async function persistOptionImage(boardOptionId: string, url: string): Promise<void> {
+  if (!boardOptionId.startsWith('opt_')) return // transient (not yet persisted)
+  const dbId = boardOptionId.slice(4)
+  const key = url.split('/shopping-images/')[1] || null
+  const { error } = await supabase
+    .from('shopping_options')
+    .update({ image_url: url, image_r2_key: key })
+    .eq('id', dbId)
+  if (error) throw new Error(`option image save failed: ${error.message}`)
+}
+
 /** Most recent shopping session id for a client (to resume from a cold start). */
 export async function getLatestSessionId(clientId: string): Promise<string | null> {
   if (!clientId) return null

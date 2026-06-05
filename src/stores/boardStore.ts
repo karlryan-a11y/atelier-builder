@@ -39,6 +39,7 @@ interface BoardState {
   getApprovedOptions: () => BoardOption[]
   setTryonStatus: (optionId: string, status: 'kept' | 'returned' | 'exchanged', exchangeNotes?: string) => void
   markAddedToCloset: (optionId: string, closetItemId: string) => void
+  setOptionImageUrl: (optionId: string, imageUrl: string) => void
   reset: () => void
 }
 
@@ -145,6 +146,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         options: slot.options.map((o) =>
           o.id === optionId ? { ...o, closet_item_id: closetItemId } : o
         ),
+      })),
+    })),
+
+  setOptionImageUrl: (optionId, imageUrl) =>
+    set((state) => ({
+      slots: state.slots.map((slot) => ({
+        ...slot,
+        options: slot.options.map((o) => (o.id === optionId ? { ...o, image_url: imageUrl } : o)),
       })),
     })),
 

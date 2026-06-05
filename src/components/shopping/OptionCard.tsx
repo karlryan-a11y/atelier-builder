@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Check, X, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react'
+import { Check, X, RefreshCw, ExternalLink, ChevronDown, ImagePlus, Loader2 } from 'lucide-react'
 import { useBoardStore, type BoardOption } from '@/stores/boardStore'
+import { useShoppingStore } from '@/stores/shoppingStore'
+import { uploadOptionImage, persistOptionImage } from '@/lib/shopping-persistence'
 import { ProductImage } from './ProductImage'
 
 const REJECTION_REASONS = [
@@ -16,6 +18,26 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
   const [sizeOverride, setSizeOverride] = useState(option.recommended_size)
   const [colorOverride, setColorOverride] = useState(option.recommended_color)
   const [expanded, setExpanded] = useState(false)
+  const [uploadingImg, setUploadingImg] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const setOptionImageUrl = useBoardStore((s) => s.setOptionImageUrl)
+  const sessionId = useShoppingStore((s) => s.session.id)
+
+  async function handleImageBlob(blob: Blob | null | undefined) {
+    if (!blob || !blob.type.startsWith('image/')) return
+    setUploadingImg(true)
+    setImgError(false)
+    try {
+      const url = await uploadOptionImage(blob, sessionId)
+      if (!url) throw new Error('no url')
+      setOptionImageUrl(option.id, url)
+      await persistOptionImage(option.id, url).catch(() => {})
+    } catch {
+      setImgError(true)
+    } finally {
+      setUploadingImg(false)
+    }
+  }
 
   const isReviewed = option.status !== 'pending'
 
@@ -53,14 +75,48 @@ export function OptionCard({ option }: { option: BoardOption; round: number }) {
           : 'border-wsg-border bg-white'
       }`}
     >
-      {/* Product image (branded fallback on load failure) */}
-      <div className="aspect-[3/4] relative">
+      {/* Product image (branded fallback on load failure). Drop/paste/upload to
+          fix a missing image — works for retailers that block automated fetch. */}
+      <div
+        className="group/img aspect-[3/4] relative"
+        onPaste={(e) => {
+          const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
+          if (item) handleImageBlob(item.getAsFile())
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          handleImageBlob(e.dataTransfer?.files?.[0])
+        }}
+        tabIndex={0}
+      >
         <ProductImage
           src={option.image_url}
           alt={option.product_name}
           brand={option.brand}
           url={option.url}
         />
+        {/* Add/replace image control */}
+        <label
+          className={`absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded-sm bg-white/90 border border-wsg-border text-[9px] tracking-[0.1em] uppercase text-text-muted hover:text-text cursor-pointer transition-opacity ${
+            option.image_url ? 'opacity-0 group-hover/img:opacity-100' : 'opacity-100'
+          }`}
+          title="Upload, drop, or paste an image"
+        >
+          {uploadingImg ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImagePlus className="h-3 w-3" />}
+          {uploadingImg ? 'Saving…' : option.image_url ? 'Replace' : 'Add image'}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleImageBlob(e.target.files?.[0])}
+          />
+        </label>
+        {imgError && (
+          <span className="absolute bottom-2 right-2 text-[9px] text-red-600 bg-white/90 px-1 rounded-sm">
+            save failed
+          </span>
+        )}
 
         {/* Confidence badge */}
         <div
