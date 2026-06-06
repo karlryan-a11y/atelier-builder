@@ -3,6 +3,10 @@
     {
       "source": "/img-proxy/:path*",
       "destination": "https://goodpix-co.s3.amazonaws.com/:path*"
+    },
+    {
+      "source": "/r2-img/:path*",
+      "destination": "https://images.atelierbywatson.com/:path*"
     }
   ]
 }
