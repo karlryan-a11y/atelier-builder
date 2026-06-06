@@ -14,12 +14,10 @@ const CANVAS_H = 1500
 
 // Look Frame: the exportable region. Items should be arranged within this area.
 // Everything outside is workspace. Export captures only the frame.
-// SQUARE (1:1) look frame to match GoodPix look images (1080×1080 / 1600×1600).
-// Must match the frame in compose.ts.
-export const FRAME_X = 60
-export const FRAME_Y = 210
-export const FRAME_W = 1080
-export const FRAME_H = 1080
+export const FRAME_X = 100
+export const FRAME_Y = 80
+export const FRAME_W = 1000
+export const FRAME_H = 1340  // ~3:4 aspect ratio (1000:1340)
 
 interface ClosetItemImageProps {
   node: ClosetItemNode
@@ -189,46 +187,14 @@ export function LookCanvas() {
       stage.size({ width: CANVAS_W, height: CANVAS_H })
 
       try {
-        // Content-aware SQUARE crop: tightly frame the actual items + brand
-        // labels, then expand to a 1:1 square (matching GoodPix's square look
-        // images) with a uniform margin. This makes every saved look fill its
-        // lookbook card cleanly, regardless of item count or how the Style
-        // engine placed things. Falls back to the full frame if no content.
-        const contentNodes = [...stage.find('Image'), ...stage.find('Text')]
-          .filter((n: any) => n.visible())
-
-        let cropX = FRAME_X
-        let cropY = FRAME_Y
-        let cropSide = FRAME_W
-
-        if (contentNodes.length > 0) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-          for (const n of contentNodes) {
-            const r = (n as any).getClientRect({ relativeTo: stage })
-            if (!r || r.width === 0 || r.height === 0) continue
-            minX = Math.min(minX, r.x)
-            minY = Math.min(minY, r.y)
-            maxX = Math.max(maxX, r.x + r.width)
-            maxY = Math.max(maxY, r.y + r.height)
-          }
-          if (isFinite(minX)) {
-            const contentW = maxX - minX
-            const contentH = maxY - minY
-            const cx = (minX + maxX) / 2
-            const cy = (minY + maxY) / 2
-            // Square side = larger content dimension + ~8% margin each side,
-            // clamped to the canvas.
-            cropSide = Math.min(Math.max(contentW, contentH) * 1.16, CANVAS_W, CANVAS_H)
-            cropX = Math.max(0, Math.min(cx - cropSide / 2, CANVAS_W - cropSide))
-            cropY = Math.max(0, Math.min(cy - cropSide / 2, CANVAS_H - cropSide))
-          }
-        }
-
+        // Export the full frame — consistent 1000:1340 aspect ratio every time.
+        // The Style engine arranges items within the frame, so the full frame
+        // IS the look composition.
         return stage.toDataURL({
-          x: cropX,
-          y: cropY,
-          width: cropSide,
-          height: cropSide,
+          x: FRAME_X,
+          y: FRAME_Y,
+          width: FRAME_W,
+          height: FRAME_H,
           pixelRatio,
           mimeType: 'image/png',
         })

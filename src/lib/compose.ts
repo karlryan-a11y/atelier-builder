@@ -224,12 +224,11 @@ export async function searchForItems(
 type LayoutName = 'dress_centered' | 'separates_stack' | 'accessories_focused'
 
 // Look Frame: items are placed within this region.
-// SQUARE (1:1) to match GoodPix look images (1080×1080 / 1600×1600).
-// Must match the export frame in LookCanvas.tsx.
-const FRAME_X = 60
-const FRAME_Y = 210
-const FRAME_W = 1080
-const FRAME_H = 1080
+// Matches the export frame in LookCanvas.tsx.
+const FRAME_X = 100
+const FRAME_Y = 80
+const FRAME_W = 1000
+const FRAME_H = 1340
 
 /**
  * Target visual HEIGHT per category in pixels on the 1200×1500 canvas.
@@ -241,21 +240,20 @@ const FRAME_H = 1080
  * This guarantees correct proportions regardless of source image size.
  * No CORS, no async, no image pre-loading needed at compose time.
  */
-// Target heights as a % of the SQUARE frame height (FRAME_H = 1080px).
-// Rescaled from the previous portrait (1340px) values to keep proportions.
+// Target heights scaled to FRAME_H (1340px) not full canvas
 const TARGET_HEIGHTS: Record<string, number> = {
-  dress:      756,    // ~70% of frame — hero piece, dominant
-  bottom:     564,    // ~52% — pants/skirts fill center
-  top:        314,    // ~29% — visible above pants, overlaps at waist
-  outerwear:  379,    // ~35% — flanks the top
-  bag:        250,    // ~23% — accent, right side
-  shoes:      130,    // ~12% — small but visible, bottom row
-  jewelry:     52,    // ~5%  — tiny accent
-  belt:        40,    // ~4%  — tiny at waist
-  accessory:  173,    // ~16%
-  scarf:      302,
-  hat:        173,
-  other:      193,
+  dress:      940,    // ~70% of frame — hero piece, dominant
+  bottom:     700,    // ~52% — pants/skirts fill center
+  top:        390,    // ~29% — visible above pants, overlaps at waist
+  outerwear:  470,    // ~35% — flanks the top
+  bag:        310,    // ~23% — accent, right side
+  shoes:      160,    // ~12% — small but visible, bottom row
+  jewelry:     65,    // ~5%  — tiny accent
+  belt:        50,    // ~4%  — tiny at waist
+  accessory:  215,    // ~16%
+  scarf:      375,
+  hat:        215,
+  other:      240,
 }
 
 /**
