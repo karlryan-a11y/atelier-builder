@@ -30,34 +30,21 @@ export function useClosetItems(clientId: string | null) {
       const allItems = data ?? []
       setItems(allItems)
 
-      // Resolve signed URLs for intake pipeline items
+      // Route intake-pipeline (digitized) item images through the image-proxy
+      // Edge Function. R2 serves no CORS headers, so signed R2 URLs taint the
+      // Konva canvas and break look export/thumbnails. The proxy returns the
+      // bytes with Access-Control-Allow-Origin:* so the canvas stays clean.
       const intakeItems = allItems.filter(i => i.source === 'intake_pipeline')
       if (intakeItems.length > 0) {
         const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-        const r2Keys = intakeItems.map(i => i.processed_image_hash ?? i.primary_image_hash).filter(Boolean) as string[]
-        const BATCH = 50
-        const signedUrls = new Map<string, string>()
-        for (let b = 0; b < r2Keys.length; b += BATCH) {
-          try {
-            const resp = await fetch(SUPABASE_URL + '/functions/v1/intake-signed-url', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ keys: r2Keys.slice(b, b + BATCH), expires_in: 3600 }),
-            })
-            if (resp.ok) {
-              const data = await resp.json()
-              for (const [key, url] of Object.entries(data.urls ?? {})) {
-                signedUrls.set(key, url as string)
-              }
-            }
-          } catch {}
-        }
-        // Inject signed URLs into raw.processed_image for intake items
         for (const item of allItems) {
           if (item.source === 'intake_pipeline') {
             const key = item.processed_image_hash ?? item.primary_image_hash
-            if (key && signedUrls.has(key)) {
-              item.raw = { ...item.raw, processed_image: signedUrls.get(key)! }
+            if (key) {
+              item.raw = {
+                ...item.raw,
+                processed_image: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`,
+              }
             }
           }
         }
