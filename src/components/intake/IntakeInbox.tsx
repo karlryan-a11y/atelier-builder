@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Inbox, Check, X, ChevronLeft, Edit3, RefreshCw, Upload, Camera, Download } from 'lucide-react'
+import { Inbox, Check, X, Edit3, RefreshCw, Upload, Camera, Download } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
@@ -14,11 +14,7 @@ const CATEGORIES = [
   'Activewear', 'Intimates',
 ]
 
-interface IntakeInboxProps {
-  onClose: () => void
-}
-
-export function IntakeInbox({ onClose }: IntakeInboxProps) {
+export function IntakeInbox() {
   const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
     // Default to In Progress if there are active batches
     const saved = localStorage.getItem('atelier_active_batch')
@@ -162,44 +158,28 @@ export function IntakeInbox({ onClose }: IntakeInboxProps) {
 
   return (
     <LightboxProvider>
-    <div className="fixed inset-0 bg-[#F8F7F5] z-50 flex flex-col">
-      {/* Header */}
-      <div className="h-[120px] bg-[#050505] flex items-center justify-between px-6 shrink-0 border-b border-white/[0.06]">
-        <div className="flex items-center gap-8">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-3 group transition-opacity duration-300 hover:opacity-80"
-          >
-            <ChevronLeft className="h-4 w-4 text-white/40 group-hover:text-white/70 transition-colors duration-300" />
-            <img
-              src="/brand/atelier-logo-inverse.svg"
-              alt="Atelier by Watson"
-              className="h-[100px]"
-            />
-          </button>
-          <div className="w-px h-8 bg-white/[0.08]" />
-          <span className="text-[13px] tracking-[0.22em] uppercase text-white/50">Digitization Inbox</span>
-        </div>
-
+    <div className="flex-1 bg-[#F8F7F5] flex flex-col overflow-hidden">
+      {/* Upload toggle bar */}
+      <div className="flex items-center justify-between px-4 md:px-6 py-2 bg-white border-b border-[#E8E4DF] shrink-0">
         <div className="flex items-center gap-3">
           {counts.pending > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] tracking-[0.2em] uppercase text-white/40">
-                {counts.pending} pending
+              <span className="text-[10px] tracking-[0.2em] uppercase text-[#888]">
+                {counts.pending} pending review
               </span>
               <div className="w-2 h-2 rounded-full bg-blush animate-pulse" />
             </div>
           )}
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${
-              showUpload ? 'bg-blush text-[#1A1A1A]' : 'bg-white/10 text-white hover:bg-white/20'
-            }`}
-          >
-            <Camera className="h-3.5 w-3.5" />
-            Upload
-          </button>
         </div>
+        <button
+          onClick={() => setShowUpload(!showUpload)}
+          className={`flex items-center gap-1.5 px-4 py-2 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${
+            showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'
+          }`}
+        >
+          <Camera className="h-3.5 w-3.5" />
+          Upload
+        </button>
       </div>
 
       {/* Upload panel — collapsible */}
@@ -1286,9 +1266,9 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     <div className="bg-white border-b border-[#E8E4DF] px-4 md:px-6 py-4 shrink-0 max-h-[70vh] overflow-y-auto">
       {stage === 'select' && (
         <div className="max-w-3xl mx-auto">
-          {/* Client picker + file count */}
-          <div className="flex items-end gap-4 mb-4">
-            <div className="flex-1 relative">
+          {/* Client picker + batch name — stack on mobile */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="relative">
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
                 Client {selectedClientId && clients.find(c => c.id === selectedClientId) && (
                   <span className="text-[#1A1A1A] font-medium ml-1">
@@ -1308,7 +1288,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   }
                 }}
                 placeholder={`Search ${clients.length} clients...`}
-                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] bg-white"
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2.5 text-sm text-[#1A1A1A] bg-white"
               />
               {clientSearch.length >= 2 && !selectedClientId && (
                 <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-[#E8E4DF] rounded-sm shadow-lg max-h-48 overflow-y-auto">
@@ -1319,7 +1299,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                       <button
                         key={c.id}
                         onClick={() => { setSelectedClientId(c.id); setClientSearch(c.name) }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#F8F7F5] transition-colors"
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-[#F8F7F5] transition-colors"
                       >
                         {c.name}
                       </button>
@@ -1330,7 +1310,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 </div>
               )}
             </div>
-            <div className="w-48">
+            <div>
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
                 Batch Name <span className="text-[#bbb]">(optional)</span>
               </label>
@@ -1339,9 +1319,13 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 value={batchLabel}
                 onChange={e => setBatchLabel(e.target.value)}
                 placeholder="e.g. Skirts, Fall Coats"
-                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] bg-white"
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2.5 text-sm text-[#1A1A1A] bg-white"
               />
             </div>
+          </div>
+
+          {/* Add buttons — full width on mobile, inline on desktop */}
+          <div className="grid grid-cols-2 md:flex gap-2 mb-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -1365,23 +1349,27 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-4 py-2 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors shrink-0"
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors"
             >
               <Upload className="h-3.5 w-3.5" />
               Add Photos
             </button>
             <button
               onClick={() => folderInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-4 py-2 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors shrink-0"
+              className="hidden md:flex items-center justify-center gap-1.5 px-4 py-2.5 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors"
             >
               <Upload className="h-3.5 w-3.5" />
               Add Folder
             </button>
           </div>
 
-          {/* Instructions for stylists */}
-          <div className="bg-[#F8F7F5] rounded-sm p-4 mb-4 text-[11px] text-[#666] space-y-3">
-            <p className="font-medium text-[#1A1A1A] text-[13px]">Closet Digitization</p>
+          {/* Instructions for stylists — collapsible on mobile */}
+          <details className="bg-[#F8F7F5] rounded-sm mb-4 text-[11px] text-[#666] group">
+            <summary className="p-4 font-medium text-[#1A1A1A] text-[13px] cursor-pointer list-none flex items-center justify-between">
+              Closet Digitization
+              <span className="text-[10px] text-[#aaa] group-open:hidden">Tap for instructions</span>
+            </summary>
+            <div className="px-4 pb-4 space-y-3">
 
             <div>
               <p className="font-medium text-[#1A1A1A] text-[11px] mb-1">📷 Photographing</p>
@@ -1430,51 +1418,52 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
             </div>
 
             <p className="text-[9px] text-[#aaa] italic">You can close this panel and come back — processing continues in the background. Click <strong>Digitize</strong> in the nav to check progress.</p>
-          </div>
+            </div>
+          </details>
 
           {/* Drop zone / file list */}
           {files.length === 0 ? (
             <div
               onDragOver={e => e.preventDefault()}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-[#E8E4DF] rounded-sm py-8 text-center hover:border-[#888] transition-colors cursor-pointer"
+              className="border-2 border-dashed border-[#E8E4DF] rounded-sm py-12 md:py-8 text-center hover:border-[#888] transition-colors cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
-              <Camera className="h-6 w-6 mx-auto text-[#ccc] mb-2" />
-              <p className="text-sm text-[#888]">Drop photos or a folder here</p>
-              <p className="text-[10px] text-[#aaa] mt-1">Garment, tag, garment, tag — in order</p>
+              <Camera className="h-8 w-8 md:h-6 md:w-6 mx-auto text-[#ccc] mb-2" />
+              <p className="text-base md:text-sm text-[#888]">Tap to add photos</p>
+              <p className="text-[10px] text-[#aaa] mt-1">Item photo, tag photo — in pairs</p>
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1.5 md:gap-2 mb-3">
                 {files.map((f, i) => (
                   <div key={i} className="relative group">
-                    <div className={`w-16 h-20 rounded-sm overflow-hidden border ${i % 2 === 0 ? 'border-[#1A1A1A]' : 'border-blush'}`}>
+                    <div className={`aspect-[4/5] rounded-sm overflow-hidden border ${i % 2 === 0 ? 'border-[#1A1A1A]' : 'border-blush'}`}>
                       <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
                     </div>
-                    <span className={`absolute top-0.5 left-0.5 text-[7px] tracking-[0.1em] uppercase px-1 rounded-sm ${
+                    <span className={`absolute top-0.5 left-0.5 text-[6px] md:text-[7px] tracking-[0.1em] uppercase px-0.5 md:px-1 rounded-sm ${
                       i % 2 === 0 ? 'bg-[#1A1A1A] text-white' : 'bg-blush text-[#1A1A1A]'
                     }`}>
                       {i % 2 === 0 ? 'item' : 'tag'}
                     </span>
                     <button
                       onClick={() => removeFile(i)}
-                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                     >
                       ×
                     </button>
                   </div>
                 ))}
               </div>
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] text-[#888]">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                <p className="text-[10px] text-[#888] text-center md:text-left">
                   {files.length} photos · {Math.ceil(files.length / 2)} items
                   {files.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
                 </p>
                 <button
                   onClick={runPipeline}
                   disabled={!selectedClientId}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
+                  className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
                   Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(files.length / 2)} Items`} · {estimateTime(files.length)}

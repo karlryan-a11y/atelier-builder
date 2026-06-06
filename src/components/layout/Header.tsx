@@ -1,4 +1,4 @@
-import { LogOut, Shield, ChevronDown } from 'lucide-react'
+import { LogOut, Shield } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useViewStore } from '@/stores/viewStore'
 
@@ -10,10 +10,9 @@ interface HeaderProps {
   }
   onSignOut: () => void
   onOpenAdmin?: () => void
-  onOpenInbox?: () => void
 }
 
-export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProps) {
+export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const { activeView, setActiveView } = useViewStore()
@@ -41,65 +40,79 @@ export function Header({ user, onSignOut, onOpenAdmin, onOpenInbox }: HeaderProp
   return (
     <header className="h-[120px] bg-[#050505] flex items-center justify-between px-6 border-b border-white/[0.06]">
       <div className="flex items-center gap-8">
-        <a href="/" className="transition-opacity duration-300 hover:opacity-80">
-          <img
-            src="/brand/atelier-logo-inverse.svg"
-            alt="Atelier by Watson"
-            className="h-[100px]"
-          />
+        <a href="/" className="flex flex-col transition-opacity duration-300 hover:opacity-80 py-2">
+          <span
+            className="text-white text-[42px] leading-none tracking-[0.015em]"
+            style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}
+          >
+            ATELIER
+          </span>
+          <span
+            className="text-white/50 text-[9px] tracking-[0.35em] uppercase mt-1.5"
+            style={{ fontFamily: "'Neue Haas', 'Helvetica Neue', sans-serif", fontWeight: 300 }}
+          >
+            By Watson
+          </span>
         </a>
-        <nav className="flex items-center gap-0.5">
-          {/* Order: Digitize → Style → Shop */}
-          {onOpenInbox && (
+        <div className="w-px h-8 bg-white/[0.08]" />
+        <div className="flex items-center gap-1">
+          {/* In-app tabs */}
+          {(['digitize', 'style', 'shop'] as const).map(view => (
             <button
-              onClick={onOpenInbox}
-              className="relative px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] text-white/50 hover:text-white/90"
+              key={view}
+              onClick={() => setActiveView(view)}
+              className={`relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group ${
+                activeView === view
+                  ? 'text-white'
+                  : 'text-white/80 hover:text-white'
+              }`}
             >
-              Digitize
-              {hasBatch && (
+              {view.charAt(0).toUpperCase() + view.slice(1)}
+              <span className={`absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#F8E5E7] rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                activeView === view ? 'w-[calc(100%-2rem)]' : 'w-0 group-hover:w-[calc(100%-2rem)]'
+              }`} style={{ left: '1rem' }} />
+              {view === 'digitize' && activeView !== 'digitize' && hasBatch && (
                 <span className="absolute top-1 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
               )}
             </button>
+          ))}
+
+          {/* External platform links — same style */}
+          <a
+            href="/client-looks"
+            className="relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase text-white/80 hover:text-white transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group"
+          >
+            Looks
+            <span className="absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#F8E5E7] rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] w-0 group-hover:w-[calc(100%-2rem)]" style={{ left: '1rem' }} />
+          </a>
+          <a
+            href="/dash"
+            className="relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase text-white/80 hover:text-white transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group"
+          >
+            Dash
+            <span className="absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#F8E5E7] rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] w-0 group-hover:w-[calc(100%-2rem)]" style={{ left: '1rem' }} />
+          </a>
+          {onOpenAdmin && (
+            <a
+              href="/admin/users"
+              className="relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase text-white/80 hover:text-white transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group"
+            >
+              Admin
+              <span className="absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#F8E5E7] rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] w-0 group-hover:w-[calc(100%-2rem)]" style={{ left: '1rem' }} />
+            </a>
           )}
-          <button
-            onClick={() => setActiveView('style')}
-            className={`px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              activeView === 'style'
-                ? 'text-white'
-                : 'text-white/50 hover:text-white/90'
-            }`}
-          >
-            Style
-            {activeView === 'style' && (
-              <span className="block h-[1.5px] bg-[#F8E5E7] mt-0.5 rounded-full" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('shop')}
-            className={`px-4 py-1.5 text-[11px] tracking-[0.22em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              activeView === 'shop'
-                ? 'text-white'
-                : 'text-white/50 hover:text-white/90'
-            }`}
-          >
-            Shop
-            {activeView === 'shop' && (
-              <span className="block h-[1.5px] bg-[#F8E5E7] mt-0.5 rounded-full" />
-            )}
-          </button>
-        </nav>
+        </div>
       </div>
 
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex items-center gap-2.5 text-[11px] tracking-[0.15em] uppercase hover:opacity-80 transition-opacity duration-300 px-2 py-1"
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity duration-300 px-2 py-1"
         >
-          <span className="text-white/50 font-light">{user.displayName}</span>
-          <div className="w-7 h-7 rounded-full bg-[#F8E5E7]/15 flex items-center justify-center text-[10px] font-medium text-[#F8E5E7]">
+          <span className="text-[10px] tracking-[0.15em] uppercase text-white/40 font-light">{user.displayName}</span>
+          <div className="w-6 h-6 rounded-full bg-[#F8E5E7]/12 flex items-center justify-center text-[9px] font-medium text-[#F8E5E7]/80">
             {initials}
           </div>
-          <ChevronDown className="h-3 w-3 text-white/30" />
         </button>
 
         {menuOpen && (

@@ -1,7 +1,6 @@
-<svg width="680" height="240" viewBox="0 0 680 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atelier by Watson primary logo on cream">
-  <title>Atelier by Watson — primary logo</title>
-  <rect width="680" height="240" fill="#F5F1EA"/>
-  <text x="340" y="125" text-anchor="middle" font-family="'Didot', 'Bodoni 72', 'Playfair Display', Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="78" fill="#1A1A1A">Atelier</text>
-  <line x1="295" y1="150" x2="385" y2="150" stroke="#1A1A1A" stroke-width="0.6"/>
-  <text x="340" y="178" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="400" font-size="13" letter-spacing="6" fill="#1A1A1A">BY WATSON</text>
+<svg width="680" height="240" viewBox="0 0 680 240" xmlns="http://www.w3.org/2000/svg">
+  <title>Atelier by Watson — dark on white</title>
+  <rect width="680" height="240" fill="#FFFFFF"/>
+  <text x="340" y="118" text-anchor="middle" font-family="'Schnyder M','Schnyder',Georgia,serif" font-weight="300" font-size="86" letter-spacing="1.3" fill="#0a0a0a">Atelier</text>
+  <text x="340" y="162" text-anchor="middle" font-family="'Neue Haas Grotesk','Helvetica Neue',Arial,sans-serif" font-weight="300" font-size="13" letter-spacing="4.6" fill="rgba(10,10,10,0.45)">BY WATSON</text>
 </svg>

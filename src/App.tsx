@@ -10,6 +10,7 @@ import { AdminPanel } from '@/components/admin/AdminPanel'
 import { SearchDebug } from '@/components/admin/SearchDebug'
 import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { ShopView } from '@/components/shopping/ShopView'
+import { FeedbackButton } from '@/components/feedback/FeedbackButton'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
 import { resumeSession } from '@/lib/shopping-resume'
@@ -18,7 +19,6 @@ import type { ClosetItemNode } from '@/types/canvas'
 function App() {
   const { user, loading, signOut } = useAuth()
   const [showAdmin, setShowAdmin] = useState(false)
-  const [showInbox, setShowInbox] = useState(() => ['#inbox', '#digitize'].includes(window.location.hash))
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const { addNode, state } = useCanvasStore()
   const activeView = useViewStore((s) => s.activeView)
@@ -28,14 +28,14 @@ function App() {
   useEffect(() => {
     const hash = window.location.hash
     if (hash === '#shop') setActiveView('shop')
-    if (hash === '#digitize' || hash === '#inbox') setShowInbox(true)
+    if (hash === '#digitize' || hash === '#inbox') setActiveView('digitize')
   }, [setActiveView])
 
   useEffect(() => {
     const onHash = () => {
       setShowSearch(window.location.hash === '#search')
-      setShowInbox(['#inbox', '#digitize'].includes(window.location.hash))
       if (window.location.hash === '#shop') setActiveView('shop')
+      if (['#inbox', '#digitize'].includes(window.location.hash)) setActiveView('digitize')
       const m = window.location.hash.match(/#session=([0-9a-fA-F-]{36})/)
       if (m) resumeSession(m[1])
     }
@@ -109,9 +109,10 @@ function App() {
           user={user}
           onSignOut={signOut}
           onOpenAdmin={user.role === 'admin' ? () => setShowAdmin(true) : undefined}
-          onOpenInbox={() => setShowInbox(true)}
         />
-        {activeView === 'style' ? (
+        {activeView === 'digitize' ? (
+          <IntakeInbox />
+        ) : activeView === 'style' ? (
           <div className="flex flex-1 overflow-hidden">
             <ClosetPanel />
             <LookCanvas />
@@ -121,7 +122,6 @@ function App() {
           <ShopView />
         )}
         {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
-        {showInbox && <IntakeInbox onClose={() => { setShowInbox(false); window.location.hash = '' }} />}
         {showSearch && (
           <div className="fixed inset-0 bg-white z-50 overflow-auto">
             <div className="flex justify-between items-center p-4 border-b border-[#E8E4DF]">
@@ -144,6 +144,7 @@ function App() {
           </div>
         ) : null}
       </DragOverlay>
+      <FeedbackButton />
     </DndContext>
   )
 }

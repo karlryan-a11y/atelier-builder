@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-type AppView = 'style' | 'shop'
+type AppView = 'digitize' | 'style' | 'shop'
 
 interface ViewState {
   activeView: AppView

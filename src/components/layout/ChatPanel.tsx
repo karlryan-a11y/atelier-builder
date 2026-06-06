@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
 import { useCanvasStore, exportCanvasImage } from '@/stores/canvasStore'
-import { styleCanvas } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useLooks } from '@/hooks/useLooks'
@@ -59,41 +58,13 @@ export function ChatPanel() {
 
     let thumbnailUrl: string | undefined
     let imageBase64: string | undefined
-    let styledState = state // default: use current canvas state
+    // Save the canvas exactly as it is. Styling is an explicit action (the ✨
+    // button in the toolbar) — saving must NEVER re-arrange or rescale the look.
+    const styledState = useCanvasStore.getState().state
 
     try {
-      // Step 1: Auto-style the canvas before exporting.
-      // This guarantees every saved look has WSG-quality composition
-      // with items in proper proportions and brand labels.
-      const store = useCanvasStore.getState()
-      const closetItems = store.state.nodes.filter(n => n.type === 'closet_item')
-
-      if (closetItems.length > 0) {
-        try {
-          const result = await styleCanvas(store.state.nodes, store.imageUrls)
-
-          // Apply styled layout to the canvas
-          store.setCanvasState({ ...store.state, nodes: [] })
-          for (const node of result.nodes) {
-            const url = result.imageUrls[node.id] ?? undefined
-            store.addNode(node, url)
-          }
-
-          // Wait for Konva to re-render with the new layout
-          await new Promise(resolve => requestAnimationFrame(() =>
-            requestAnimationFrame(resolve)
-          ))
-
-          // Capture the styled state for saving
-          styledState = useCanvasStore.getState().state
-        } catch (styleErr) {
-          console.error('Auto-style failed, saving with current layout:', styleErr)
-          // Fall through — save with whatever's on the canvas
-        }
-      }
-
-      // Step 2: Export the styled canvas via Konva native API
-      const pngDataUrl = exportCanvasImage({ pixelRatio: 2, padding: 30 })
+      // Export the current canvas via Konva native API
+      const pngDataUrl = exportCanvasImage({ pixelRatio: 2 })
       if (pngDataUrl) {
         // JPEG thumbnail for gallery + capsule composites
         const img = new window.Image()

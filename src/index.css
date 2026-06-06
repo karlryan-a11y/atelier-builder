@@ -18,7 +18,7 @@
 
 @font-face {
   font-family: 'Schnyder';
-  src: url('/fonts/SchnyderM-Light.woff2') format('woff2');
+  src: url('/fonts/Schnyder-MLight-Web.woff2') format('woff2');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -166,4 +166,14 @@
   background: linear-gradient(90deg, #F8F7F5 25%, #EFEEEC 50%, #F8F7F5 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ── WSG Custom cursor — White Glove ── */
+@media (hover: hover) {
+  html, html *, html a, html button, html input, html textarea {
+    cursor: url('/images/cursor-glove.png') 7 1, auto !important;
+  }
+}
+@media (hover: none) {
+  html, html * { cursor: auto !important; }
 }

@@ -174,6 +174,18 @@ export function LookCanvas() {
       const lines = stage.find('Line')
       lines.forEach((l: any) => l.hide())
 
+      // The on-screen stage is rendered at a reduced scale (Stage scaleX/Y below).
+      // toDataURL applies that scale to the drawn content but interprets the crop
+      // rect in post-scale pixels — so cropping the frame while scaled yields a
+      // shrunken, corner-offset image. Reset the stage to 1:1 / full size for the
+      // capture so the frame exports at full resolution, then restore.
+      const prevScaleX = stage.scaleX()
+      const prevScaleY = stage.scaleY()
+      const prevWidth = stage.width()
+      const prevHeight = stage.height()
+      stage.scale({ x: 1, y: 1 })
+      stage.size({ width: CANVAS_W, height: CANVAS_H })
+
       try {
         // Export the full frame — consistent 1000:1340 aspect ratio every time.
         // The Style engine arranges items within the frame, so the full frame
@@ -187,6 +199,9 @@ export function LookCanvas() {
           mimeType: 'image/png',
         })
       } finally {
+        stage.scale({ x: prevScaleX, y: prevScaleY })
+        stage.size({ width: prevWidth, height: prevHeight })
+        stage.batchDraw()
         transformers.forEach((t: any) => t.show())
         hiddenRects.forEach((r: any) => r.show())
         lines.forEach((l: any) => l.show())
