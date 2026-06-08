@@ -9,6 +9,8 @@ import {
   isGoogleDriveConfigured,
   signInAndPickPhotos,
   downloadDriveFile,
+  refreshAccessToken,
+  runDriveDiagnostics,
   type DriveFile,
   type PickedFolder,
 } from '@/lib/googleDrive'
@@ -1138,6 +1140,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [driveToken, setDriveToken] = useState<string | null>(null)
   const [driveFolder, setDriveFolder] = useState<PickedFolder | null>(null)
   const [driveBusy, setDriveBusy] = useState(false)
+  const [driveTesting, setDriveTesting] = useState(false)
 
   const [clientSearch, setClientSearch] = useState('')
 
@@ -1196,9 +1199,33 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       setDriveFiles(picked.files)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not connect to Google Drive'
-      alert(`Google Drive: ${msg}`)
+      alert(
+        `Google Drive: ${msg}\n\n` +
+        `Page: ${window.location.origin}\n` +
+        `If this keeps happening, click "Test connection" below — it pinpoints which step is failing.`,
+      )
     } finally {
       setDriveBusy(false)
+    }
+  }, [])
+
+  // Self-service connection test: walks the same OAuth → Drive path and reports
+  // exactly which step fails plus this page's origin, so support/Karl can fix the
+  // right Google allowlist instead of guessing from an opaque "There was an error".
+  const handleTestDrive = useCallback(async () => {
+    setDriveTesting(true)
+    try {
+      const diag = await runDriveDiagnostics()
+      const lines = diag.steps.map(s => `${s.ok ? '✅' : '❌'} ${s.name}${s.detail ? `\n     ${s.detail}` : ''}`)
+      alert(
+        `${diag.ok ? 'Google Drive connection looks good ✅' : 'Google Drive connection has a problem ❌'}\n` +
+        `Page origin: ${diag.origin}\n\n` +
+        lines.join('\n'),
+      )
+    } catch (err) {
+      alert(`Test failed: ${err instanceof Error ? err.message : String(err)}\n\nPage: ${window.location.origin}`)
+    } finally {
+      setDriveTesting(false)
     }
   }, [])
 
@@ -1225,12 +1252,22 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
 
     // Fetch one chunk's worth of File objects. For Drive, download just-in-time so we
     // never hold more than CHUNK photos in memory — keeps large batches (500+) safe.
+    // The ~1h Drive token can expire mid-batch; on a 401 we silently refresh it once
+    // and retry the chunk so long uploads don't die partway through.
+    let activeToken = driveToken!
     const getChunkFiles = async (start: number, count: number): Promise<File[]> => {
-      if (fromDrive) {
-        const slice = driveFiles.slice(start, start + count)
-        return Promise.all(slice.map(df => downloadDriveFile(df, driveToken!)))
+      if (!fromDrive) return files.slice(start, start + count)
+      const slice = driveFiles.slice(start, start + count)
+      try {
+        return await Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
+      } catch (e) {
+        if (e instanceof Error && /\(401\)/.test(e.message)) {
+          activeToken = await refreshAccessToken()
+          setDriveToken(activeToken)
+          return Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
+        }
+        throw e
       }
-      return files.slice(start, start + count)
     }
 
     const itemCount = Math.ceil(photoCount / 2)
@@ -1419,6 +1456,17 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                   : <HardDrive className="h-3.5 w-3.5" />}
                 Google Drive
+              </button>
+            )}
+            {isGoogleDriveConfigured() && (
+              <button
+                onClick={handleTestDrive}
+                disabled={driveTesting}
+                title="Check that Google Drive import is working from this device"
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 text-[10px] tracking-[0.1em] uppercase text-[#999] hover:text-[#1A1A1A] disabled:opacity-50 transition-colors"
+              >
+                {driveTesting ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+                Test connection
               </button>
             )}
             <button

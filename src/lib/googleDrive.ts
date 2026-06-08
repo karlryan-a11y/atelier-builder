@@ -81,27 +81,102 @@ async function ensureLoaded(): Promise<void> {
   return scriptPromise
 }
 
+// One reusable GIS token client (GIS recommends reusing it across requests).
+let tokenClient: any = null
+// Cache the current access token so a multi-chunk batch reuses it and only
+// re-prompts when it actually expires (~1h). Refreshed silently on 401.
+let cachedToken: { value: string; expiresAt: number } | null = null
+
+function initTokenClient(): any {
+  if (tokenClient) return tokenClient
+  if (!window.google?.accounts?.oauth2) {
+    throw new Error('Google Identity Services not available')
+  }
+  tokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: () => {}, // assigned per-request below
+  })
+  return tokenClient
+}
+
 // Pop the Google sign-in consent and return a short-lived OAuth access token.
-function requestAccessToken(): Promise<string> {
+//
+// interactive=true forces the account chooser (`prompt: 'select_account'`) so a
+// stylist on a shared/multi-login browser explicitly picks their @watsonstylegroup.com
+// account — picking a personal account silently is a common cause of cryptic failures
+// (it's not on the Internal consent screen). interactive=false attempts a SILENT
+// refresh (no UI) for the mid-batch 401 path.
+function requestAccessToken(opts: { interactive: boolean }): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!window.google?.accounts?.oauth2) {
-      reject(new Error('Google Identity Services not available'))
+    let client: any
+    try {
+      client = initTokenClient()
+    } catch (e) {
+      reject(e)
       return
     }
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPE,
-      callback: (resp: any) => {
-        if (resp.error) {
-          reject(new Error(resp.error_description || resp.error))
-          return
-        }
-        resolve(resp.access_token as string)
-      },
-      error_callback: (err: any) => reject(new Error(err?.message || 'Sign-in cancelled')),
-    })
-    tokenClient.requestAccessToken({ prompt: '' })
+    client.callback = (resp: any) => {
+      if (resp.error) {
+        reject(new Error(resp.error_description || resp.error))
+        return
+      }
+      const ttlMs = (Number(resp.expires_in) || 3600) * 1000
+      // Expire 60s early so we refresh before Drive starts 401-ing mid-download.
+      cachedToken = { value: resp.access_token, expiresAt: Date.now() + ttlMs - 60_000 }
+      resolve(resp.access_token as string)
+    }
+    client.error_callback = (err: any) => reject(new Error(err?.message || 'Sign-in cancelled'))
+    client.requestAccessToken({ prompt: opts.interactive ? 'select_account' : '' })
   })
+}
+
+// Return a valid access token, reusing the cached one when still fresh.
+async function ensureAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value
+  await ensureLoaded()
+  return requestAccessToken({ interactive: true })
+}
+
+/**
+ * Silently re-mint the access token mid-batch (called on a Drive 401 during a long
+ * upload, where the ~1h token has expired). Falls back to an interactive prompt if
+ * the silent grant fails (e.g. the GIS session is gone).
+ */
+export async function refreshAccessToken(): Promise<string> {
+  await ensureLoaded()
+  try {
+    return await requestAccessToken({ interactive: false })
+  } catch {
+    return requestAccessToken({ interactive: true })
+  }
+}
+
+/**
+ * Validate the token + Drive API + account access BEFORE opening the Picker, so a
+ * misconfig surfaces as a clear, actionable message instead of the Picker's opaque
+ * "There was an error!" modal. Note: this does NOT validate the Picker's developerKey
+ * / HTTP-referrer (only the Picker UI exercises that) — see runDriveDiagnostics.
+ */
+export async function preflightDriveAccess(accessToken: string): Promise<{ email?: string }> {
+  let resp: Response
+  try {
+    resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch (e) {
+    throw new Error(`Couldn't reach Google Drive (network error). ${e instanceof Error ? e.message : ''}`)
+  }
+  if (resp.status === 401) throw new Error('Your Google sign-in expired — click the Google Drive button again.')
+  if (resp.status === 403) {
+    const body = await resp.text().catch(() => '')
+    throw new Error(
+      `Google Drive refused access (403). The Drive API may be disabled for the project, or your account lacks access. ${body.slice(0, 160)}`,
+    )
+  }
+  if (!resp.ok) throw new Error(`Google Drive preflight failed (${resp.status}).`)
+  const json = await resp.json().catch(() => ({} as any))
+  return { email: json?.user?.emailAddress }
 }
 
 interface PickedDoc {
@@ -178,7 +253,9 @@ function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
  */
 export async function signInAndPickPhotos(): Promise<{ accessToken: string; files: DriveFile[]; sourceName: string } | null> {
   await ensureLoaded()
-  const accessToken = await requestAccessToken()
+  const accessToken = await ensureAccessToken()
+  // Surface token/account/Drive-API problems cleanly before the Picker opens.
+  await preflightDriveAccess(accessToken)
   const docs = await openPicker(accessToken)
   if (!docs || docs.length === 0) return null
 
@@ -247,4 +324,73 @@ export async function downloadDriveFile(file: DriveFile, accessToken: string): P
   }
   const blob = await resp.blob()
   return new File([blob], file.name, { type: file.mimeType || blob.type || 'image/jpeg' })
+}
+
+export interface DriveDiagnostics {
+  ok: boolean
+  origin: string
+  steps: { name: string; ok: boolean; detail?: string }[]
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/**
+ * Self-service connection test for stylists/support. Walks the same path the import
+ * uses and reports exactly which step fails AND the current page origin — so when
+ * something breaks (the recurring "wrong origin not in an allowlist" problem) the
+ * failure is self-locating instead of an opaque Google modal.
+ *
+ * The Picker's developerKey/HTTP-referrer can't be validated without rendering the
+ * Picker UI, so the final step is advisory: it names the exact origin to add to the
+ * API key's HTTP-referrer list if the Picker still errors.
+ */
+export async function runDriveDiagnostics(): Promise<DriveDiagnostics> {
+  const origin = window.location.origin
+  const steps: DriveDiagnostics['steps'] = []
+  const finish = (): DriveDiagnostics => ({ ok: steps.every(s => s.ok), origin, steps })
+
+  steps.push({
+    name: 'Environment configured',
+    ok: isGoogleDriveConfigured(),
+    detail: `clientId:${Boolean(CLIENT_ID)} apiKey:${Boolean(API_KEY)} appId:${Boolean(APP_ID)}`,
+  })
+  if (!isGoogleDriveConfigured()) return finish()
+
+  try {
+    await ensureLoaded()
+    steps.push({ name: 'Google libraries loaded', ok: true })
+  } catch (e) {
+    steps.push({ name: 'Google libraries loaded', ok: false, detail: errMsg(e) })
+    return finish()
+  }
+
+  let token: string
+  try {
+    token = await requestAccessToken({ interactive: true })
+    steps.push({ name: 'Sign-in / OAuth origin authorized', ok: true, detail: `origin ${origin}` })
+  } catch (e) {
+    steps.push({
+      name: 'Sign-in / OAuth origin authorized',
+      ok: false,
+      detail: `${errMsg(e)} — if this says origin_mismatch, add "${origin}" to the OAuth client's Authorized JavaScript origins.`,
+    })
+    return finish()
+  }
+
+  try {
+    const { email } = await preflightDriveAccess(token)
+    steps.push({ name: 'Drive API reachable', ok: true, detail: email ? `signed in as ${email}` : undefined })
+  } catch (e) {
+    steps.push({ name: 'Drive API reachable', ok: false, detail: errMsg(e) })
+    return finish()
+  }
+
+  steps.push({
+    name: 'Picker developer key (not auto-testable)',
+    ok: true,
+    detail: `If the Picker shows "The API developer key is invalid", add "${origin}/*" to the API key's HTTP-referrer list and ensure the Google Picker API is in the key's API restrictions.`,
+  })
+  return finish()
 }
