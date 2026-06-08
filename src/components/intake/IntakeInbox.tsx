@@ -14,6 +14,7 @@ import {
   type DriveFile,
   type PickedFolder,
 } from '@/lib/googleDrive'
+import { ensureJpegFiles } from '@/lib/heic'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -1256,18 +1257,26 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     // and retry the chunk so long uploads don't die partway through.
     let activeToken = driveToken!
     const getChunkFiles = async (start: number, count: number): Promise<File[]> => {
-      if (!fromDrive) return files.slice(start, start + count)
-      const slice = driveFiles.slice(start, start + count)
-      try {
-        return await Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
-      } catch (e) {
-        if (e instanceof Error && /\(401\)/.test(e.message)) {
-          activeToken = await refreshAccessToken()
-          setDriveToken(activeToken)
-          return Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
+      let chunk: File[]
+      if (!fromDrive) {
+        chunk = files.slice(start, start + count)
+      } else {
+        const slice = driveFiles.slice(start, start + count)
+        try {
+          chunk = await Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
+        } catch (e) {
+          if (e instanceof Error && /\(401\)/.test(e.message)) {
+            activeToken = await refreshAccessToken()
+            setDriveToken(activeToken)
+            chunk = await Promise.all(slice.map(df => downloadDriveFile(df, activeToken)))
+          } else {
+            throw e
+          }
         }
-        throw e
       }
+      // Convert any HEIC → JPEG before upload (Claude/OpenAI reject HEIC). Covers both
+      // the local picker and the Drive import, since both flow through here. See lib/heic.
+      return ensureJpegFiles(chunk)
     }
 
     const itemCount = Math.ceil(photoCount / 2)
