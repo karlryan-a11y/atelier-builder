@@ -562,11 +562,11 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
           {(() => {
             const heroKey = currentAiKey ?? item.garment_photo?.r2_key
             return heroKey ? (
-              <div className="aspect-square bg-[#F8F7F5] rounded-sm overflow-hidden border border-[#E8E4DF] relative">
+              <div className="aspect-[3/4] bg-[#F8F7F5] rounded-sm overflow-hidden border border-[#E8E4DF] relative">
                 <ClickableSignedImage
                   r2Key={heroKey}
                   alt={item.extracted_name ?? 'Product photo'}
-                  className={`w-full h-full ${currentAiKey ? 'object-contain' : 'object-cover'}`}
+                  className={`w-full h-full ${currentAiKey ? 'object-contain p-2' : 'object-cover'}`}
                   label={currentAiKey ? 'AI Product Photo' : 'Original Photo'}
                 />
                 {!currentAiKey && (
