@@ -122,17 +122,31 @@ function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
       reject(new Error('Picker not loaded'))
       return
     }
-    // DOCS_IMAGES shows image thumbnails; includeFolders makes folders navigable;
-    // selectFolderEnabled lets a whole folder be chosen.
-    const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES)
+    // Full Drive navigation: My Drive (all files + folders, navigable + folder-selectable),
+    // plus Shared with me and Shared drives as separate tabs. Image thumbnails still render.
+    const myDrive = new picker.DocsView(picker.ViewId.DOCS)
       .setIncludeFolders(true)
       .setSelectFolderEnabled(true)
+      .setParent('root')
+
+    const sharedWithMe = new picker.DocsView(picker.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setOwnedByMe(false)
+
+    const sharedDrives = new picker.DocsView(picker.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setEnableDrives(true)
 
     const builder = new picker.PickerBuilder()
-      .addView(view)
+      .addView(myDrive)
+      .addView(sharedWithMe)
+      .addView(sharedDrives)
       .setOAuthToken(accessToken)
       .setDeveloperKey(API_KEY)
       .enableFeature(picker.Feature.MULTISELECT_ENABLED)
+      .enableFeature(picker.Feature.SUPPORT_DRIVES)
       .setTitle('Select a folder or photos to digitize')
       .setCallback((data: any) => {
         const action = data[picker.Response.ACTION]
