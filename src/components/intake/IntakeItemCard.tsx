@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, createContext, useContext } from 'react'
 import { Clock, Check, X, ZoomIn } from 'lucide-react'
 import type { IntakeItem } from '@/hooks/useIntakeItems'
 
@@ -108,65 +108,42 @@ export function IntakeItemCard({ item, onClick }: IntakeItemCardProps) {
 }
 
 /**
- * Loads an image from R2 via the intake-signed-url Edge Function.
- * No auth required — the function generates pre-signed read URLs.
- * Caches URLs in memory for 14 minutes (URLs expire in 15 min).
+ * Builds a public, permanent URL that streams an R2 object through the intake
+ * pipeline's `image-proxy` Edge Function. Unlike the old `intake-signed-url` path,
+ * this URL:
+ *   - lives on the same `supabase.co` host the app already talks to (not the raw
+ *     `*.r2.cloudflarestorage.com` host, which some browsers/networks fail to load),
+ *   - never expires (keyed by the stable R2 key, cached 1yr immutable),
+ *   - needs no pre-fetch round-trip — it goes straight into `<img src>`.
+ * Same function the canvas export + GoodPix export already rely on.
  */
-const signedUrlCache = new Map<string, { url: string; expires: number }>()
+function imageProxyUrl(r2Key: string): string {
+  return `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2Key)}`
+}
 
 export function SignedImage({ r2Key, alt, className }: { r2Key: string; alt: string; className?: string }) {
-  const [src, setSrc] = useState<string | null>(null)
+  const [errored, setErrored] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      // Check cache
-      const cached = signedUrlCache.get(r2Key)
-      if (cached && cached.expires > Date.now()) {
-        setSrc(cached.url)
-        return
-      }
-
-      try {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-signed-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keys: [r2Key], expires_in: 900 }),
-        })
-
-        if (!resp.ok) return
-        const data = await resp.json()
-        const url = data.urls?.[r2Key]
-
-        if (url && !cancelled) {
-          signedUrlCache.set(r2Key, { url, expires: Date.now() + 840_000 })
-          setSrc(url)
-        }
-      } catch {
-        // Silent fail
-      }
-    }
-
-    load()
-    return () => { cancelled = true }
-  }, [r2Key])
-
-  if (!src) {
+  // Visible failure state — never silently hide a broken image. If this ever shows,
+  // it means image-proxy couldn't serve this key (down / JWT-gated / missing object),
+  // which is a real, diagnosable error rather than a mysterious blank.
+  if (errored) {
     return (
-      <div className={`bg-[#F8F7F5] animate-pulse ${className ?? 'w-full h-full'}`} />
+      <div className={`bg-[#F8F7F5] flex items-center justify-center ${className ?? 'w-full h-full'}`}>
+        <span className="text-[9px] tracking-[0.15em] uppercase text-[#bbb] text-center px-2 leading-tight">
+          Image unavailable
+        </span>
+      </div>
     )
   }
 
   return (
     <img
-      src={src}
+      src={imageProxyUrl(r2Key)}
       alt={alt}
       className={className ?? 'w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300'}
       loading="lazy"
-      onError={(e) => {
-        (e.target as HTMLImageElement).style.display = 'none'
-      }}
+      onError={() => setErrored(true)}
     />
   )
 }
@@ -182,10 +159,7 @@ export function ClickableSignedImage({ r2Key, alt, className, label }: { r2Key: 
       className="relative cursor-zoom-in group/img"
       onClick={(e) => {
         e.stopPropagation()
-        const cached = signedUrlCache.get(r2Key)
-        if (cached && cached.expires > Date.now()) {
-          open(cached.url, label || alt)
-        }
+        open(imageProxyUrl(r2Key), label || alt)
       }}
     >
       <SignedImage r2Key={r2Key} alt={alt} className={className} />
