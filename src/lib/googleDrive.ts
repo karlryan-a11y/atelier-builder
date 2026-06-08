@@ -104,30 +104,49 @@ function requestAccessToken(): Promise<string> {
   })
 }
 
-// Open the Picker filtered to folders; resolves with the chosen folder (or null if cancelled).
-function openFolderPicker(accessToken: string): Promise<PickedFolder | null> {
+interface PickedDoc {
+  id: string
+  name: string
+  mimeType: string
+  isFolder: boolean
+}
+
+// Open the Picker showing images + navigable folders. The stylist can either open a
+// folder and select it, or multi-select individual photos. Image thumbnails are visible
+// while browsing (so folders never look empty). Resolves with the picked docs, or null
+// if cancelled.
+function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
   return new Promise((resolve, reject) => {
     const picker = window.google.picker
     if (!picker) {
       reject(new Error('Picker not loaded'))
       return
     }
-    const view = new picker.DocsView(picker.ViewId.FOLDERS)
-      .setSelectFolderEnabled(true)
+    // DOCS_IMAGES shows image thumbnails; includeFolders makes folders navigable;
+    // selectFolderEnabled lets a whole folder be chosen.
+    const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES)
       .setIncludeFolders(true)
-      .setMimeTypes('application/vnd.google-apps.folder')
+      .setSelectFolderEnabled(true)
 
     const builder = new picker.PickerBuilder()
       .addView(view)
       .setOAuthToken(accessToken)
       .setDeveloperKey(API_KEY)
-      .setSelectableMimeTypes('application/vnd.google-apps.folder')
-      .setTitle('Select a client photo folder')
+      .enableFeature(picker.Feature.MULTISELECT_ENABLED)
+      .setTitle('Select a folder or photos to digitize')
       .setCallback((data: any) => {
         const action = data[picker.Response.ACTION]
         if (action === picker.Action.PICKED) {
-          const doc = data[picker.Response.DOCUMENTS]?.[0]
-          resolve(doc ? { id: doc[picker.Document.ID], name: doc[picker.Document.NAME] } : null)
+          const docs: PickedDoc[] = (data[picker.Response.DOCUMENTS] ?? []).map((d: any) => {
+            const mimeType = d[picker.Document.MIME_TYPE]
+            return {
+              id: d[picker.Document.ID],
+              name: d[picker.Document.NAME],
+              mimeType,
+              isFolder: mimeType === 'application/vnd.google-apps.folder',
+            }
+          })
+          resolve(docs)
         } else if (action === picker.Action.CANCEL) {
           resolve(null)
         }
@@ -139,15 +158,32 @@ function openFolderPicker(accessToken: string): Promise<PickedFolder | null> {
 }
 
 /**
- * Sign in (own Google account) and pick a Drive folder.
- * Returns the access token + folder, or null if the stylist cancels.
+ * Sign in (own Google account) and pick a folder or photos to digitize.
+ * Expands any picked folders into their images, sorts everything by filename, and
+ * returns the flat image list + a display name. Null if the stylist cancels.
  */
-export async function signInAndPickFolder(): Promise<{ accessToken: string; folder: PickedFolder } | null> {
+export async function signInAndPickPhotos(): Promise<{ accessToken: string; files: DriveFile[]; sourceName: string } | null> {
   await ensureLoaded()
   const accessToken = await requestAccessToken()
-  const folder = await openFolderPicker(accessToken)
-  if (!folder) return null
-  return { accessToken, folder }
+  const docs = await openPicker(accessToken)
+  if (!docs || docs.length === 0) return null
+
+  const files: DriveFile[] = []
+  for (const doc of docs) {
+    if (doc.isFolder) {
+      files.push(...(await listImagesInFolder(doc.id, accessToken)))
+    } else if (doc.mimeType?.startsWith('image/') || doc.name?.toLowerCase().endsWith('.heic')) {
+      files.push({ id: doc.id, name: doc.name, mimeType: doc.mimeType || 'image/jpeg', size: 0 })
+    }
+  }
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+
+  // Dedupe by id (a photo could be picked individually and via its folder)
+  const seen = new Set<string>()
+  const deduped = files.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)))
+
+  const sourceName = docs.length === 1 && docs[0].isFolder ? docs[0].name : `${deduped.length} photos`
+  return { accessToken, files: deduped, sourceName }
 }
 
 /** List every image (incl. HEIC) directly inside a folder, sorted by filename. */

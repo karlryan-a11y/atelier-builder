@@ -7,8 +7,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { exportGoodPixXlsx } from '@/lib/goodpix-export'
 import {
   isGoogleDriveConfigured,
-  signInAndPickFolder,
-  listImagesInFolder,
+  signInAndPickPhotos,
   downloadDriveFile,
   type DriveFile,
   type PickedFolder,
@@ -1184,18 +1183,17 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const handlePickDriveFolder = useCallback(async () => {
     setDriveBusy(true)
     try {
-      const picked = await signInAndPickFolder()
+      const picked = await signInAndPickPhotos()
       if (!picked) return // cancelled
-      const images = await listImagesInFolder(picked.folder.id, picked.accessToken)
-      if (images.length === 0) {
-        alert(`No photos found in "${picked.folder.name}".`)
+      if (picked.files.length === 0) {
+        alert('No photos found in your selection.')
         return
       }
       // Drive source replaces any locally-staged files (mutually exclusive)
       setFiles([])
       setDriveToken(picked.accessToken)
-      setDriveFolder(picked.folder)
-      setDriveFiles(images)
+      setDriveFolder({ id: '', name: picked.sourceName })
+      setDriveFiles(picked.files)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not connect to Google Drive'
       alert(`Google Drive: ${msg}`)
