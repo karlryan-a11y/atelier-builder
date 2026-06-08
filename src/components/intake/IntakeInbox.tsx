@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Inbox, Check, X, Edit3, RefreshCw, Upload, Camera, Download } from 'lucide-react'
+import { Inbox, Check, X, Edit3, RefreshCw, Upload, Camera, Download, HardDrive } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { useClientStore } from '@/stores/clientStore'
 import { exportGoodPixXlsx } from '@/lib/goodpix-export'
+import {
+  isGoogleDriveConfigured,
+  signInAndPickFolder,
+  listImagesInFolder,
+  downloadDriveFile,
+  type DriveFile,
+  type PickedFolder,
+} from '@/lib/googleDrive'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -1126,6 +1134,11 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [progressPct, setProgressPct] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  // Google Drive source (mutually exclusive with local `files`)
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([])
+  const [driveToken, setDriveToken] = useState<string | null>(null)
+  const [driveFolder, setDriveFolder] = useState<PickedFolder | null>(null)
+  const [driveBusy, setDriveBusy] = useState(false)
 
   const [clientSearch, setClientSearch] = useState('')
 
@@ -1162,6 +1175,35 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     setFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
+  const clearDrive = () => {
+    setDriveFiles([])
+    setDriveToken(null)
+    setDriveFolder(null)
+  }
+
+  const handlePickDriveFolder = useCallback(async () => {
+    setDriveBusy(true)
+    try {
+      const picked = await signInAndPickFolder()
+      if (!picked) return // cancelled
+      const images = await listImagesInFolder(picked.folder.id, picked.accessToken)
+      if (images.length === 0) {
+        alert(`No photos found in "${picked.folder.name}".`)
+        return
+      }
+      // Drive source replaces any locally-staged files (mutually exclusive)
+      setFiles([])
+      setDriveToken(picked.accessToken)
+      setDriveFolder(picked.folder)
+      setDriveFiles(images)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not connect to Google Drive'
+      alert(`Google Drive: ${msg}`)
+    } finally {
+      setDriveBusy(false)
+    }
+  }, [])
+
   // Realistic time estimates including image generation + QC
   const estimateTime = (photoCount: number) => {
     const items = Math.ceil(photoCount / 2)
@@ -1177,13 +1219,27 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
 
   const runPipeline = async () => {
     if (!selectedClientId) { alert('Select a client'); return }
-    if (files.length === 0) { alert('Add photos'); return }
 
-    const itemCount = Math.ceil(files.length / 2)
-    const timeEst = estimateTime(files.length)
+    // Source is either locally-staged files or a picked Google Drive folder (mutually exclusive).
+    const fromDrive = driveFiles.length > 0
+    const photoCount = fromDrive ? driveFiles.length : files.length
+    if (photoCount === 0) { alert('Add photos'); return }
+
+    // Fetch one chunk's worth of File objects. For Drive, download just-in-time so we
+    // never hold more than CHUNK photos in memory — keeps large batches (500+) safe.
+    const getChunkFiles = async (start: number, count: number): Promise<File[]> => {
+      if (fromDrive) {
+        const slice = driveFiles.slice(start, start + count)
+        return Promise.all(slice.map(df => downloadDriveFile(df, driveToken!)))
+      }
+      return files.slice(start, start + count)
+    }
+
+    const itemCount = Math.ceil(photoCount / 2)
+    const timeEst = estimateTime(photoCount)
 
     setStage('uploading')
-    setProgress(`Uploading ${files.length} photos (${itemCount} items)... ${timeEst} total`)
+    setProgress(`Uploading ${photoCount} photos (${itemCount} items)... ${timeEst} total`)
     setProgressPct(5)
 
     try {
@@ -1192,8 +1248,8 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       const CHUNK = 2 // Keep small — Edge Function body limit is ~6MB, iPhone photos are 3-8MB each
       let uploadedCount = 0
 
-      for (let i = 0; i < files.length; i += CHUNK) {
-        const chunk = files.slice(i, i + CHUNK)
+      for (let i = 0; i < photoCount; i += CHUNK) {
+        const chunk = await getChunkFiles(i, CHUNK)
         const formData = new FormData()
         if (batchId) formData.append('batch_id', batchId)
         formData.append('client_id', selectedClientId)
@@ -1213,15 +1269,15 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         const result = await resp.json()
         batchId = result.batch_id
         uploadedCount += chunk.length
-        const pct = Math.round((uploadedCount / files.length) * 40)
+        const pct = Math.round((uploadedCount / photoCount) * 40)
         setProgressPct(pct)
-        setProgress(`Uploaded ${uploadedCount} of ${files.length} photos...`)
+        setProgress(`Uploaded ${uploadedCount} of ${photoCount} photos...`)
       }
 
       if (!batchId) throw new Error('No batch_id returned')
 
       // Finalize — triggers classify + process
-      setProgress(`Classifying ${files.length} photos...`)
+      setProgress(`Classifying ${photoCount} photos...`)
       setProgressPct(45)
 
       const finalizeResp = await fetch(`${SUPABASE_URL}/functions/v1/intake-finalize-batch`, {
@@ -1237,7 +1293,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
 
       // Save batch to localStorage for the nav badge indicator
       localStorage.setItem('atelier_active_batch', JSON.stringify({
-        batchId, clientId: selectedClientId, photoCount: files.length,
+        batchId, clientId: selectedClientId, photoCount,
       }))
 
       // Show brief success then reset form so stylist can upload another batch immediately
@@ -1250,6 +1306,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       setTimeout(() => {
         setStage('select')
         setFiles([])
+        clearDrive()
         setBatchLabel('')
         setProgress('')
         setProgressPct(0)
@@ -1258,7 +1315,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     } catch (err) {
       setStage('error')
       const msg = err instanceof Error ? err.message : 'Something went wrong'
-      setProgress(`Error: ${msg}. Screenshot this and send to Karl. [Client: ${selectedClientId?.slice(0,8)}, Photos: ${files.length}, Time: ${new Date().toISOString()}]`)
+      setProgress(`Error: ${msg}. Screenshot this and send to Karl. [Client: ${selectedClientId?.slice(0,8)}, Photos: ${photoCount}, Time: ${new Date().toISOString()}]`)
     }
   }
 
@@ -1354,6 +1411,18 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               <Upload className="h-3.5 w-3.5" />
               Add Photos
             </button>
+            {isGoogleDriveConfigured() && (
+              <button
+                onClick={handlePickDriveFolder}
+                disabled={driveBusy}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] disabled:opacity-50 transition-colors"
+              >
+                {driveBusy
+                  ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  : <HardDrive className="h-3.5 w-3.5" />}
+                Google Drive
+              </button>
+            )}
             <button
               onClick={() => folderInputRef.current?.click()}
               className="hidden md:flex items-center justify-center gap-1.5 px-4 py-2.5 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] transition-colors"
@@ -1421,8 +1490,40 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
             </div>
           </details>
 
-          {/* Drop zone / file list */}
-          {files.length === 0 ? (
+          {/* Drop zone / file list / Google Drive selection */}
+          {driveFiles.length > 0 ? (
+            <div className="border border-[#E8E4DF] rounded-sm p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <HardDrive className="h-4 w-4 text-[#888] shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-[#1A1A1A] font-medium truncate">{driveFolder?.name}</p>
+                    <p className="text-[10px] text-[#888]">
+                      {driveFiles.length} photos · {Math.ceil(driveFiles.length / 2)} items from Google Drive
+                      {driveFiles.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={clearDrive}
+                  className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline shrink-0"
+                >
+                  Clear
+                </button>
+              </div>
+              <p className="text-[10px] text-[#aaa] mb-3">
+                Photos download from Drive as they upload — keep this tab open until it finishes.
+              </p>
+              <button
+                onClick={runPipeline}
+                disabled={!selectedClientId}
+                className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(driveFiles.length / 2)} Items`} · {estimateTime(driveFiles.length)}
+              </button>
+            </div>
+          ) : files.length === 0 ? (
             <div
               onDragOver={e => e.preventDefault()}
               onDrop={handleDrop}
@@ -1499,7 +1600,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         <div className="max-w-xl mx-auto text-center py-4">
           <p className="text-sm text-red-600 mb-2">{progress}</p>
           <button
-            onClick={() => { setStage('select'); setFiles([]) }}
+            onClick={() => { setStage('select'); setFiles([]); clearDrive() }}
             className="text-[10px] tracking-[0.15em] uppercase text-[#1A1A1A] underline"
           >
             Try again
