@@ -156,7 +156,7 @@ export function ClickableSignedImage({ r2Key, alt, className, label }: { r2Key: 
 
   return (
     <div
-      className="relative cursor-zoom-in group/img"
+      className="relative w-full h-full cursor-zoom-in group/img"
       onClick={(e) => {
         e.stopPropagation()
         open(imageProxyUrl(r2Key), label || alt)
