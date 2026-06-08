@@ -1,13 +1,18 @@
 /**
  * Export approved intake items as a GoodPix Bulk Closet Uploader .xlsx file.
- * Images are copied to Supabase Storage (public bucket) for permanent URLs.
+ *
+ * Image URLs point at the intake pipeline's public `image-proxy` Edge Function, which
+ * streams the R2 object with the correct `image/*` content-type and permissive CORS.
+ * These URLs are public and permanent (keyed by the stable R2 key), so the GoodPix
+ * uploader and the in-sheet `=IMAGE()` preview can fetch them directly — no copy to a
+ * separate Storage bucket is needed (that path required a client-side write the
+ * `goodpix-exports` bucket had no RLS policy for, so every image came out blank).
  */
 
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const STORAGE_BUCKET = 'goodpix-exports'
 
 interface ApprovedItem {
   id: string
@@ -20,58 +25,10 @@ interface ApprovedItem {
 }
 
 /**
- * Get a temporary signed R2 URL to fetch the image from R2.
+ * Build a public, permanent URL that streams an R2 object via the image-proxy Edge Function.
  */
-async function getSignedR2Url(r2Key: string): Promise<string | null> {
-  try {
-    const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-signed-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: [r2Key], expires_in: 900 }),
-    })
-    if (resp.ok) {
-      const data = await resp.json()
-      return data.urls?.[r2Key] ?? null
-    }
-  } catch {}
-  return null
-}
-
-/**
- * Copy an image from R2 to Supabase Storage (public bucket) and return the permanent URL.
- */
-async function copyToPublicStorage(r2Key: string, clientName: string): Promise<string | null> {
-  // Get temporary signed URL from R2
-  const signedUrl = await getSignedR2Url(r2Key)
-  if (!signedUrl) return null
-
-  // Fetch the image
-  const resp = await fetch(signedUrl)
-  if (!resp.ok) return null
-  const blob = await resp.blob()
-
-  // Generate a clean path in the public bucket
-  const ext = r2Key.endsWith('.png') ? 'png' : 'jpg'
-  const cleanClient = clientName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
-  const filename = r2Key.split('/').pop() ?? `image-${Date.now()}.${ext}`
-  const storagePath = `${cleanClient}/${filename}`
-
-  // Upload to Supabase Storage
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, blob, {
-      contentType: `image/${ext}`,
-      upsert: true,
-    })
-
-  if (error) {
-    console.error('Storage upload failed:', error.message)
-    return null
-  }
-
-  // Return the permanent public URL
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath)
-  return data.publicUrl
+function imageProxyUrl(r2Key: string): string {
+  return `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2Key)}`
 }
 
 /**
@@ -113,18 +70,16 @@ export async function exportGoodPixXlsx(
 
   const total = items.length
   const rows: Array<Record<string, string>> = []
+  let imagesResolved = 0
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i] as ApprovedItem
     onProgress?.(i + 1, total)
 
-    // Get the R2 key, then copy to permanent public storage
+    // Resolve the item's R2 key and point the spreadsheet at the public image-proxy URL.
     const r2Key = await getImageR2Key(item)
-    let imageUrl = ''
-    if (r2Key) {
-      const publicUrl = await copyToPublicStorage(r2Key, clientName)
-      imageUrl = publicUrl ?? ''
-    }
+    const imageUrl = r2Key ? imageProxyUrl(r2Key) : ''
+    if (imageUrl) imagesResolved++
 
     rows.push({
       'Image Preview': imageUrl ? `=IMAGE("${imageUrl}")` : '',
@@ -137,6 +92,13 @@ export async function exportGoodPixXlsx(
       'Remove Image Background, Yes? (Leave blank if BG is already removed or unnecessary)': '',
       'Skip this one as it was added already, yes? (Leave blank to upload OR write YES if we should NOT add this one)': '',
     })
+  }
+
+  // None of the approved items resolved to an image — the spreadsheet would be useless.
+  if (imagesResolved === 0) {
+    throw new Error(
+      `Export failed: none of the ${total} approved items have an image. No file was downloaded.`,
+    )
   }
 
   // Create workbook
