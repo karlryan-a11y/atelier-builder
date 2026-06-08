@@ -71,6 +71,7 @@ export async function exportGoodPixXlsx(
   const total = items.length
   const rows: Array<Record<string, string>> = []
   let imagesResolved = 0
+  let probeUrl = ''
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i] as ApprovedItem
@@ -79,7 +80,7 @@ export async function exportGoodPixXlsx(
     // Resolve the item's R2 key and point the spreadsheet at the public image-proxy URL.
     const r2Key = await getImageR2Key(item)
     const imageUrl = r2Key ? imageProxyUrl(r2Key) : ''
-    if (imageUrl) imagesResolved++
+    if (imageUrl) { imagesResolved++; if (!probeUrl) probeUrl = imageUrl }
 
     rows.push({
       'Image Preview': imageUrl ? `=IMAGE("${imageUrl}")` : '',
@@ -98,6 +99,24 @@ export async function exportGoodPixXlsx(
   if (imagesResolved === 0) {
     throw new Error(
       `Export failed: none of the ${total} approved items have an image. No file was downloaded.`,
+    )
+  }
+
+  // Liveness probe: the image URLs all point at the public `image-proxy` Edge Function.
+  // If it is ever undeployed or redeployed WITH jwt verification (it must stay public via
+  // `--no-verify-jwt`), every image in the sheet would be dead. Fetch one image so that
+  // breakage fails loudly here instead of silently shipping a sheet full of broken URLs.
+  try {
+    const probe = await fetch(probeUrl, { method: 'GET' })
+    if (!probe.ok) throw new Error(`image-proxy returned HTTP ${probe.status}`)
+    if (!(probe.headers.get('content-type') ?? '').startsWith('image/')) {
+      throw new Error('image-proxy did not return an image')
+    }
+  } catch (e) {
+    throw new Error(
+      `Export failed: the image service (image-proxy) is not serving images ` +
+      `(${e instanceof Error ? e.message : 'unreachable'}). No file was downloaded — ` +
+      `the spreadsheet would have had broken image links.`,
     )
   }
 
