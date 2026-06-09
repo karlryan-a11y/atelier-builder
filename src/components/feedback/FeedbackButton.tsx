@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { MessageSquare, X, Image as ImageIcon, Loader2, Check } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+
+// Canonical apex endpoint — the feedback API lives on the dashboard. Posting to
+// an absolute apex URL (never relative / never www) means it works regardless of
+// which origin the builder is served from and never hits the www→apex redirect.
+const FEEDBACK_ENDPOINT = 'https://atelierbywatson.com/api/feedback'
 
 type SubmitState = 'idle' | 'submitting' | 'success' | 'error'
 
@@ -73,15 +79,28 @@ export function FeedbackButton() {
     setState('submitting')
     setErrorMsg('')
     try {
-      const res = await fetch('/api/feedback', {
+      // Builder auth lives in localStorage (no cookie crosses to the dashboard),
+      // so pass identity in the body for Slack attribution. Best-effort.
+      let userName: string | null = null
+      let userEmail: string | null = null
+      try {
+        const { data } = await supabase.auth.getUser()
+        userEmail = data.user?.email ?? null
+        userName =
+          (data.user?.user_metadata?.full_name as string | undefined) ?? null
+      } catch {
+        // ignore — feedback still sends without identity
+      }
+      const res = await fetch(FEEDBACK_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           note: note.trim(),
           pageUrl: typeof window !== 'undefined' ? window.location.href : null,
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
           screenshotDataUrl,
+          userName,
+          userEmail,
         }),
       })
       const data = await res.json().catch(() => ({}))
