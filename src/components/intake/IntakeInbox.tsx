@@ -835,6 +835,9 @@ interface ActiveBatch {
   items_done: number
   items_total: number
   items_processing: number
+  items_approved: number
+  items_rejected: number
+  items_to_review: number
 }
 
 function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountChange: (n: number) => void; onRefreshItems: () => void }) {
@@ -851,8 +854,9 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
     let mounted = true
 
     const fetchBatches = async () => {
-      // Get active batches + recently completed (last 24h)
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      // Get active batches + recently completed. 7-day window so a finished batch stays
+      // visible (with its review-completion bar) until the stylist has reviewed every item.
+      const yesterday = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const { data: activeBatches } = await supabase
         .from('intake_batches')
         .select('id, client_id, batch_label, status, total_photos, estimated_pairs, created_at, completed_at')
@@ -921,6 +925,9 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
               items_done: done,
               items_total: items.total ?? 0,
               items_processing: processing,
+              items_approved: items.approved ?? 0,
+              items_rejected: items.rejected_final ?? 0,
+              items_to_review: (items.qc_passed ?? 0) + (items.pending_review ?? 0),
             }
           } catch {
             return {
@@ -932,6 +939,7 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
               completed_at: b.completed_at,
               photos_classified: 0, photos_total: b.total_photos,
               items_done: 0, items_total: 0, items_processing: 0,
+              items_approved: 0, items_rejected: 0, items_to_review: 0,
             }
           }
         })
@@ -985,6 +993,12 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
           ? `${batch.batch_label} — ${batch.client_name}`
           : batch.client_name
 
+        // Review-completion tracking: once processing is done, the batch isn't truly
+        // finished until the stylist has approved or rejected every item.
+        const reviewTotal = batch.items_total || batch.estimated_pairs || Math.ceil(batch.total_photos / 2)
+        const reviewed = batch.items_approved + batch.items_rejected
+        const fullyReviewed = isComplete && reviewTotal > 0 && batch.items_to_review === 0
+
         // Calculate overall progress percentage
         let pct = 0
         let phase = ''
@@ -992,10 +1006,15 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
         let timeEst = ''
 
         if (isComplete) {
-          pct = 100
-          phase = 'Complete'
-          const total = batch.items_total || batch.estimated_pairs || Math.ceil(batch.total_photos / 2)
-          detail = `${total} items ready for review`
+          // After processing, the bar tracks REVIEW progress (approved+rejected / total).
+          pct = reviewTotal > 0 ? Math.round((reviewed / reviewTotal) * 100) : 100
+          if (fullyReviewed) {
+            phase = 'Complete — all reviewed'
+            detail = `All ${reviewTotal} items reviewed · ${batch.items_approved} approved, ${batch.items_rejected} sent back`
+          } else {
+            phase = 'Ready for review'
+            detail = `${reviewed} of ${reviewTotal} reviewed · ${batch.items_to_review} to go · ${batch.items_approved} approved, ${batch.items_rejected} sent back`
+          }
         } else if (isUploading) {
           pct = Math.max(5, Math.round((batch.total_photos / Math.max(batch.total_photos, 1)) * 30))
           phase = 'Uploading photos'
@@ -1033,15 +1052,17 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
 
         return (
           <div key={batch.id} className={`bg-white rounded-sm border overflow-hidden ${
-            isComplete ? 'border-emerald-200 bg-emerald-50/20' : 'border-[#E8E4DF]'
+            fullyReviewed ? 'border-emerald-200 bg-emerald-50/20' : isComplete ? 'border-[#E8D5C4] bg-[#FBF7F2]' : 'border-[#E8E4DF]'
           }`}>
             {/* Header row */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-[#F0EDE9]">
               <div className="flex items-center gap-3">
-                {isComplete ? (
+                {fullyReviewed ? (
                   <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full flex items-center justify-center">
                     <Check className="h-1.5 w-1.5 text-white" />
                   </span>
+                ) : isComplete ? (
+                  <span className="w-2.5 h-2.5 bg-[#C89B7B] rounded-full" />
                 ) : (
                   <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
                 )}
@@ -1056,9 +1077,14 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
                     {timeEst}
                   </span>
                 )}
-                {isComplete && (
+                {fullyReviewed && (
                   <span className="text-[10px] tracking-[0.15em] uppercase text-emerald-600 font-medium">
-                    Done
+                    Done ✓
+                  </span>
+                )}
+                {isComplete && !fullyReviewed && (
+                  <span className="text-[10px] tracking-[0.15em] uppercase text-[#9C6F4A] font-medium">
+                    {batch.items_to_review} to review
                   </span>
                 )}
                 {!isComplete && (
@@ -1083,12 +1109,12 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
             {/* Progress */}
             <div className="px-5 py-4">
               <div className="flex items-center justify-between mb-2">
-                <span className={`text-[11px] tracking-[0.1em] uppercase font-medium ${isComplete ? 'text-emerald-600' : 'text-[#888]'}`}>{phase}</span>
+                <span className={`text-[11px] tracking-[0.1em] uppercase font-medium ${fullyReviewed ? 'text-emerald-600' : isComplete ? 'text-[#9C6F4A]' : 'text-[#888]'}`}>{phase}</span>
                 <span className="text-[11px] text-[#aaa]">{pct}%</span>
               </div>
               <div className="w-full bg-[#F0EDE9] rounded-full h-2 mb-2">
                 <div
-                  className={`h-2 rounded-full transition-all duration-1000 ease-out ${isComplete ? 'bg-emerald-500' : 'bg-emerald-500'}`}
+                  className={`h-2 rounded-full transition-all duration-1000 ease-out ${fullyReviewed ? 'bg-emerald-500' : isComplete ? 'bg-[#C89B7B]' : 'bg-emerald-500'}`}
                   style={{ width: `${Math.max(pct, 2)}%` }}
                 />
               </div>
@@ -1305,17 +1331,26 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
         chunk.forEach(f => formData.append('photos', f))
 
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-upload-photos`, {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!resp.ok) {
-          const errBody = await resp.json().catch(() => ({ error: `Upload failed (${resp.status})` }))
-          throw new Error(errBody.error || `Upload failed at photo ${i + 1}`)
+        // Retry each chunk up to 3x with backoff. Retries reuse batchId (the function
+        // accepts an existing batch_id), so a transient network/timeout blip resumes the
+        // same batch in-place instead of orphaning a half-uploaded batch.
+        let result: { batch_id: string } | null = null
+        let lastErr = ''
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt))
+          try {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-upload-photos`, {
+              method: 'POST',
+              body: formData,
+            })
+            if (resp.ok) { result = await resp.json(); break }
+            lastErr = (await resp.json().catch(() => ({}))).error || `Upload failed (${resp.status})`
+          } catch (e) {
+            lastErr = e instanceof Error ? e.message : 'network error'
+          }
         }
+        if (!result) throw new Error(`Upload failed at photo ${i + 1} after 3 attempts: ${lastErr}`)
 
-        const result = await resp.json()
         batchId = result.batch_id
         uploadedCount += chunk.length
         const pct = Math.round((uploadedCount / photoCount) * 40)
@@ -1507,6 +1542,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 <li><strong>1 photo of the brand/care tag</strong> — so AI can read the brand, size, and material</li>
                 <li>Repeat for each piece: <strong>item photo → tag photo → item photo → tag photo</strong></li>
               </ol>
+              <p className="text-[10px] text-[#9C6F4A] mt-1 font-medium">⚠️ Order matters — photos are paired in the exact order you upload them (item, then its tag). Keep them in order, or items will pair with the wrong tag.</p>
               <p className="text-[10px] text-[#888] mt-1">No tag? That's fine — AI will still identify the brand when possible.</p>
             </div>
 
