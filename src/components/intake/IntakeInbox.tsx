@@ -406,22 +406,12 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
   const [restyling, setRestyling] = useState(false)
   const [currentAiKey, setCurrentAiKey] = useState(item.ai_image_primary_r2_key)
   const [rejecting, setRejecting] = useState(false)
-  const [rejectionReasons, setRejectionReasons] = useState<Array<{ code: string; label: string }>>([])
-  const [selectedReason, setSelectedReason] = useState('')
+  // New reject UX: the stylist confirms or disputes the QC assessment + adds a note.
+  // That + the QC issues drive an automatic backend restyle (no stylist prompt-writing).
+  const [agreedWithQc, setAgreedWithQc] = useState<boolean | null>(null)
   const [rejectionNote, setRejectionNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [actionResult, setActionResult] = useState<'approved' | 'rejected' | null>(null)
-
-  useEffect(() => {
-    if (rejecting && rejectionReasons.length === 0) {
-      supabase
-        .from('intake_rejection_reasons')
-        .select('code, label')
-        .eq('active', true)
-        .order('display_order')
-        .then(({ data }) => setRejectionReasons(data ?? []))
-    }
-  }, [rejecting])
 
   const handleRestyle = async () => {
     // For restyle (has existing AI image), instructions are required.
@@ -500,8 +490,12 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
 
   const handleReject = async () => {
     if (submitting) return
-    if (!selectedReason) {
-      alert('Select a rejection reason')
+    if (agreedWithQc === null) {
+      alert('Let us know if the QC notes match what you see')
+      return
+    }
+    if (agreedWithQc === false && !rejectionNote.trim()) {
+      alert("Please describe what's actually wrong so we can fix it")
       return
     }
     setSubmitting(true)
@@ -517,7 +511,7 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
         },
         body: JSON.stringify({
           item_id: item.id,
-          rejection_reason_code: selectedReason,
+          agreed_with_qc: agreedWithQc,
           rejection_note: rejectionNote || null,
         }),
       })
@@ -546,7 +540,7 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
           {actionResult === 'approved' ? (
             <><Check className="h-5 w-5 text-emerald-600" /><span className="text-sm text-emerald-700">Approved — added to collection</span></>
           ) : (
-            <><X className="h-5 w-5 text-red-500" /><span className="text-sm text-red-600">Rejected</span></>
+            <><RefreshCw className="h-5 w-5 text-amber-500" /><span className="text-sm text-amber-700">Sent back to be reprocessed — it'll return to Needs Review</span></>
           )}
         </div>
       </div>
@@ -714,41 +708,58 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
             </div>
           )}
 
-          {/* Rejection panel */}
+          {/* Reject panel — confirm/dispute QC + a note; the backend auto-reprocesses it */}
           {rejecting && (
-            <div className="border border-red-100 rounded-sm p-3 bg-red-50/30 mb-3">
-              <div className="space-y-2">
-                <select
-                  value={selectedReason}
-                  onChange={e => setSelectedReason(e.target.value)}
-                  className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] bg-white"
-                >
-                  <option value="">Select reason...</option>
-                  {rejectionReasons.map(r => (
-                    <option key={r.code} value={r.code}>{r.label}</option>
-                  ))}
-                </select>
-                <textarea
-                  value={rejectionNote}
-                  onChange={e => setRejectionNote(e.target.value)}
-                  placeholder="Note (optional)..."
-                  className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm resize-none h-14"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleReject}
-                    disabled={submitting}
-                    className="flex-1 px-3 py-2 bg-red-600 text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {submitting ? 'Rejecting...' : 'Confirm Reject'}
-                  </button>
-                  <button
-                    onClick={() => setRejecting(false)}
-                    className="px-3 py-2 border border-[#E8E4DF] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]"
-                  >
-                    Cancel
-                  </button>
+            <div className="border border-amber-100 rounded-sm p-3 bg-amber-50/30 mb-3">
+              <p className="text-[11px] tracking-[0.15em] uppercase text-amber-700 font-medium mb-2">Send back for a redo</p>
+              {(item.qc_notes || (item.qc_issues && item.qc_issues.length > 0)) ? (
+                <div className="bg-white/70 border border-amber-100 rounded-sm px-3 py-2 mb-3">
+                  <p className="text-[9px] tracking-[0.1em] uppercase text-amber-600 mb-0.5">What QC flagged</p>
+                  {item.qc_issues && item.qc_issues.length > 0 && (
+                    <p className="text-xs text-amber-800">{item.qc_issues.map(i => i.replace(/_/g, ' ')).join(', ')}</p>
+                  )}
+                  {item.qc_notes && <p className="text-xs text-amber-800 mt-0.5">{item.qc_notes}</p>}
                 </div>
+              ) : (
+                <p className="text-xs text-[#888] mb-3">QC didn't flag anything specific — tell us what's wrong below.</p>
+              )}
+              <p className="text-[11px] text-[#555] mb-2">Does this match what you see?</p>
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={() => setAgreedWithQc(true)}
+                  className={`flex-1 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded-sm border transition-colors ${agreedWithQc === true ? 'border-amber-400 bg-amber-100 text-amber-800' : 'border-[#E8E4DF] text-[#888] hover:border-amber-300'}`}
+                >
+                  Yes, that's the issue
+                </button>
+                <button
+                  onClick={() => setAgreedWithQc(false)}
+                  className={`flex-1 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded-sm border transition-colors ${agreedWithQc === false ? 'border-amber-400 bg-amber-100 text-amber-800' : 'border-[#E8E4DF] text-[#888] hover:border-amber-300'}`}
+                >
+                  No, it's something else
+                </button>
+              </div>
+              <textarea
+                value={rejectionNote}
+                onChange={e => setRejectionNote(e.target.value)}
+                placeholder={agreedWithQc === false
+                  ? "Then what's actually wrong? (required) — e.g. it turned the dress into a jumpsuit"
+                  : "Anything to add that would help us fix it? (optional)"}
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm resize-none h-16 focus:border-amber-400 focus:outline-none mb-2"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReject}
+                  disabled={submitting}
+                  className="flex-1 px-3 py-2 bg-amber-600 text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {submitting ? 'Sending...' : 'Send back to fix'}
+                </button>
+                <button
+                  onClick={() => { setRejecting(false); setAgreedWithQc(null); setRejectionNote('') }}
+                  className="px-3 py-2 border border-[#E8E4DF] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
@@ -765,21 +776,9 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
                 {submitting ? 'Approving...' : 'Approve'}
               </button>
               <button
-                onClick={() => setShowRestyle(!showRestyle)}
-                disabled={restyling}
-                className={`flex items-center justify-center gap-1.5 px-4 py-3 border text-[11px] tracking-[0.2em] uppercase rounded-sm transition-colors ${
-                  showRestyle
-                    ? 'border-[#1A1A1A] text-[#1A1A1A] bg-[#F8F7F5]'
-                    : 'border-[#E8E4DF] text-[#888] hover:border-[#888] hover:text-[#1A1A1A]'
-                } disabled:opacity-50`}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${restyling ? 'animate-spin' : ''}`} />
-                {currentAiKey ? 'Restyle' : 'Generate'}
-              </button>
-              <button
                 onClick={() => setRejecting(true)}
-                disabled={submitting || restyling}
-                className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-red-200 hover:text-red-600 transition-colors disabled:opacity-50"
+                disabled={submitting}
+                className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
                 Reject
@@ -795,10 +794,16 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
               <span className="text-sm text-emerald-700">Approved — added to collection</span>
             </div>
           )}
+          {(item.status === 'rerun_requested' || item.status === 'qc_failed_restyle') && (
+            <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-sm">
+              <RefreshCw className="h-4 w-4 text-amber-500 animate-spin" />
+              <span className="text-sm text-amber-700">Reprocessing — will return to Needs Review</span>
+            </div>
+          )}
           {(item.status === 'rejected' || item.status === 'rejected_final') && (
             <div className="flex items-center gap-2 p-3 bg-red-50 rounded-sm">
               <X className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600">Rejected</span>
+              <span className="text-sm text-red-600">Rejected — auto-reprocess exhausted, needs a manual look</span>
             </div>
           )}
         </div>
