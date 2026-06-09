@@ -1022,8 +1022,8 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
           timeEst = ''
         } else if (isClassifying) {
           pct = batch.photos_total > 0 ? Math.round((batch.photos_classified / batch.photos_total) * 40) : 5
-          phase = 'Classifying photos'
-          detail = `${batch.photos_classified} of ${batch.photos_total} photos identified`
+          phase = 'Creating product photos'
+          detail = `Reading your ${batch.photos_total} photos — ${batch.photos_classified} sorted so far`
           const remaining = batch.photos_total - batch.photos_classified
           const secLeft = Math.round(remaining * 1.5)
           timeEst = secLeft > 60 ? `~${Math.ceil(secLeft / 60)}min left` : `~${secLeft}s left`
@@ -1034,11 +1034,11 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
           } else if (total > 0) {
             pct = 45
           }
-          phase = 'Generating AI photos + QC'
+          phase = 'Creating product photos'
           const remaining = total - batch.items_done
           detail = batch.items_done > 0
-            ? `${batch.items_done} of ${total} items complete, ${batch.items_processing} processing`
-            : `${total} items queued (metadata + AI photos + quality check)`
+            ? `${batch.items_done} of ${total} product photos ready, ${batch.items_processing} still being made`
+            : `${total} items in line — making clean product photos for each`
           const secLeft = remaining * 7
           timeEst = secLeft > 60 ? `~${Math.ceil(secLeft / 60)}min left` : secLeft > 0 ? `~${secLeft}s left` : ''
         }
@@ -1121,36 +1121,47 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
               <p className="text-[11px] text-[#888]">{detail}</p>
             </div>
 
-            {/* Phase dots */}
+            {/* Stylist-facing stepper — no engineering jargon. The active step is always
+                the one needing attention: 'Ready to review' (blush) means it's the
+                stylist's turn; only 'All reviewed' green means the batch is truly done. */}
             <div className="flex items-center gap-0 px-5 pb-4">
-              {[
-                { label: 'Upload', done: !isUploading, active: isUploading },
-                { label: 'Classify', done: !isClassifying && !isUploading, active: isClassifying },
-                { label: 'Metadata', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing && batch.items_done === 0 },
-                { label: 'AI Photo', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing },
-                { label: 'QC Check', done: (isProcessing && batch.items_done > 0) || isComplete, active: isProcessing },
-              ].map((step, i) => (
-                <div key={i} className="flex items-center">
-                  {i > 0 && <div className={`w-8 h-px ${step.done || step.active ? 'bg-emerald-300' : 'bg-[#E8E4DF]'}`} />}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className={`w-3 h-3 rounded-full flex items-center justify-center
-                      ${step.done ? 'bg-emerald-500' : step.active ? 'bg-emerald-400 animate-pulse' : 'bg-[#E8E4DF]'}
-                    `}>
-                      {step.done && <Check className="h-2 w-2 text-white" />}
+              {(() => {
+                const steps = [
+                  // done = finished, active = current, review = stylist-action styling
+                  { label: 'Uploaded', done: !isUploading, active: isUploading },
+                  { label: 'Creating photos', done: isComplete, active: !isUploading && !isComplete },
+                  { label: 'Ready to review', done: fullyReviewed, active: isComplete && !fullyReviewed, review: true },
+                  { label: 'All reviewed', done: fullyReviewed, active: false },
+                ]
+                return steps.map((step, i) => (
+                  <div key={i} className="flex items-center">
+                    {i > 0 && <div className={`w-7 h-px ${steps[i - 1].done ? 'bg-emerald-300' : 'bg-[#E8E4DF]'}`} />}
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-colors
+                        ${step.done ? 'bg-emerald-500'
+                          : step.active && step.review ? 'bg-[#C89B7B] animate-pulse ring-2 ring-[#E8D5C4]'
+                          : step.active ? 'bg-emerald-400 animate-pulse'
+                          : 'bg-[#E8E4DF]'}
+                      `}>
+                        {step.done && <Check className="h-2.5 w-2.5 text-white" />}
+                      </div>
+                      <span className={`text-[8px] tracking-[0.1em] uppercase text-center leading-tight ${
+                        step.done ? 'text-emerald-600'
+                          : step.active && step.review ? 'text-[#9C6F4A] font-semibold'
+                          : step.active ? 'text-[#1A1A1A] font-medium'
+                          : 'text-[#ccc]'
+                      }`}>{step.label}</span>
                     </div>
-                    <span className={`text-[8px] tracking-[0.1em] uppercase ${
-                      step.done ? 'text-emerald-600' : step.active ? 'text-[#1A1A1A]' : 'text-[#ccc]'
-                    }`}>{step.label}</span>
                   </div>
-                </div>
-              ))}
+                ))
+              })()}
             </div>
           </div>
         )
       })}
 
       <p className="text-[10px] text-[#aaa] text-center italic pt-2">
-        You can close this panel — processing continues in the background. Items appear in QC Passed as they complete.
+        You can close this panel — photos keep processing in the background. When a batch says <strong>Ready to review</strong>, open the tabs above to approve or reject each item; it's <strong>done</strong> once every item is reviewed.
       </p>
     </div>
   )
