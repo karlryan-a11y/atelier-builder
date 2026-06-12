@@ -28,7 +28,7 @@ export function IntakeInbox() {
   const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
     // Default to In Progress if there are active batches
     const saved = localStorage.getItem('atelier_active_batch')
-    return saved ? 'in_progress' : 'qc_passed'
+    return saved ? 'in_progress' : 'pending_review'
   })
   const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [bulkApproving, setBulkApproving] = useState(false)
@@ -39,7 +39,7 @@ export function IntakeInbox() {
   const { activeClient } = useClientStore()
   const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
-  const hookFilter = filter === 'in_progress' ? 'qc_passed' : filter
+  const hookFilter = filter === 'in_progress' ? 'pending_review' : filter
   const { items, loading, error, refresh, counts } = useIntakeItems(hookFilter, selectedClientId)
   const [showUpload, setShowUpload] = useState(false)
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
@@ -134,7 +134,6 @@ export function IntakeInbox() {
 
   const tabs = [
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
-    { key: 'qc_passed' as const, label: 'QC Passed', count: counts.qc_passed },
     { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
     { key: 'rejected_final' as const, label: 'Rejected', count: counts.rejected },
