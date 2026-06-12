@@ -67,6 +67,14 @@ export function IntakeInbox() {
     }
     setSelectedIds(new Set()); setBulkActing(''); refresh()
   }
+  const handleClearApproved = async () => {
+    if (!confirm('Clear all approved items from this tab? They stay in the collection — this just clears the list.')) return
+    await fetch(`${SUPABASE_URL}/functions/v1/intake-clear-approved`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(selectedClientId ? { client_id: selectedClientId } : {}),
+    })
+    refresh()
+  }
 
   // Sync: if stylist switches client in the Builder, update the inbox filter
   useEffect(() => {
@@ -396,6 +404,14 @@ export function IntakeInbox() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {filter === 'approved' && items.length > 0 && (
+              <div className="flex justify-end mb-2">
+                <button onClick={handleClearApproved} className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline">
+                  Clear approved (stays in collection)
+                </button>
               </div>
             )}
 
