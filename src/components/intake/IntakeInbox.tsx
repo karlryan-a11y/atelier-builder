@@ -45,6 +45,29 @@ export function IntakeInbox() {
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
   const [_aiSpend, _setAiSpend] = useState<{ anthropic: number; openai: number; total: number } | null>(null)
 
+  // Multi-select for bulk approve/reject (check items as you review → act on all at once)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkActing, setBulkActing] = useState('')
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const handleBulkAction = async (action: 'approve' | 'reject') => {
+    const ids = [...selectedIds]
+    if (!ids.length || bulkActing) return
+    const fn = action === 'approve' ? 'intake-approve-item' : 'intake-reject-final'
+    const verb = action === 'approve' ? 'Approving' : 'Rejecting'
+    const BATCH = 10
+    let done = 0
+    for (let i = 0; i < ids.length; i += BATCH) {
+      setBulkActing(`${verb} ${done} of ${ids.length}...`)
+      const res = await Promise.allSettled(ids.slice(i, i + BATCH).map(id =>
+        fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: id }),
+        }).then(r => { if (!r.ok) throw new Error(); return r })))
+      done += res.filter(r => r.status === 'fulfilled').length
+    }
+    setSelectedIds(new Set()); setBulkActing(''); refresh()
+  }
+
   // Sync: if stylist switches client in the Builder, update the inbox filter
   useEffect(() => {
     if (activeClient?.id && activeClient.id !== selectedClientId) {
@@ -377,8 +400,28 @@ export function IntakeInbox() {
               </div>
             )}
 
+            {selectedIds.size > 0 && (
+              <div className="sticky top-2 z-20 flex items-center gap-3 bg-[#1A1A1A] text-white rounded-sm px-4 py-2.5 shadow-lg">
+                <span className="text-[11px] tracking-[0.15em] uppercase">{selectedIds.size} selected</span>
+                <div className="flex-1" />
+                {bulkActing ? (
+                  <span className="text-[11px] text-white/70">{bulkActing}</span>
+                ) : (
+                  <>
+                    <button onClick={() => handleBulkAction('approve')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[#1A1A1A] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]">
+                      <Check className="h-3.5 w-3.5" /> Approve selected
+                    </button>
+                    <button onClick={() => handleBulkAction('reject')} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/30 text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-white/10">
+                      <X className="h-3.5 w-3.5" /> Reject selected
+                    </button>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-[10px] tracking-[0.15em] uppercase text-white/60 hover:text-white">Clear</button>
+                  </>
+                )}
+              </div>
+            )}
+
             {items.map(item => (
-              <InlineItemCard key={item.id} item={item} onAction={refresh} />
+              <InlineItemCard key={item.id} item={item} onAction={refresh} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} />
             ))}
           </div>
         )}
@@ -394,7 +437,7 @@ export function IntakeInbox() {
  * AI photo large on left, original + tag small below it,
  * metadata + actions on the right. One-tap approve.
  */
-function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => void }) {
+function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
@@ -445,6 +488,26 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
       alert(err instanceof Error ? err.message : 'Failed to restyle')
     } finally {
       setRestyling(false)
+    }
+  }
+
+  // Reject WITHOUT a redo → Rejected column (intake-reject-final). Reversible via restore=true.
+  const handleRejectFinal = async (restore = false) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-reject-final`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id, restore }),
+      })
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Action failed')
+      if (!restore) setActionResult('rejected')
+      onAction()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -617,11 +680,16 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
         <div className="flex-1 p-4 md:p-6 flex flex-col">
           {/* Client + Item header */}
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
-              <h3 className="text-lg font-serif text-[#1A1A1A] mt-0.5 leading-tight">
-                {editing ? name || 'Untitled Item' : item.extracted_name || 'Untitled Item'}
-              </h3>
+            <div className="flex items-start gap-3">
+              {onToggle && (item.status === 'pending_review' || item.status === 'qc_passed') && (
+                <input type="checkbox" checked={!!selected} onChange={onToggle} className="mt-1.5 h-4 w-4 rounded-sm border-[#ccc] accent-[#1A1A1A] cursor-pointer shrink-0" aria-label="Select item" />
+              )}
+              <div>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
+                <h3 className="text-lg font-serif text-[#1A1A1A] mt-0.5 leading-tight">
+                  {editing ? name || 'Untitled Item' : item.extracted_name || 'Untitled Item'}
+                </h3>
+              </div>
             </div>
             {(item.status === 'pending_review' || item.status === 'qc_passed') && !editing && (
               <button
@@ -633,6 +701,10 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
               </button>
             )}
           </div>
+
+          {(item.reprocess_attempts ?? 0) > 0 && (
+            <p className="text-[11px] text-[#b06a4a] font-medium -mt-2 mb-3">↩ Sent back {item.reprocess_attempts}× — rework or reject it</p>
+          )}
 
           {/* Metadata fields — compact */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
@@ -780,6 +852,14 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
                 disabled={submitting}
                 className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-50"
               >
+                <RefreshCw className="h-4 w-4" />
+                Send back to fix
+              </button>
+              <button
+                onClick={() => handleRejectFinal(false)}
+                disabled={submitting}
+                className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-50"
+              >
                 <X className="h-4 w-4" />
                 Reject
               </button>
@@ -801,9 +881,18 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
             </div>
           )}
           {(item.status === 'rejected' || item.status === 'rejected_final') && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 rounded-sm">
-              <X className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600">Rejected — auto-reprocess exhausted, needs a manual look</span>
+            <div className="flex items-center justify-between gap-2 p-3 bg-red-50 rounded-sm">
+              <div className="flex items-center gap-2">
+                <X className="h-4 w-4 text-red-500" />
+                <span className="text-sm text-red-600">Rejected</span>
+              </div>
+              <button
+                onClick={() => handleRejectFinal(true)}
+                disabled={submitting}
+                className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline disabled:opacity-50"
+              >
+                Restore to Needs Review
+              </button>
             </div>
           )}
         </div>
