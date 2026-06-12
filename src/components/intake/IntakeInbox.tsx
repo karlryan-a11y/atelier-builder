@@ -75,6 +75,42 @@ export function IntakeInbox() {
     })
     refresh()
   }
+  // Rejected fix loop: download the originals for ChatGPT, then upload the finished images back.
+  const handleDownloadRejected = async () => {
+    setBulkActing('Building zip...')
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-export-rejected`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedClientId ? { client_id: selectedClientId } : {}),
+      })
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Export failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'reprocess-for-chatgpt.zip'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) { alert(err instanceof Error ? err.message : 'Export failed') }
+    finally { setBulkActing('') }
+  }
+  const handleUploadReplace = async (files: FileList) => {
+    const arr = [...files]
+    let done = 0, matched = 0
+    for (const f of arr) {
+      const m = f.name.match(/(\d{1,4})/) // the number the stylist kept on the file
+      if (m) {
+        const form = new FormData()
+        form.append('photo', f)
+        form.append('export_number', String(parseInt(m[1], 10)))
+        if (selectedClientId) form.append('client_id', selectedClientId)
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-replace-rejected`, { method: 'POST', body: form })
+        if (resp.ok) matched++
+      }
+      done++
+      setBulkActing(`Uploading ${done} of ${arr.length}... (${matched} matched)`)
+    }
+    setBulkActing('')
+    alert(`${matched} of ${arr.length} matched and moved to Needs Review for final approval.`)
+    refresh()
+  }
 
   // Sync: if stylist switches client in the Builder, update the inbox filter
   useEffect(() => {
@@ -412,6 +448,21 @@ export function IntakeInbox() {
                 <button onClick={handleClearApproved} className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline">
                   Clear approved (stays in collection)
                 </button>
+              </div>
+            )}
+
+            {filter === 'rejected_final' && items.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-[#FAFAF8] border border-[#E8E4DF] rounded-sm">
+                <span className="text-[10px] tracking-[0.15em] uppercase text-[#888]">Fix in ChatGPT:</span>
+                <button onClick={handleDownloadRejected} disabled={!!bulkActing} className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50">
+                  <Download className="h-3.5 w-3.5" /> Download for ChatGPT
+                </button>
+                <label className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E4DF] text-[#888] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:border-[#ccc] hover:text-[#1A1A1A] cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" /> Upload to replace
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={e => { if (e.target.files) handleUploadReplace(e.target.files) }} />
+                </label>
+                {bulkActing && <span className="text-[11px] text-[#888]">{bulkActing}</span>}
+                <span className="text-[10px] text-[#aaa] ml-auto">Keep each file's number — finished images map back automatically</span>
               </div>
             )}
 
