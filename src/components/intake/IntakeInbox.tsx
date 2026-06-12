@@ -1327,6 +1327,8 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([])
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id ?? '')
   const [batchLabel, setBatchLabel] = useState('')
+  const [category, setCategory] = useState('clothing')
+  const isAccessory = ['handbag', 'shoes', 'jewelry', 'belts'].includes(category)
   const [files, setFiles] = useState<File[]>([])
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
   const [progress, setProgress] = useState('')
@@ -1436,7 +1438,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   // We deliberately over-estimate: far better to under-promise than to have a stylist think
   // it's stuck. (Revisit if we add an in-flight marker to shorten the cron backstop windows.)
   const estimateTime = (photoCount: number) => {
-    const items = Math.ceil(photoCount / 2)
+    const items = (isAccessory ? photoCount : Math.ceil(photoCount / 2))
     const uploadSec = Math.ceil(photoCount * 2) // ~2s per photo upload (chunked by 2)
     const floorSec = 420                        // gpt-image-2 (~2× slower) + 180s cron claim/QC backstops
     const perItemSec = 22                       // conservative end-to-end per item on the slower model
@@ -1482,7 +1484,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       return ensureJpegFiles(chunk)
     }
 
-    const itemCount = Math.ceil(photoCount / 2)
+    const itemCount = (isAccessory ? photoCount : Math.ceil(photoCount / 2))
     const timeEst = estimateTime(photoCount)
 
     setStage('uploading')
@@ -1502,6 +1504,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         if (batchId) formData.append('batch_id', batchId)
         formData.append('client_id', selectedClientId)
         if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
+        if (!batchId) formData.append('batch_category', category)
         chunk.forEach(f => formData.append('photos', f))
 
         // Retry each chunk up to 3x. Once we have a batchId, retries reuse it.
@@ -1639,6 +1642,22 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   )}
                 </div>
               )}
+            </div>
+            <div>
+              <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
+                Category
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {([['clothing', 'Clothing'], ['handbag', 'Handbag'], ['shoes', 'Shoes'], ['jewelry', 'Jewelry'], ['belts', 'Belts']] as const).map(([val, lbl]) => (
+                  <button key={val} type="button" onClick={() => setCategory(val)}
+                    className={`px-3 py-1.5 text-[10px] tracking-[0.1em] uppercase rounded-sm border ${category === val ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'bg-white text-[#888] border-[#E8E4DF] hover:border-[#ccc]'}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-[#aaa] mt-1.5">
+                {isAccessory ? 'One photo per item — no tag needed.' : 'Two photos per item: the garment, then its tag.'}
+              </p>
             </div>
             <div>
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
@@ -1784,7 +1803,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   <div className="min-w-0">
                     <p className="text-sm text-[#1A1A1A] font-medium truncate">{driveFolder?.name}</p>
                     <p className="text-[10px] text-[#888]">
-                      {driveFiles.length} photos · {Math.ceil(driveFiles.length / 2)} items from Google Drive
+                      {driveFiles.length} photos · {(isAccessory ? driveFiles.length : Math.ceil(driveFiles.length / 2))} items from Google Drive
                       {driveFiles.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
                     </p>
                   </div>
@@ -1805,7 +1824,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
               >
                 <Upload className="h-3.5 w-3.5" />
-                Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(driveFiles.length / 2)} Items`} · {estimateTime(driveFiles.length)}
+                Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${(isAccessory ? driveFiles.length : Math.ceil(driveFiles.length / 2))} Items`} · {estimateTime(driveFiles.length)}
               </button>
             </div>
           ) : files.length === 0 ? (
@@ -1843,7 +1862,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               </div>
               <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 <p className="text-[10px] text-[#888] text-center md:text-left">
-                  {files.length} photos · {Math.ceil(files.length / 2)} items
+                  {files.length} photos · {(isAccessory ? files.length : Math.ceil(files.length / 2))} items
                   {files.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
                 </p>
                 <button
@@ -1852,7 +1871,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(files.length / 2)} Items`} · {estimateTime(files.length)}
+                  Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${(isAccessory ? files.length : Math.ceil(files.length / 2))} Items`} · {estimateTime(files.length)}
                 </button>
               </div>
             </>
