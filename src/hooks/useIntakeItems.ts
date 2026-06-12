@@ -21,6 +21,8 @@ export interface IntakeItem {
   qc_notes: string | null
   qc_checked_at: string | null
   qc_attempt: number
+  rerun_count: number | null
+  reprocess_attempts: number | null
   auto_restyle_instructions: string | null
   created_at: string
   // Joined fields
@@ -60,7 +62,7 @@ export function useIntakeItems(
           extracted_category, extracted_material, extracted_metadata,
           ai_image_primary_r2_key, ai_image_generated_at,
           metadata_extracted_at, created_at,
-          qc_score, qc_issues, qc_notes, qc_checked_at, qc_attempt, auto_restyle_instructions,
+          qc_score, qc_issues, qc_notes, qc_checked_at, qc_attempt, rerun_count, reprocess_attempts, auto_restyle_instructions,
           garment_photo:intake_photos!garment_photo_id(id, r2_key),
           tag_photo:intake_photos!tag_photo_id(id, r2_key)
         `)
