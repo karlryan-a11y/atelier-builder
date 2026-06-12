@@ -1272,15 +1272,21 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     }
   }, [])
 
-  // Realistic time estimates including image generation + QC
+  // Realistic time estimate. The pipeline is cron-driven for reliability (fire-and-forget
+  // triggers die in the Edge runtime), which adds a fixed floor the naive estimate ignored.
+  // As of the gpt-image-2 upgrade (newer, higher-fidelity model — but ~2× slower, ~110-130s
+  // vs ~55s), the cron backstops wait 180s for an in-flight gen, so the floor is now ~7 min:
+  // item waits for the cron claim (~180s), generates (~110-130s), waits for the cron QC
+  // re-fire (~180s) + QC (~20s). Per-item term is conservative — absorbs QC + any high re-gen.
+  // We deliberately over-estimate: far better to under-promise than to have a stylist think
+  // it's stuck. (Revisit if we add an in-flight marker to shorten the cron backstop windows.)
   const estimateTime = (photoCount: number) => {
     const items = Math.ceil(photoCount / 2)
     const uploadSec = Math.ceil(photoCount * 2) // ~2s per photo upload (chunked by 2)
-    const classifySec = Math.ceil(photoCount * 0.5) // ~0.5s per photo (10 parallel)
-    const processSec = Math.ceil(items * 7) // ~35s per item but 5 concurrent = ~7s effective
-    const totalSec = uploadSec + classifySec + processSec
-    const totalMin = Math.ceil(totalSec / 60)
-    if (totalMin <= 1) return '~1 min'
+    const floorSec = 420                        // gpt-image-2 (~2× slower) + 180s cron claim/QC backstops
+    const perItemSec = 22                       // conservative end-to-end per item on the slower model
+    const totalMin = Math.ceil((uploadSec + floorSec + items * perItemSec) / 60)
+    if (totalMin <= 5) return '~5 min'
     if (totalMin <= 60) return `~${totalMin} min`
     return `~${Math.floor(totalMin / 60)}h ${totalMin % 60}m`
   }
@@ -1325,14 +1331,15 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     const timeEst = estimateTime(photoCount)
 
     setStage('uploading')
-    setProgress(`Uploading ${photoCount} photos (${itemCount} items)... ${timeEst} total`)
+    setProgress(`Uploading ${photoCount} photos (${itemCount} items)...`)
     setProgressPct(5)
 
     try {
-      // Upload in chunks of 2 (Edge Functions have ~6MB body limit)
+      // Upload in chunks of 2.
       let batchId: string | null = null
-      const CHUNK = 2 // Keep small — Edge Function body limit is ~6MB, iPhone photos are 3-8MB each
+      const CHUNK = 2
       let uploadedCount = 0
+      const failedPhotos: string[] = []
 
       for (let i = 0; i < photoCount; i += CHUNK) {
         const chunk = await getChunkFiles(i, CHUNK)
@@ -1342,10 +1349,8 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
         chunk.forEach(f => formData.append('photos', f))
 
-        // Retry each chunk up to 3x with backoff. Retries reuse batchId (the function
-        // accepts an existing batch_id), so a transient network/timeout blip resumes the
-        // same batch in-place instead of orphaning a half-uploaded batch.
-        let result: { batch_id: string } | null = null
+        // Retry each chunk up to 3x. Once we have a batchId, retries reuse it.
+        let result: { batch_id: string; uploaded?: number; errors?: string[] } | null = null
         let lastErr = ''
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt))
@@ -1354,22 +1359,36 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               method: 'POST',
               body: formData,
             })
-            if (resp.ok) { result = await resp.json(); break }
-            lastErr = (await resp.json().catch(() => ({}))).error || `Upload failed (${resp.status})`
+            const body = await resp.json().catch(() => ({}))
+            if (resp.ok) { result = body; break }
+            lastErr = body.error || `Upload failed (${resp.status})`
           } catch (e) {
             lastErr = e instanceof Error ? e.message : 'network error'
           }
         }
-        if (!result) throw new Error(`Upload failed at photo ${i + 1} after 3 attempts: ${lastErr}`)
+
+        if (!result) {
+          // This chunk's photos couldn't be stored (a HEIC that wouldn't convert, or one over
+          // the size limit). DO NOT abort the whole batch — skip them, record them, and keep
+          // uploading the rest. The stylist only re-handles the few that failed.
+          console.warn(`chunk at photo ${i + 1} skipped after retries: ${lastErr}`)
+          chunk.forEach(f => failedPhotos.push(f.name))
+          continue
+        }
 
         batchId = result.batch_id
-        uploadedCount += chunk.length
+        if (result.errors?.length) failedPhotos.push(...result.errors)
+        uploadedCount += result.uploaded ?? chunk.length
         const pct = Math.round((uploadedCount / photoCount) * 40)
         setProgressPct(pct)
         setProgress(`Uploaded ${uploadedCount} of ${photoCount} photos...`)
       }
 
-      if (!batchId) throw new Error('No batch_id returned')
+      if (!batchId || uploadedCount === 0) {
+        throw new Error(
+          `No photos could be uploaded.${failedPhotos.length ? ' ' + failedPhotos.slice(0, 4).join('; ') : ''}`,
+        )
+      }
 
       // Finalize — triggers classify + process
       setProgress(`Classifying ${photoCount} photos...`)
@@ -1394,7 +1413,11 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       // Show brief success then reset form so stylist can upload another batch immediately
       setStage('complete')
       const label = batchLabel.trim() ? `"${batchLabel.trim()}"` : `${itemCount} items`
-      setProgress(`${label} submitted! Check the In Progress tab for status.`)
+      const skipped = failedPhotos.length
+      const skipNote = skipped
+        ? ` ⚠️ ${skipped} photo${skipped > 1 ? 's' : ''} couldn't be processed and ${skipped > 1 ? 'were' : 'was'} skipped — re-upload ${skipped > 1 ? 'those' : 'it'} (often a very large or unconvertible HEIC).`
+        : ''
+      setProgress(`${label} submitted!${skipNote} Processing runs in the background — about ${timeEst} for everything to land in the inbox (large batches take longer). Watch the In Progress tab; you can close this and come back.`)
       setProgressPct(100)
 
       // Reset after 2s so they can upload again
@@ -1406,7 +1429,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         setProgress('')
         setProgressPct(0)
         onComplete()
-      }, 2500)
+      }, 5000)
     } catch (err) {
       setStage('error')
       const msg = err instanceof Error ? err.message : 'Something went wrong'
