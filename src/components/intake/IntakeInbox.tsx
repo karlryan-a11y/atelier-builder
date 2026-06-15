@@ -1329,6 +1329,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [batchLabel, setBatchLabel] = useState('')
   const [category, setCategory] = useState('clothing')
   const isAccessory = ['handbag', 'shoes', 'jewelry', 'belts'].includes(category)
+  const categoryLabel = category.charAt(0).toUpperCase() + category.slice(1)
   const [files, setFiles] = useState<File[]>([])
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
   const [progress, setProgress] = useState('')
@@ -1645,7 +1646,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
             </div>
             <div>
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
-                Category
+                Category <span className="normal-case tracking-normal text-[#bbb]">· one category per upload</span>
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {([['clothing', 'Clothing'], ['handbag', 'Handbag'], ['shoes', 'Shoes'], ['jewelry', 'Jewelry'], ['belts', 'Belts']] as const).map(([val, lbl]) => (
@@ -1655,9 +1656,19 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-[#aaa] mt-1.5">
-                {isAccessory ? 'One photo per item — no tag needed.' : 'Two photos per item: the garment, then its tag.'}
-              </p>
+              <div className="mt-2 rounded-sm border border-[#E8E4DF] bg-[#FAF8F6] px-3 py-2.5">
+                <p className="text-[12px] text-[#1A1A1A] font-medium flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-[#1A1A1A] text-white text-[9px] font-semibold">
+                    {isAccessory ? '1' : '2'}
+                  </span>
+                  {isAccessory
+                    ? `${categoryLabel}: upload 1 photo per item`
+                    : 'Clothing: upload 2 photos per item — the garment first, then its tag'}
+                </p>
+                <p className="text-[10.5px] leading-snug text-[#888] mt-1.5">
+                  Every photo in this upload is treated as <span className="font-medium text-[#666]">{categoryLabel}</span>. Upload <span className="font-medium text-[#666]">one category at a time</span> — don't mix (e.g. shoes and bags) in the same batch, or items will be paired and styled incorrectly.
+                </p>
+              </div>
             </div>
             <div>
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
