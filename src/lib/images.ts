@@ -2,7 +2,12 @@ export interface ClosetItem {
   id: string
   client_id: string
   name: string
+  /** Stylist-set override; UI shows this in place of `name` when present. Scraper never writes it. */
+  name_override?: string | null
+  /** Stylist-only note pinned to this garment (e.g. "must be styled with heels"). */
+  style_note?: string | null
   brand: string
+  color: string | null
   content_tag_ids: string[]
   is_deleted: boolean
   raw: {
@@ -16,6 +21,11 @@ export interface ClosetItem {
   processed_image_hash: string | null
   source: string | null
   added_at: string | null
+}
+
+/** Effective display name: stylist override wins over the scraped name. */
+export function displayName(item: Pick<ClosetItem, 'name' | 'name_override'>): string {
+  return (item.name_override?.trim() || item.name) ?? ''
 }
 
 export function resolveItemImage(item: ClosetItem): string | null {

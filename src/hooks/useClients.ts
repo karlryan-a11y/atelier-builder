@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 interface Client {
@@ -10,18 +10,19 @@ export function useClients() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('clients')
-        .select('id, name')
-        .order('name')
+  const refetch = useCallback(async () => {
+    const { data } = await supabase
+      .from('clients')
+      .select('id, name')
+      .order('name')
 
-      setClients(data ?? [])
-      setLoading(false)
-    }
-    load()
+    setClients(data ?? [])
+    setLoading(false)
   }, [])
 
-  return { clients, loading }
+  useEffect(() => {
+    refetch()
+  }, [refetch])
+
+  return { clients, loading, refetch }
 }

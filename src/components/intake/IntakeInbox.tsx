@@ -28,7 +28,7 @@ export function IntakeInbox() {
   const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
     // Default to In Progress if there are active batches
     const saved = localStorage.getItem('atelier_active_batch')
-    return saved ? 'in_progress' : 'qc_passed'
+    return saved ? 'in_progress' : 'pending_review'
   })
   const [activeBatchCount, setActiveBatchCount] = useState(0)
   const [bulkApproving, setBulkApproving] = useState(false)
@@ -39,11 +39,78 @@ export function IntakeInbox() {
   const { activeClient } = useClientStore()
   const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
-  const hookFilter = filter === 'in_progress' ? 'qc_passed' : filter
+  const hookFilter = filter === 'in_progress' ? 'pending_review' : filter
   const { items, loading, error, refresh, counts } = useIntakeItems(hookFilter, selectedClientId)
   const [showUpload, setShowUpload] = useState(false)
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
   const [_aiSpend, _setAiSpend] = useState<{ anthropic: number; openai: number; total: number } | null>(null)
+
+  // Multi-select for bulk approve/reject (check items as you review → act on all at once)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkActing, setBulkActing] = useState('')
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const handleBulkAction = async (action: 'approve' | 'reject') => {
+    const ids = [...selectedIds]
+    if (!ids.length || bulkActing) return
+    const fn = action === 'approve' ? 'intake-approve-item' : 'intake-reject-final'
+    const verb = action === 'approve' ? 'Approving' : 'Rejecting'
+    const BATCH = 10
+    let done = 0
+    for (let i = 0; i < ids.length; i += BATCH) {
+      setBulkActing(`${verb} ${done} of ${ids.length}...`)
+      const res = await Promise.allSettled(ids.slice(i, i + BATCH).map(id =>
+        fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: id }),
+        }).then(r => { if (!r.ok) throw new Error(); return r })))
+      done += res.filter(r => r.status === 'fulfilled').length
+    }
+    setSelectedIds(new Set()); setBulkActing(''); refresh()
+  }
+  const handleClearApproved = async () => {
+    if (!confirm('Clear all approved items from this tab? They stay in the collection — this just clears the list.')) return
+    await fetch(`${SUPABASE_URL}/functions/v1/intake-clear-approved`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(selectedClientId ? { client_id: selectedClientId } : {}),
+    })
+    refresh()
+  }
+  // Rejected fix loop: download the originals for ChatGPT, then upload the finished images back.
+  const handleDownloadRejected = async () => {
+    setBulkActing('Building zip...')
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-export-rejected`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedClientId ? { client_id: selectedClientId } : {}),
+      })
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Export failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'reprocess-for-chatgpt.zip'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) { alert(err instanceof Error ? err.message : 'Export failed') }
+    finally { setBulkActing('') }
+  }
+  const handleUploadReplace = async (files: FileList) => {
+    const arr = [...files]
+    let done = 0, matched = 0
+    for (const f of arr) {
+      const m = f.name.match(/(\d{1,4})/) // the number the stylist kept on the file
+      if (m) {
+        const form = new FormData()
+        form.append('photo', f)
+        form.append('export_number', String(parseInt(m[1], 10)))
+        if (selectedClientId) form.append('client_id', selectedClientId)
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-replace-rejected`, { method: 'POST', body: form })
+        if (resp.ok) matched++
+      }
+      done++
+      setBulkActing(`Uploading ${done} of ${arr.length}... (${matched} matched)`)
+    }
+    setBulkActing('')
+    alert(`${matched} of ${arr.length} matched and moved to Needs Review for final approval.`)
+    refresh()
+  }
 
   // Sync: if stylist switches client in the Builder, update the inbox filter
   useEffect(() => {
@@ -111,7 +178,6 @@ export function IntakeInbox() {
 
   const tabs = [
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
-    { key: 'qc_passed' as const, label: 'QC Passed', count: counts.qc_passed },
     { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
     { key: 'rejected_final' as const, label: 'Rejected', count: counts.rejected },
@@ -377,8 +443,51 @@ export function IntakeInbox() {
               </div>
             )}
 
+            {filter === 'approved' && items.length > 0 && (
+              <div className="flex justify-end mb-2">
+                <button onClick={handleClearApproved} className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline">
+                  Clear approved (stays in collection)
+                </button>
+              </div>
+            )}
+
+            {filter === 'rejected_final' && items.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-[#FAFAF8] border border-[#E8E4DF] rounded-sm">
+                <span className="text-[10px] tracking-[0.15em] uppercase text-[#888]">Fix in ChatGPT:</span>
+                <button onClick={handleDownloadRejected} disabled={!!bulkActing} className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50">
+                  <Download className="h-3.5 w-3.5" /> Download for ChatGPT
+                </button>
+                <label className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E4DF] text-[#888] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:border-[#ccc] hover:text-[#1A1A1A] cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" /> Upload to replace
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={e => { if (e.target.files) handleUploadReplace(e.target.files) }} />
+                </label>
+                {bulkActing && <span className="text-[11px] text-[#888]">{bulkActing}</span>}
+                <span className="text-[10px] text-[#aaa] ml-auto">Keep each file's number — finished images map back automatically</span>
+              </div>
+            )}
+
+            {selectedIds.size > 0 && (
+              <div className="sticky top-2 z-20 flex items-center gap-3 bg-[#1A1A1A] text-white rounded-sm px-4 py-2.5 shadow-lg">
+                <span className="text-[11px] tracking-[0.15em] uppercase">{selectedIds.size} selected</span>
+                <div className="flex-1" />
+                {bulkActing ? (
+                  <span className="text-[11px] text-white/70">{bulkActing}</span>
+                ) : (
+                  <>
+                    <button onClick={() => handleBulkAction('approve')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[#1A1A1A] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]">
+                      <Check className="h-3.5 w-3.5" /> Approve selected
+                    </button>
+                    <button onClick={() => handleBulkAction('reject')} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/30 text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-white/10">
+                      <X className="h-3.5 w-3.5" /> Reject selected
+                    </button>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-[10px] tracking-[0.15em] uppercase text-white/60 hover:text-white">Clear</button>
+                  </>
+                )}
+              </div>
+            )}
+
             {items.map(item => (
-              <InlineItemCard key={item.id} item={item} onAction={refresh} />
+              <InlineItemCard key={item.id} item={item} onAction={refresh} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} />
             ))}
           </div>
         )}
@@ -394,7 +503,7 @@ export function IntakeInbox() {
  * AI photo large on left, original + tag small below it,
  * metadata + actions on the right. One-tap approve.
  */
-function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => void }) {
+function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
@@ -445,6 +554,26 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
       alert(err instanceof Error ? err.message : 'Failed to restyle')
     } finally {
       setRestyling(false)
+    }
+  }
+
+  // Reject WITHOUT a redo → Rejected column (intake-reject-final). Reversible via restore=true.
+  const handleRejectFinal = async (restore = false) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-reject-final`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id, restore }),
+      })
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Action failed')
+      if (!restore) setActionResult('rejected')
+      onAction()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -617,11 +746,16 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
         <div className="flex-1 p-4 md:p-6 flex flex-col">
           {/* Client + Item header */}
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
-              <h3 className="text-lg font-serif text-[#1A1A1A] mt-0.5 leading-tight">
-                {editing ? name || 'Untitled Item' : item.extracted_name || 'Untitled Item'}
-              </h3>
+            <div className="flex items-start gap-3">
+              {onToggle && (item.status === 'pending_review' || item.status === 'qc_passed') && (
+                <input type="checkbox" checked={!!selected} onChange={onToggle} className="mt-1.5 h-4 w-4 rounded-sm border-[#ccc] accent-[#1A1A1A] cursor-pointer shrink-0" aria-label="Select item" />
+              )}
+              <div>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
+                <h3 className="text-lg font-serif text-[#1A1A1A] mt-0.5 leading-tight">
+                  {editing ? name || 'Untitled Item' : item.extracted_name || 'Untitled Item'}
+                </h3>
+              </div>
             </div>
             {(item.status === 'pending_review' || item.status === 'qc_passed') && !editing && (
               <button
@@ -633,6 +767,10 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
               </button>
             )}
           </div>
+
+          {(item.reprocess_attempts ?? 0) > 0 && (
+            <p className="text-[11px] text-[#b06a4a] font-medium -mt-2 mb-3">↩ Sent back {item.reprocess_attempts}× — rework or reject it</p>
+          )}
 
           {/* Metadata fields — compact */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
@@ -780,6 +918,14 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
                 disabled={submitting}
                 className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-50"
               >
+                <RefreshCw className="h-4 w-4" />
+                Send back to fix
+              </button>
+              <button
+                onClick={() => handleRejectFinal(false)}
+                disabled={submitting}
+                className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-50"
+              >
                 <X className="h-4 w-4" />
                 Reject
               </button>
@@ -801,9 +947,18 @@ function InlineItemCard({ item, onAction }: { item: IntakeItem; onAction: () => 
             </div>
           )}
           {(item.status === 'rejected' || item.status === 'rejected_final') && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 rounded-sm">
-              <X className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600">Rejected — auto-reprocess exhausted, needs a manual look</span>
+            <div className="flex items-center justify-between gap-2 p-3 bg-red-50 rounded-sm">
+              <div className="flex items-center gap-2">
+                <X className="h-4 w-4 text-red-500" />
+                <span className="text-sm text-red-600">Rejected</span>
+              </div>
+              <button
+                onClick={() => handleRejectFinal(true)}
+                disabled={submitting}
+                className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline disabled:opacity-50"
+              >
+                Restore to Needs Review
+              </button>
             </div>
           )}
         </div>
@@ -1172,10 +1327,17 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([])
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id ?? '')
   const [batchLabel, setBatchLabel] = useState('')
+  const [category, setCategory] = useState('clothing')
+  const isAccessory = ['handbag', 'shoes', 'jewelry', 'belts'].includes(category)
+  const categoryLabel = category.charAt(0).toUpperCase() + category.slice(1)
   const [files, setFiles] = useState<File[]>([])
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
   const [progress, setProgress] = useState('')
   const [progressPct, setProgressPct] = useState(0)
+  // When upload succeeds but finalize doesn't, the photos are stored under this batch and only
+  // the "start processing" signal is missing. We keep the id so the stylist can re-finalize the
+  // SAME batch instead of re-uploading (which would create a duplicate batch — no content dedup).
+  const [strandedBatchId, setStrandedBatchId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   // Google Drive source (mutually exclusive with local `files`)
@@ -1281,7 +1443,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   // We deliberately over-estimate: far better to under-promise than to have a stylist think
   // it's stuck. (Revisit if we add an in-flight marker to shorten the cron backstop windows.)
   const estimateTime = (photoCount: number) => {
-    const items = Math.ceil(photoCount / 2)
+    const items = (isAccessory ? photoCount : Math.ceil(photoCount / 2))
     const uploadSec = Math.ceil(photoCount * 2) // ~2s per photo upload (chunked by 2)
     const floorSec = 420                        // gpt-image-2 (~2× slower) + 180s cron claim/QC backstops
     const perItemSec = 22                       // conservative end-to-end per item on the slower model
@@ -1289,6 +1451,51 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     if (totalMin <= 5) return '~5 min'
     if (totalMin <= 60) return `~${totalMin} min`
     return `~${Math.floor(totalMin / 60)}h ${totalMin % 60}m`
+  }
+
+  // Re-tryable "commit" step. Every photo is already stored before this runs, so a transient
+  // network blip must NOT lose the batch — retry 3x w/ backoff. Returns the error string on
+  // failure (empty string on success) so callers can decide how to surface it.
+  const finalizeBatch = async (batchId: string): Promise<string> => {
+    let lastErr = ''
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt))
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-finalize-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch_id: batchId }),
+        })
+        if (resp.ok) return ''
+        const err = await resp.json().catch(() => ({ error: `Finalize failed (${resp.status})` }))
+        lastErr = err.error || `Finalize failed (${resp.status})`
+        // 4xx is a real rejection (e.g. batch already finalized) — don't keep hammering it.
+        if (resp.status >= 400 && resp.status < 500) return lastErr
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : 'network error'
+      }
+    }
+    return lastErr || 'Finalize failed'
+  }
+
+  // Resume a batch whose photos uploaded but whose finalize never landed (the stranded case).
+  // Re-finalizes the SAME batch — no re-upload, so no duplicate batch.
+  const resumeStrandedBatch = async () => {
+    if (!strandedBatchId) return
+    setStage('uploading')
+    setProgress('Resuming — starting processing...')
+    setProgressPct(45)
+    const err = await finalizeBatch(strandedBatchId)
+    if (err) {
+      setStage('error')
+      setProgress(`Still couldn't start processing (${err}). Your photos are safe — try again in a minute, or send this to Karl. [Batch: ${strandedBatchId.slice(0, 8)}]`)
+      return
+    }
+    setStrandedBatchId(null)
+    setStage('complete')
+    setProgress('Processing started! Watch the In Progress tab.')
+    setProgressPct(100)
+    setTimeout(() => { setStage('select'); setProgress(''); setProgressPct(0); onComplete() }, 5000)
   }
 
   const runPipeline = async () => {
@@ -1327,7 +1534,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       return ensureJpegFiles(chunk)
     }
 
-    const itemCount = Math.ceil(photoCount / 2)
+    const itemCount = (isAccessory ? photoCount : Math.ceil(photoCount / 2))
     const timeEst = estimateTime(photoCount)
 
     setStage('uploading')
@@ -1347,6 +1554,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         if (batchId) formData.append('batch_id', batchId)
         formData.append('client_id', selectedClientId)
         if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
+        if (!batchId) formData.append('batch_category', category)
         chunk.forEach(f => formData.append('photos', f))
 
         // Retry each chunk up to 3x. Once we have a batchId, retries reuse it.
@@ -1390,19 +1598,25 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         )
       }
 
-      // Finalize — triggers classify + process
+      // Finalize — triggers classify + process. This is the "commit" step: every photo is
+      // already stored at this point, so a transient network blip here must NOT torch the batch.
+      // Retry the same way upload chunks do (3x w/ backoff). If it STILL fails, the photos are
+      // safe in 'uploading' state — surface a recoverable message instead of a total-loss error.
       setProgress(`Classifying ${photoCount} photos...`)
       setProgressPct(45)
 
-      const finalizeResp = await fetch(`${SUPABASE_URL}/functions/v1/intake-finalize-batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_id: batchId }),
-      })
-
-      if (!finalizeResp.ok) {
-        const err = await finalizeResp.json().catch(() => ({ error: 'Finalize failed' }))
-        throw new Error(err.error || 'Finalize failed')
+      const finalizeErr = await finalizeBatch(batchId)
+      if (finalizeErr) {
+        // Photos are stored under this batch; only the "start processing" signal didn't land.
+        // Stash the id so the error screen offers a one-tap RESUME (re-finalize, no re-upload).
+        setStrandedBatchId(batchId)
+        setStage('error')
+        setProgress(
+          `All ${uploadedCount} photos uploaded OK, but couldn't start processing (${finalizeErr}). ` +
+          `Your photos are safe — tap "Resume processing" below (this won't re-upload them). ` +
+          `[Batch: ${batchId.slice(0, 8)}]`,
+        )
+        return
       }
 
       // Save batch to localStorage for the nav badge indicator
@@ -1484,6 +1698,32 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   )}
                 </div>
               )}
+            </div>
+            <div>
+              <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
+                Category <span className="normal-case tracking-normal text-[#bbb]">· one category per upload</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {([['clothing', 'Clothing'], ['handbag', 'Handbag'], ['shoes', 'Shoes'], ['jewelry', 'Jewelry'], ['belts', 'Belts']] as const).map(([val, lbl]) => (
+                  <button key={val} type="button" onClick={() => setCategory(val)}
+                    className={`px-3 py-1.5 text-[10px] tracking-[0.1em] uppercase rounded-sm border ${category === val ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'bg-white text-[#888] border-[#E8E4DF] hover:border-[#ccc]'}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 rounded-sm border border-[#E8E4DF] bg-[#FAF8F6] px-3 py-2.5">
+                <p className="text-[12px] text-[#1A1A1A] font-medium flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-[#1A1A1A] text-white text-[9px] font-semibold">
+                    {isAccessory ? '1' : '2'}
+                  </span>
+                  {isAccessory
+                    ? `${categoryLabel}: upload 1 photo per item`
+                    : 'Clothing: upload 2 photos per item — the garment first, then its tag'}
+                </p>
+                <p className="text-[10.5px] leading-snug text-[#888] mt-1.5">
+                  Every photo in this upload is treated as <span className="font-medium text-[#666]">{categoryLabel}</span>. Upload <span className="font-medium text-[#666]">one category at a time</span> — don't mix (e.g. shoes and bags) in the same batch, or items will be paired and styled incorrectly.
+                </p>
+              </div>
             </div>
             <div>
               <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">
@@ -1629,7 +1869,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   <div className="min-w-0">
                     <p className="text-sm text-[#1A1A1A] font-medium truncate">{driveFolder?.name}</p>
                     <p className="text-[10px] text-[#888]">
-                      {driveFiles.length} photos · {Math.ceil(driveFiles.length / 2)} items from Google Drive
+                      {driveFiles.length} photos · {(isAccessory ? driveFiles.length : Math.ceil(driveFiles.length / 2))} items from Google Drive
                       {driveFiles.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
                     </p>
                   </div>
@@ -1650,7 +1890,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
               >
                 <Upload className="h-3.5 w-3.5" />
-                Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(driveFiles.length / 2)} Items`} · {estimateTime(driveFiles.length)}
+                Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${(isAccessory ? driveFiles.length : Math.ceil(driveFiles.length / 2))} Items`} · {estimateTime(driveFiles.length)}
               </button>
             </div>
           ) : files.length === 0 ? (
@@ -1688,7 +1928,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               </div>
               <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 <p className="text-[10px] text-[#888] text-center md:text-left">
-                  {files.length} photos · {Math.ceil(files.length / 2)} items
+                  {files.length} photos · {(isAccessory ? files.length : Math.ceil(files.length / 2))} items
                   {files.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
                 </p>
                 <button
@@ -1697,7 +1937,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-40 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${Math.ceil(files.length / 2)} Items`} · {estimateTime(files.length)}
+                  Digitize {batchLabel.trim() ? `"${batchLabel.trim()}"` : `${(isAccessory ? files.length : Math.ceil(files.length / 2))} Items`} · {estimateTime(files.length)}
                 </button>
               </div>
             </>
@@ -1729,12 +1969,31 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       {stage === 'error' && (
         <div className="max-w-xl mx-auto text-center py-4">
           <p className="text-sm text-red-600 mb-2">{progress}</p>
-          <button
-            onClick={() => { setStage('select'); setFiles([]); clearDrive() }}
-            className="text-[10px] tracking-[0.15em] uppercase text-[#1A1A1A] underline"
-          >
-            Try again
-          </button>
+          {strandedBatchId ? (
+            // Photos already uploaded — the safe action is RESUME (re-finalize), not a fresh
+            // upload that would duplicate the batch. Keep a discard option for the edge case.
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={resumeStrandedBatch}
+                className="text-[10px] tracking-[0.15em] uppercase text-white bg-[#1A1A1A] px-4 py-2 rounded-sm"
+              >
+                Resume processing
+              </button>
+              <button
+                onClick={() => { setStrandedBatchId(null); setStage('select'); setFiles([]); clearDrive() }}
+                className="text-[10px] tracking-[0.15em] uppercase text-[#888] underline"
+              >
+                Discard &amp; start over
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setStage('select'); setFiles([]); clearDrive() }}
+              className="text-[10px] tracking-[0.15em] uppercase text-[#1A1A1A] underline"
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
     </div>

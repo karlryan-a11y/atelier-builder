@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { X, Save } from 'lucide-react'
+import { X, Save, Plus } from 'lucide-react'
+import { useClientStore } from '@/stores/clientStore'
+import { useLookCategoryVocab } from '@/hooks/useLookCategories'
 
 interface SaveLookDialogProps {
   initialName: string
@@ -10,16 +12,31 @@ interface SaveLookDialogProps {
   onClose: () => void
 }
 
-const SEASON_TAGS = ['Spring', 'Summer', 'Fall', 'Winter', 'Resort', 'Holiday']
-const OCCASION_TAGS = ['Work', 'Casual', 'Date Night', 'Event', 'Travel', 'Vacation', 'Brunch', 'Cocktail']
-
 export function SaveLookDialog({ initialName, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
   const [name, setName] = useState(initialName)
   const [notes, setNotes] = useState(initialNotes)
   const [tags, setTags] = useState<string[]>(initialTags)
 
+  const activeClient = useClientStore((s) => s.activeClient)
+  const { categories, createCategory } = useLookCategoryVocab(activeClient?.id ?? null)
+  const [sessionNew, setSessionNew] = useState<string[]>([])
+  const [newCat, setNewCat] = useState('')
+  // Categories to show as pills: this client's persisted taxonomy (look_categories) +
+  // any just-created this session + anything already selected on the look.
+  const shownCats = [...new Set([...categories.map((c) => c.label), ...sessionNew, ...tags])]
+
   const toggleTag = (tag: string) => {
     setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])
+  }
+
+  const addNewCat = async () => {
+    const n = newCat.trim()
+    if (!n) return
+    if (!shownCats.some((c) => c.toLowerCase() === n.toLowerCase())) setSessionNew((p) => [...p, n])
+    if (!tags.some((t) => t.toLowerCase() === n.toLowerCase())) setTags((p) => [...p, n])
+    setNewCat('')
+    // Persist to the client's taxonomy so it shows up in the Categorize tool too.
+    await createCategory(n)
   }
 
   return (
@@ -46,13 +63,13 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
           </div>
 
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Season</label>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Categories</label>
             <div className="flex flex-wrap gap-1.5">
-              {SEASON_TAGS.map((tag) => (
+              {shownCats.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
-                  className={`text-[9px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border transition-colors ${
+                  className={`text-[9px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border transition-colors capitalize ${
                     tags.includes(tag)
                       ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
                       : 'border-border text-text-muted hover:border-blush'
@@ -61,25 +78,27 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
                   {tag}
                 </button>
               ))}
+              {shownCats.length === 0 && (
+                <span className="text-[10px] text-text-muted/50">Loading categories…</span>
+              )}
             </div>
-          </div>
-
-          <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Occasion</label>
-            <div className="flex flex-wrap gap-1.5">
-              {OCCASION_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`text-[9px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border transition-colors ${
-                    tags.includes(tag)
-                      ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
-                      : 'border-border text-text-muted hover:border-blush'
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 mt-2">
+              <input
+                type="text"
+                value={newCat}
+                onChange={(e) => setNewCat(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNewCat() } }}
+                placeholder="New category"
+                className="flex-1 bg-tile rounded-sm px-2.5 py-1.5 text-[12px] placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
+              />
+              <button
+                type="button"
+                onClick={addNewCat}
+                className="flex-none w-8 h-8 flex items-center justify-center rounded-sm bg-[#1A1A1A] text-white hover:bg-[#333] transition-colors"
+                aria-label="Create category"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 

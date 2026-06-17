@@ -41,6 +41,12 @@ export interface TextNode {
   y: number
   rotation: number
   z_index: number
+  /** Optional formatting — all default to off/left for backward compatibility. */
+  bold?: boolean
+  underline?: boolean
+  align?: 'left' | 'center' | 'right'
+  /** Fixed text-box width; when set, Konva wraps text to it (enables stacked/centered lines). */
+  width?: number
 }
 
 export interface StickerNode {

@@ -10,9 +10,12 @@ import { AdminPanel } from '@/components/admin/AdminPanel'
 import { SearchDebug } from '@/components/admin/SearchDebug'
 import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { ShopView } from '@/components/shopping/ShopView'
+import { CategorizePanel } from '@/components/categorize/CategorizePanel'
 import { FeedbackButton } from '@/components/feedback/FeedbackButton'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
+import { useClientStore } from '@/stores/clientStore'
+import { useDraftCount } from '@/hooks/useLookCategories'
 import { resumeSession } from '@/lib/shopping-resume'
 import type { ClosetItemNode } from '@/types/canvas'
 
@@ -20,6 +23,9 @@ function App() {
   const { user, loading, signOut } = useAuth()
   const [showAdmin, setShowAdmin] = useState(false)
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
+  const [styleTab, setStyleTab] = useState<'canvas' | 'categorize'>('canvas')
+  const activeClient = useClientStore((s) => s.activeClient)
+  const draftCount = useDraftCount(activeClient?.id ?? null, styleTab)
   const { addNode, state } = useCanvasStore()
   const activeView = useViewStore((s) => s.activeView)
   const setActiveView = useViewStore((s) => s.setActiveView)
@@ -113,10 +119,38 @@ function App() {
         {activeView === 'digitize' ? (
           <IntakeInbox />
         ) : activeView === 'style' ? (
-          <div className="flex flex-1 overflow-hidden">
-            <ClosetPanel />
-            <LookCanvas />
-            <ChatPanel />
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Sub-tabs within Style: the styling canvas + the Categorize board */}
+            <div className="flex items-center gap-1 px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
+              {(['canvas', 'categorize'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setStyleTab(t)}
+                  className={`relative px-3 py-1.5 text-[12px] tracking-[0.18em] uppercase transition-colors ${
+                    styleTab === t ? 'text-[#1A1A1A]' : 'text-[#888] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  {t}
+                  {t === 'categorize' && draftCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[9px] font-medium align-middle">
+                      {draftCount}
+                    </span>
+                  )}
+                  {styleTab === t && (
+                    <span className="absolute left-3 right-3 bottom-0 h-[1.5px] bg-[#1A1A1A]" />
+                  )}
+                </button>
+              ))}
+            </div>
+            {styleTab === 'canvas' ? (
+              <div className="flex flex-1 overflow-hidden">
+                <ClosetPanel />
+                <LookCanvas />
+                <ChatPanel />
+              </div>
+            ) : (
+              <CategorizePanel />
+            )}
           </div>
         ) : (
           <ShopView />

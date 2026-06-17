@@ -6,6 +6,7 @@ export function useClosetItems(clientId: string | null) {
   const [items, setItems] = useState<ClosetItem[]>([])
   const [itemTagIds, setItemTagIds] = useState<Map<string, string[]>>(new Map())
   const [loading, setLoading] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
     if (!clientId) {
@@ -20,7 +21,7 @@ export function useClosetItems(clientId: string | null) {
     async function load() {
       const { data } = await supabase
         .from('closet_items')
-        .select('id, client_id, name, brand, content_tag_ids, is_deleted, raw, primary_image_hash, processed_image_hash, source, added_at')
+        .select('id, client_id, name, name_override, style_note, brand, color, content_tag_ids, is_deleted, raw, primary_image_hash, processed_image_hash, source, added_at')
         .eq('client_id', clientId)
         .eq('is_deleted', false)
         .order('added_at', { ascending: false, nullsFirst: false })
@@ -74,7 +75,7 @@ export function useClosetItems(clientId: string | null) {
 
     load()
     return () => { cancelled = true }
-  }, [clientId])
+  }, [clientId, reloadTick])
 
-  return { items, itemTagIds, loading }
+  return { items, itemTagIds, loading, refetch: () => setReloadTick((t) => t + 1) }
 }

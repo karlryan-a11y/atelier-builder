@@ -102,6 +102,9 @@ export function IntakeItemCard({ item, onClick }: IntakeItemCardProps) {
           <span className="text-[10px] text-[#888]">{item.extracted_category || '—'}</span>
         </div>
         <p className="text-[10px] text-[#aaa] mt-1.5">{item.client_name}</p>
+        {(item.reprocess_attempts ?? 0) > 0 && (
+          <p className="text-[10px] text-[#b06a4a] mt-1 font-medium">↩ Sent back {item.reprocess_attempts}×</p>
+        )}
       </div>
     </button>
   )

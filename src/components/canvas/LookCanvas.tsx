@@ -100,11 +100,23 @@ interface TextNodeProps {
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
   onDragEnd: (x: number, y: number) => void
   onDblClick: () => void
+  onResize: (width: number) => void
 }
 
-function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick }: TextNodeProps) {
+function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick, onResize }: TextNodeProps) {
   const textRef = useRef<Konva.Text>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
+
+  // Side handles resize the text BOX width (not font scale): convert any scaleX
+  // the Transformer applied into a concrete width so the text wraps to stacked
+  // lines. Live during drag (no store churn), then persist on release.
+  const applyWidth = (persist: boolean) => {
+    const n = textRef.current
+    if (!n) return
+    const w = Math.max(20, n.width() * n.scaleX())
+    n.setAttrs({ width: w, scaleX: 1 })
+    if (persist) onResize(w)
+  }
 
   return (
     <>
@@ -116,6 +128,10 @@ function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick }: 
         y={node.y}
         fontFamily={node.font_family}
         fontSize={node.font_size}
+        fontStyle={node.bold ? 'bold' : 'normal'}
+        textDecoration={node.underline ? 'underline' : ''}
+        align={node.align ?? 'left'}
+        {...(node.width ? { width: node.width } : {})}
         fill={node.fill}
         rotation={node.rotation}
         draggable
@@ -124,6 +140,8 @@ function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick }: 
         onDblClick={onDblClick}
         onDblTap={onDblClick}
         onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
+        onTransform={() => applyWidth(false)}
+        onTransformEnd={() => applyWidth(true)}
       />
       {isSelected && (
         <Transformer
@@ -211,6 +229,19 @@ export function LookCanvas() {
     return () => unregisterCanvasExport()
   }, [store.state.nodes])
 
+  // Web fonts (Playfair Display SC, Playfair, Great Vibes) must be loaded before
+  // Konva measures/draws text, or it renders with a fallback until the next redraw.
+  useEffect(() => {
+    let cancelled = false
+    const families = ["'Playfair Display SC'", "'Playfair Display'", "'Great Vibes'"]
+    const docFonts = (document as Document & { fonts?: FontFaceSet }).fonts
+    if (!docFonts) return
+    Promise.all(families.map((f) => docFonts.load(`16px ${f}`).catch(() => undefined)))
+      .then(() => docFonts.ready)
+      .then(() => { if (!cancelled) stageRef.current?.batchDraw() })
+    return () => { cancelled = true }
+  }, [])
+
   const [showGrid, setShowGrid] = useState(false)
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const selectionStart = useRef<{ x: number; y: number } | null>(null)
@@ -260,6 +291,16 @@ export function LookCanvas() {
       if (mod && e.key === 'd' && ids.length > 0) {
         e.preventDefault()
         useCanvasStore.getState().duplicateNodes(ids)
+        return
+      }
+      if (mod && e.key === 'c' && ids.length > 0) {
+        e.preventDefault()
+        useCanvasStore.getState().copyNodes(ids)
+        return
+      }
+      if (mod && e.key === 'v') {
+        e.preventDefault()
+        useCanvasStore.getState().pasteNodes()
         return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && ids.length > 0) {
@@ -409,12 +450,12 @@ export function LookCanvas() {
     const step = 100
     for (let i = step; i < CANVAS_W; i += step) {
       lines.push(
-        <Line key={`gv${i}`} points={[i, 0, i, CANVAS_H]} stroke="#E8E4DF" strokeWidth={0.5} listening={false} />
+        <Line key={`gv${i}`} points={[i, 0, i, CANVAS_H]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
       )
     }
     for (let i = step; i < CANVAS_H; i += step) {
       lines.push(
-        <Line key={`gh${i}`} points={[0, i, CANVAS_W, i]} stroke="#E8E4DF" strokeWidth={0.5} listening={false} />
+        <Line key={`gh${i}`} points={[0, i, CANVAS_W, i]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
       )
     }
     return lines
@@ -512,6 +553,7 @@ export function LookCanvas() {
                     onSelect={(e) => handleNodeSelect(node.id, e)}
                     onDragEnd={(x, y) => updateNode(node.id, { x, y })}
                     onDblClick={() => handleTextDblClick(tNode)}
+                    onResize={(width) => updateNode(node.id, { width })}
                   />
                 )
               }

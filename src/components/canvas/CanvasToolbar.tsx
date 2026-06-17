@@ -4,7 +4,7 @@ import {
   Copy, ChevronUp, ChevronDown, Type, Undo2, Redo2,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
-  Sparkles, FilePlus,
+  Sparkles, FilePlus, Bold, Underline, AlignCenter,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { styleCanvas } from '@/lib/style'
@@ -12,6 +12,8 @@ import type { ClosetItemNode, TextNode } from '@/types/canvas'
 
 const FONT_FAMILIES = [
   { value: 'Helvetica Neue, Helvetica, Arial, sans-serif', label: 'Sans Serif' },
+  { value: "'Playfair Display SC', serif", label: 'Playfair SC' },
+  { value: "'Playfair Display', serif", label: 'Playfair' },
   { value: 'Georgia, Times New Roman, serif', label: 'Serif' },
   { value: "'Great Vibes', cursive", label: 'Handwriting' },
   { value: 'Courier New, monospace', label: 'Mono' },
@@ -174,6 +176,29 @@ export function CanvasToolbar() {
                 />
               ))}
             </div>
+
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <button
+              onClick={() => updateNode(tn.id, { bold: !tn.bold })}
+              className={`p-1.5 rounded-sm transition-colors ${tn.bold ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
+              title="Bold"
+            >
+              <Bold className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => updateNode(tn.id, { underline: !tn.underline })}
+              className={`p-1.5 rounded-sm transition-colors ${tn.underline ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
+              title="Underline"
+            >
+              <Underline className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => updateNode(tn.id, { align: tn.align === 'center' ? 'left' : 'center' })}
+              className={`p-1.5 rounded-sm transition-colors ${tn.align === 'center' ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
+              title="Center"
+            >
+              <AlignCenter className="h-3.5 w-3.5" />
+            </button>
           </>
         )
       })()}

@@ -4,8 +4,10 @@ import { useClients } from '@/hooks/useClients'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { loadClientData } from '@/lib/client-data'
 
+const TIERS = ['A-la-carte', 'Signature', 'White Glove', 'Elève']
+
 export function ClientSelector() {
-  const { clients, loading } = useClients()
+  const { clients, loading, refetch } = useClients()
   const {
     session,
     setProfile,
@@ -18,7 +20,47 @@ export function ClientSelector() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newTier, setNewTier] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  async function createClient() {
+    const name = newName.trim()
+    if (!name || creating) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const resp = await fetch('/api/create-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          email: newEmail.trim() || undefined,
+          phone: newPhone.trim() || undefined,
+          membership_tier: newTier || undefined,
+        }),
+      })
+      const data = await resp.json()
+      if (!resp.ok || !data?.client?.id) {
+        throw new Error(data?.error || 'Could not create client')
+      }
+      // The client now exists in gp_clients — treat it as a real, existing client.
+      setShowNew(false)
+      setNewName('')
+      setNewEmail('')
+      setNewPhone('')
+      setNewTier('')
+      refetch()
+      setProfile({ client_id: data.client.id, client_name: data.client.name, is_new_client: false })
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Could not create client')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!search.trim()) return clients.slice(0, 20)
@@ -80,39 +122,68 @@ export function ClientSelector() {
   }
 
   if (showNew) {
+    const inputCls =
+      'w-full bg-transparent border-0 border-b border-wsg-border text-sm pb-2 focus:outline-none focus:border-text transition-colors placeholder:text-text-muted/50'
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Client name"
-            autoFocus
-            className="flex-1 bg-transparent border-0 border-b border-wsg-border text-sm pb-2 focus:outline-none focus:border-text transition-colors placeholder:text-text-muted/50"
-          />
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && createClient()}
+          placeholder="Client name (required)"
+          autoFocus
+          className={inputCls}
+        />
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="Email (optional)"
+          className={inputCls}
+        />
+        <input
+          type="tel"
+          value={newPhone}
+          onChange={(e) => setNewPhone(e.target.value)}
+          placeholder="Phone (optional)"
+          className={inputCls}
+        />
+        <select
+          value={newTier}
+          onChange={(e) => setNewTier(e.target.value)}
+          className={inputCls + ' text-text-muted'}
+        >
+          <option value="">Membership tier (assign later in dashboard)</option>
+          {TIERS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+
+        {createError && <p className="text-[10px] text-red-600">{createError}</p>}
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={createClient}
+            disabled={!newName.trim() || creating}
+            className="px-3 py-1.5 bg-text text-white text-[10px] tracking-[0.15em] uppercase disabled:opacity-30 flex items-center gap-2"
+          >
+            {creating && <Loader2 className="h-3 w-3 animate-spin" />}
+            {creating ? 'Creating…' : 'Create client'}
+          </button>
           <button
             onClick={() => {
-              if (newName.trim()) {
-                setProfile({
-                  client_id: `new_${Date.now()}`,
-                  client_name: newName.trim(),
-                  is_new_client: true,
-                })
-              }
+              setShowNew(false)
+              setCreateError(null)
             }}
-            disabled={!newName.trim()}
-            className="px-3 py-1.5 bg-text text-white text-[10px] tracking-[0.15em] uppercase disabled:opacity-30"
+            disabled={creating}
+            className="text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text disabled:opacity-30"
           >
-            Add
+            Back to search
           </button>
         </div>
-        <button
-          onClick={() => setShowNew(false)}
-          className="text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text"
-        >
-          Back to search
-        </button>
       </div>
     )
   }

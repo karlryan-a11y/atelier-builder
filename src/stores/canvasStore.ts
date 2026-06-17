@@ -49,6 +49,10 @@ type ExportCanvasFn = (opts?: { pixelRatio?: number; padding?: number }) => stri
 
 let _registeredExportFn: ExportCanvasFn | null = null
 
+// In-memory copy/paste clipboard (not persisted — lives for the session). Holds
+// detached snapshots so paste still works after the originals are deleted.
+let _clipboard: { nodes: CanvasNode[]; urls: Record<string, string> } | null = null
+
 /** Called by LookCanvas on mount to register its export function */
 export function registerCanvasExport(fn: ExportCanvasFn) {
   _registeredExportFn = fn
@@ -77,6 +81,8 @@ interface CanvasStoreActions {
   setSelectedNodeIds: (ids: string[]) => void
   toggleNodeSelection: (id: string) => void
   duplicateNodes: (ids: string[]) => void
+  copyNodes: (ids: string[]) => void
+  pasteNodes: () => void
   moveLayer: (ids: string[], direction: 'up' | 'down') => void
   alignNodes: (ids: string[], edge: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
   distributeNodes: (ids: string[], axis: 'horizontal' | 'vertical') => void
@@ -208,6 +214,50 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       newIds.push(newId)
       if (imageUrls[id]) newUrls[newId] = imageUrls[id]
     }
+
+    const updated = { ...current, nodes: [...current.nodes, ...newNodes] }
+    set({
+      past: pushHistory(past, current),
+      future: [],
+      state: updated,
+      imageUrls: newUrls,
+      selectedNodeIds: newIds,
+      isDirty: true,
+    })
+    saveDraft(updated)
+    saveImageUrls(newUrls)
+  },
+
+  copyNodes: (ids) => {
+    const { state: current, imageUrls } = get()
+    const nodes = current.nodes.filter((n) => ids.includes(n.id))
+    if (nodes.length === 0) { _clipboard = null; return }
+    const urls: Record<string, string> = {}
+    for (const n of nodes) if (imageUrls[n.id]) urls[n.id] = imageUrls[n.id]
+    // Detached deep copy so edits/deletes to the originals don't mutate the clipboard.
+    _clipboard = { nodes: JSON.parse(JSON.stringify(nodes)), urls: { ...urls } }
+  },
+
+  pasteNodes: () => {
+    if (!_clipboard || _clipboard.nodes.length === 0) return
+    const { state: current, past, imageUrls } = get()
+    const newNodes: CanvasNode[] = []
+    const newUrls = { ...imageUrls }
+    const newIds: string[] = []
+
+    _clipboard.nodes.forEach((node, idx) => {
+      const newId = `${node.type.slice(0, 2)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${idx}`
+      const clone = {
+        ...node,
+        id: newId,
+        x: node.x + 30,
+        y: node.y + 30,
+        z_index: current.nodes.length + newNodes.length,
+      } as CanvasNode
+      newNodes.push(clone)
+      newIds.push(newId)
+      if (_clipboard!.urls[node.id]) newUrls[newId] = _clipboard!.urls[node.id]
+    })
 
     const updated = { ...current, nodes: [...current.nodes, ...newNodes] }
     set({

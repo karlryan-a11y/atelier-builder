@@ -1,20 +1,26 @@
 import { useState, useMemo } from 'react'
-import { Search, ChevronDown } from 'lucide-react'
+import { Search, ChevronDown, Pencil, StickyNote } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useContentTags } from '@/hooks/useContentTags'
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { resolveItemImage } from '@/lib/images'
+import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
+import { supabase } from '@/lib/supabase'
 import { useDraggable } from '@dnd-kit/core'
 import type { ClosetItemNode } from '@/types/canvas'
+import { EditItemDialog } from './EditItemDialog'
 
 function DraggableItem({
   item,
   onAdd,
+  onEdit,
+  hasNote,
 }: {
-  item: { id: string; name: string; brand: string; imageUrl: string | null }
+  item: { id: string; name: string; brand: string; color: string | null; imageUrl: string | null }
   onAdd: () => void
+  onEdit: () => void
+  hasNote: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
@@ -42,7 +48,24 @@ function DraggableItem({
         }
       }}
     >
-      <div className="aspect-[3/4] bg-tile rounded-sm overflow-hidden mb-1.5 flex items-center justify-center">
+      <div className="relative aspect-[3/4] bg-tile rounded-sm overflow-hidden mb-1.5 flex items-center justify-center">
+        <button
+          type="button"
+          title="Edit item"
+          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-1 right-1 z-10 p-1 rounded-sm bg-white/90 text-text-muted opacity-0 group-hover:opacity-100 hover:text-text transition-opacity shadow-sm"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        {hasNote && (
+          <div
+            title="Has a styling note"
+            className="absolute top-1 left-1 z-10 h-4 w-4 rounded-full bg-blush/90 flex items-center justify-center shadow-sm"
+          >
+            <StickyNote className="h-2.5 w-2.5 text-text" />
+          </div>
+        )}
         {item.imageUrl ? (
           <img
             src={item.imageUrl}
@@ -58,7 +81,10 @@ function DraggableItem({
         )}
       </div>
       <p className="text-[11px] font-medium text-text truncate">{item.name}</p>
-      <p className="text-[10px] text-text-muted truncate">{item.brand}</p>
+      <p className="text-[10px] text-text-muted truncate">
+        {item.brand}
+        {item.color ? <span className="text-text-muted/60">{item.brand ? ' · ' : ''}{item.color}</span> : null}
+      </p>
     </div>
   )
 }
@@ -66,13 +92,31 @@ function DraggableItem({
 export function ClosetPanel() {
   const { clients } = useClients()
   const { activeClient, setActiveClient } = useClientStore()
-  const { items, itemTagIds, loading } = useClosetItems(activeClient?.id ?? null)
+  const { items, itemTagIds, loading, refetch } = useClosetItems(activeClient?.id ?? null)
   const { categories, tags } = useContentTags()
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
-  const [activeTagId, setActiveTagId] = useState<string | null>(null)
+  const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set())
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
+  const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
+  const [savingItem, setSavingItem] = useState(false)
+
+  async function handleSaveItem(data: { name_override: string | null; color: string | null; style_note: string | null }) {
+    if (!editingItem) return
+    setSavingItem(true)
+    const { error } = await supabase
+      .from('gp_closet_items')
+      .update({ name_override: data.name_override, color: data.color, style_note: data.style_note })
+      .eq('id', editingItem.id)
+    setSavingItem(false)
+    if (error) {
+      console.error('Failed to save item edits:', error)
+      return
+    }
+    setEditingItem(null)
+    refetch()
+  }
 
   const usedTagIds = useMemo(() => {
     const ids = new Set<string>()
@@ -81,6 +125,23 @@ export function ClosetPanel() {
     }
     return ids
   }, [itemTagIds])
+
+  // How many of this client's items carry each tag — shown as a count on the chip.
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const tagIds of itemTagIds.values()) {
+      for (const tid of tagIds) counts.set(tid, (counts.get(tid) ?? 0) + 1)
+    }
+    return counts
+  }, [itemTagIds])
+
+  function toggleTag(id: string) {
+    setActiveTagIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const visibleCategories = useMemo(() => {
     return categories.filter((c) => c.client_visible)
@@ -102,14 +163,21 @@ export function ClosetPanel() {
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(
-        (i) => i.name?.toLowerCase().includes(q) || i.brand?.toLowerCase().includes(q)
+        (i) =>
+          displayName(i).toLowerCase().includes(q) ||
+          i.name?.toLowerCase().includes(q) ||
+          i.brand?.toLowerCase().includes(q) ||
+          i.color?.toLowerCase().includes(q)
       )
     }
-    if (activeTagId) {
-      result = result.filter((i) => (itemTagIds.get(i.id) ?? []).includes(activeTagId))
+    if (activeTagIds.size > 0) {
+      // Multi-select unions: an item shows if it carries ANY selected tag.
+      result = result.filter((i) =>
+        (itemTagIds.get(i.id) ?? []).some((tid) => activeTagIds.has(tid))
+      )
     }
     return result
-  }, [items, itemTagIds, search, activeTagId])
+  }, [items, itemTagIds, search, activeTagIds])
 
   function addItemToCanvas(itemId: string, imageUrl: string | null) {
     const node: ClosetItemNode = {
@@ -170,7 +238,7 @@ export function ClosetPanel() {
                       setClientPickerOpen(false)
                       setClientSearch('')
                       setSearch('')
-                      setActiveTagId(null)
+                      setActiveTagIds(new Set())
                     }}
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-tile transition-colors ${
                       activeClient?.id === c.id ? 'bg-tile font-medium' : ''
@@ -204,9 +272,9 @@ export function ClosetPanel() {
           {tagsByCategory.size > 0 && (
             <div className="px-3 py-2 border-b border-border max-h-40 overflow-y-auto space-y-1.5">
               <button
-                onClick={() => setActiveTagId(null)}
+                onClick={() => setActiveTagIds(new Set())}
                 className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
-                  !activeTagId
+                  activeTagIds.size === 0
                     ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
                     : 'border-border text-text-muted hover:border-blush'
                 }`}
@@ -219,19 +287,23 @@ export function ClosetPanel() {
                   <div key={cat.id}>
                     <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">{cat.name}</p>
                     <div className="flex flex-wrap gap-1">
-                      {tagsByCategory.get(cat.id)!.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setActiveTagId(activeTagId === t.id ? null : t.id)}
-                          className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
-                            activeTagId === t.id
-                              ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
-                              : 'border-border text-text-muted hover:border-blush'
-                          }`}
-                        >
-                          {t.display_name}
-                        </button>
-                      ))}
+                      {tagsByCategory.get(cat.id)!.map((t) => {
+                        const on = activeTagIds.has(t.id)
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => toggleTag(t.id)}
+                            className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
+                              on
+                                ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
+                                : 'border-border text-text-muted hover:border-blush'
+                            }`}
+                          >
+                            {t.display_name}
+                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{tagCounts.get(t.id) ?? 0}</span>
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -265,11 +337,14 @@ export function ClosetPanel() {
                       key={item.id}
                       item={{
                         id: item.id,
-                        name: item.name,
+                        name: displayName(item),
                         brand: item.brand,
+                        color: item.color,
                         imageUrl,
                       }}
+                      hasNote={!!item.style_note?.trim()}
                       onAdd={() => addItemToCanvas(item.id, imageUrl)}
+                      onEdit={() => setEditingItem(item)}
                     />
                   )
                 })}
@@ -290,6 +365,15 @@ export function ClosetPanel() {
             Select a client to browse their collection
           </p>
         </div>
+      )}
+
+      {editingItem && (
+        <EditItemDialog
+          item={editingItem}
+          saving={savingItem}
+          onSave={handleSaveItem}
+          onClose={() => setEditingItem(null)}
+        />
       )}
     </div>
   )
