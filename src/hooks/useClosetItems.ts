@@ -6,6 +6,7 @@ export function useClosetItems(clientId: string | null) {
   const [items, setItems] = useState<ClosetItem[]>([])
   const [itemTagIds, setItemTagIds] = useState<Map<string, string[]>>(new Map())
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
@@ -17,16 +18,31 @@ export function useClosetItems(clientId: string | null) {
 
     let cancelled = false
     setLoading(true)
+    setError(null)
 
     async function load() {
-      const { data } = await supabase
-        .from('closet_items')
-        .select('id, client_id, name, name_override, style_note, brand, color, content_tag_ids, is_deleted, raw, primary_image_hash, processed_image_hash, source, added_at')
+      const { data, error: queryError } = await supabase
+        // Read the base table directly (not the `closet_items` view) so the new
+        // override columns are available without depending on the view's frozen
+        // column list. SELECT RLS on gp_closet_items is open (same as the view).
+        .from('gp_closet_items')
+        .select('id, client_id, name, name_override, style_note, category, custom_categories, category_suggested, brand, color, content_tag_ids, is_deleted, raw, primary_image_hash, processed_image_hash, source, added_at')
         .eq('client_id', clientId)
         .eq('is_deleted', false)
         .order('added_at', { ascending: false, nullsFirst: false })
 
       if (cancelled) return
+
+      // Never collapse a failed query into an empty list — that masked the
+      // 2026-06-24 outage (a missing column read as "client has no items").
+      // Surface the error so the UI shows a broken state, not a false-empty one.
+      if (queryError) {
+        console.error('useClosetItems: closet query failed —', queryError.message)
+        setError(queryError.message)
+        setItems([])
+        setLoading(false)
+        return
+      }
 
       const allItems = data ?? []
       setItems(allItems)
@@ -77,5 +93,5 @@ export function useClosetItems(clientId: string | null) {
     return () => { cancelled = true }
   }, [clientId, reloadTick])
 
-  return { items, itemTagIds, loading, refetch: () => setReloadTick((t) => t + 1) }
+  return { items, itemTagIds, loading, error, refetch: () => setReloadTick((t) => t + 1) }
 }

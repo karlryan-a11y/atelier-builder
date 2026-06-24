@@ -92,7 +92,7 @@ function DraggableItem({
 export function ClosetPanel() {
   const { clients } = useClients()
   const { activeClient, setActiveClient } = useClientStore()
-  const { items, itemTagIds, loading, refetch } = useClosetItems(activeClient?.id ?? null)
+  const { items, itemTagIds, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
   const { categories, tags } = useContentTags()
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
@@ -102,12 +102,12 @@ export function ClosetPanel() {
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
   const [savingItem, setSavingItem] = useState(false)
 
-  async function handleSaveItem(data: { name_override: string | null; color: string | null; style_note: string | null }) {
+  async function handleSaveItem(data: { name_override: string | null; color: string | null; style_note: string | null; category: string | null }) {
     if (!editingItem) return
     setSavingItem(true)
     const { error } = await supabase
       .from('gp_closet_items')
-      .update({ name_override: data.name_override, color: data.color, style_note: data.style_note })
+      .update({ name_override: data.name_override, color: data.color, style_note: data.style_note, category: data.category })
       .eq('id', editingItem.id)
     setSavingItem(false)
     if (error) {
@@ -321,6 +321,17 @@ export function ClosetPanel() {
                     <div className="h-2.5 shimmer rounded mt-1 w-1/2" />
                   </div>
                 ))}
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 px-3">
+                <p className="text-[10px] tracking-[0.3em] uppercase text-red-400/80">Couldn't load collection</p>
+                <p className="text-[10px] text-text-muted/50 mt-2 normal-case tracking-normal break-words">{error}</p>
+                <button
+                  onClick={() => refetch()}
+                  className="mt-3 text-[9px] tracking-[0.2em] uppercase px-3 py-1 rounded-full border border-border text-text-muted hover:border-blush transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-8">
