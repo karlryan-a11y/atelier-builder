@@ -1,27 +1,36 @@
 import { useState } from 'react'
 import { X, Save } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
+import { CATEGORY_LABELS } from '@/lib/categorize'
+import { slugifyCategory } from '@/lib/garmentCategory'
 
 interface EditItemDialogProps {
   item: ClosetItem
   saving: boolean
-  onSave: (data: { name_override: string | null; color: string | null; style_note: string | null }) => void
+  /** Custom categories already used by this client, offered alongside the fixed ones. */
+  customCategories?: { slug: string; label: string }[]
+  onSave: (data: { name_override: string | null; color: string | null; style_note: string | null; category: string | null }) => void
   onClose: () => void
 }
 
-export function EditItemDialog({ item, saving, onSave, onClose }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], onSave, onClose }: EditItemDialogProps) {
   // The name field is pre-filled with the effective name (override or scraped).
   const [name, setName] = useState(item.name_override?.trim() || item.name || '')
   const [color, setColor] = useState(item.color ?? '')
   const [styleNote, setStyleNote] = useState(item.style_note ?? '')
+  const [category, setCategory] = useState(item.category ?? '')
+  const [customMode, setCustomMode] = useState(false)
+  const [customName, setCustomName] = useState('')
 
   function handleSave() {
     const trimmedName = name.trim()
+    const finalCategory = customMode ? slugifyCategory(customName) : category
     onSave({
       // Only persist an override when it actually differs from the scraped name.
       name_override: trimmedName && trimmedName !== item.name ? trimmedName : null,
       color: color.trim() || null,
       style_note: styleNote.trim() || null,
+      category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
     })
   }
 
@@ -54,6 +63,53 @@ export function EditItemDialog({ item, saving, onSave, onClose }: EditItemDialog
                 Original: {item.name}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Category</label>
+            {customMode ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="e.g. Rompers"
+                  autoFocus
+                  className="flex-1 bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
+                />
+                <button
+                  onClick={() => { setCustomMode(false); setCustomName('') }}
+                  className="px-2 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text"
+                >Cancel</button>
+              </div>
+            ) : (
+              <select
+                value={category}
+                onChange={(e) => {
+                  if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') }
+                  else setCategory(e.target.value)
+                }}
+                className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
+              >
+                <option value="">Auto — detect from name</option>
+                {Object.entries(CATEGORY_LABELS)
+                  .filter(([slug]) => slug !== 'other')
+                  .map(([slug, label]) => (
+                    <option key={slug} value={slug}>{label}</option>
+                  ))}
+                {customCategories.length > 0 && (
+                  <optgroup label="Custom">
+                    {customCategories.map((c) => (
+                      <option key={c.slug} value={c.slug}>{c.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="__new__">＋ New category…</option>
+              </select>
+            )}
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+              Sets where this piece appears in the client's Collection. Pick "New category" to add a custom one (e.g. Rompers).
+            </p>
           </div>
 
           <div>

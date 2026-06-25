@@ -3,7 +3,8 @@ import { Plus, Tag, X, Send, ChevronDown, Pencil, Check } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useClients } from '@/hooks/useClients'
 import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/hooks/useLookCategories'
-import { CATEGORY_LABELS, SIDEBAR_STRUCTURE, type Category } from '@/lib/categorize'
+import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
+import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
 import { CollectionTab } from './CollectionTab'
 
@@ -79,10 +80,10 @@ export function CategorizePanel() {
   const [editVal, setEditVal] = useState('')
   const [chatStatus, setChatStatus] = useState<string | null>(null)
   // Collection mode uses garment categories (item-level), not the look-category brush.
-  const [garmentCounts, setGarmentCounts] = useState<Map<Category, number>>(new Map())
-  const [activeGarmentCats, setActiveGarmentCats] = useState<Set<Category>>(new Set())
-  const onGarmentCounts = useCallback((c: Map<Category, number>) => setGarmentCounts(c), [])
-  const toggleGarment = (slug: Category) =>
+  const [garmentCounts, setGarmentCounts] = useState<Map<string, number>>(new Map())
+  const [activeGarmentCats, setActiveGarmentCats] = useState<Set<string>>(new Set())
+  const onGarmentCounts = useCallback((c: Map<string, number>) => setGarmentCounts(c), [])
+  const toggleGarment = (slug: string) =>
     setActiveGarmentCats((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
 
   // Share a look/capsule into the client's chat (lands as a card in their thread).
@@ -242,6 +243,25 @@ export function CategorizePanel() {
                     </div>
                   )
                 })}
+                {(() => {
+                  const customSlugs = [...garmentCounts.keys()].filter((s) => !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  if (customSlugs.length === 0) return null
+                  return (
+                    <div className="mt-1">
+                      <p className="text-[8px] tracking-[0.3em] uppercase text-[#bbb] px-3 mb-0.5">Custom</p>
+                      {customSlugs.map((slug) => {
+                        const on = activeGarmentCats.has(slug)
+                        return (
+                          <button key={slug} onClick={() => toggleGarment(slug)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}>
+                            <span>{labelForCategory(slug)}</span>
+                            <span className={on ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get(slug) ?? 0}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </div>
             </>
           ) : (

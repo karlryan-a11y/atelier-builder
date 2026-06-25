@@ -3,7 +3,8 @@ import { Search, ChevronDown, Pencil, StickyNote } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useContentTags } from '@/hooks/useContentTags'
-import { resolveCategory, CATEGORY_LABELS, SIDEBAR_STRUCTURE, type Category } from '@/lib/categorize'
+import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
+import { categoryOf, labelForCategory, isFixedCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
@@ -97,7 +98,7 @@ export function ClosetPanel() {
   const { tags } = useContentTags()
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
-  const [activeCategories, setActiveCategories] = useState<Set<Category>>(new Set())
+  const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
@@ -128,22 +129,24 @@ export function ClosetPanel() {
   }, [tags])
 
   const categoryByItem = useMemo(() => {
-    const m = new Map<string, Category>()
+    const m = new Map<string, string>()
     for (const i of items) {
       const tagNames = (itemTagIds.get(i.id) ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, resolveCategory({ name: displayName(i), category: i.category }, tagNames))
+      m.set(i.id, categoryOf(i, tagNames))
     }
     return m
   }, [items, itemTagIds, tagNameById])
 
+  const customCats = useMemo(() => customCategoriesFromItems(items), [items])
+
   // How many of this client's items fall in each category — shown on the chip.
   const categoryCounts = useMemo(() => {
-    const counts = new Map<Category, number>()
+    const counts = new Map<string, number>()
     for (const cat of categoryByItem.values()) counts.set(cat, (counts.get(cat) ?? 0) + 1)
     return counts
   }, [categoryByItem])
 
-  function toggleCategory(slug: Category) {
+  function toggleCategory(slug: string) {
     setActiveCategories((prev) => {
       const next = new Set(prev)
       next.has(slug) ? next.delete(slug) : next.add(slug)
@@ -165,7 +168,7 @@ export function ClosetPanel() {
     }
     if (activeCategories.size > 0) {
       // Multi-select unions: show items in ANY selected garment category.
-      result = result.filter((i) => activeCategories.has(categoryByItem.get(i.id) as Category))
+      result = result.filter((i) => activeCategories.has(categoryByItem.get(i.id) ?? ''))
     }
     return result
   }, [items, search, activeCategories, categoryByItem])
@@ -303,6 +306,30 @@ export function ClosetPanel() {
                   </div>
                 )
               })}
+              {(() => {
+                const customSlugs = [...categoryCounts.keys()].filter((s) => !isFixedCategory(s) && (categoryCounts.get(s) ?? 0) > 0).sort()
+                if (customSlugs.length === 0) return null
+                return (
+                  <div>
+                    <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">Custom</p>
+                    <div className="flex flex-wrap gap-1">
+                      {customSlugs.map((slug) => {
+                        const on = activeCategories.has(slug)
+                        return (
+                          <button
+                            key={slug}
+                            onClick={() => toggleCategory(slug)}
+                            className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${on ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-border text-text-muted hover:border-blush'}`}
+                          >
+                            {labelForCategory(slug)}
+                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{categoryCounts.get(slug) ?? 0}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -378,6 +405,7 @@ export function ClosetPanel() {
         <EditItemDialog
           item={editingItem}
           saving={savingItem}
+          customCategories={customCats}
           onSave={handleSaveItem}
           onClose={() => setEditingItem(null)}
         />

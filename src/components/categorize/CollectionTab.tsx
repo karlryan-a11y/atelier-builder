@@ -3,7 +3,7 @@ import { Pencil, Search } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useContentTags } from '@/hooks/useContentTags'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
-import { resolveCategory, CATEGORY_LABELS, type Category } from '@/lib/categorize'
+import { categoryOf, labelForCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 
@@ -16,8 +16,8 @@ import { EditItemDialog } from '@/components/layout/EditItemDialog'
 // filter and accepts a garment-category filter.
 export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: {
   clientId: string | null
-  filterCategories?: Set<Category>
-  onCategoryCounts?: (counts: Map<Category, number>) => void
+  filterCategories?: Set<string>
+  onCategoryCounts?: (counts: Map<string, number>) => void
 }) {
   const { items, itemTagIds, loading, error, refetch } = useClosetItems(clientId)
   const { tags } = useContentTags()
@@ -32,18 +32,20 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
   }, [tags])
 
   const categoryByItem = useMemo(() => {
-    const m = new Map<string, Category>()
+    const m = new Map<string, string>()
     for (const i of items) {
       const tagNames = (itemTagIds.get(i.id) ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, resolveCategory({ name: displayName(i), category: i.category }, tagNames))
+      m.set(i.id, categoryOf(i, tagNames))
     }
     return m
   }, [items, itemTagIds, tagNameById])
 
+  const customCats = useMemo(() => customCategoriesFromItems(items), [items])
+
   // Report category counts up to the rail (present categories + counts for the filter chips).
   useEffect(() => {
     if (!onCategoryCounts) return
-    const counts = new Map<Category, number>()
+    const counts = new Map<string, number>()
     for (const i of items) {
       if (i.is_deleted) continue
       const c = categoryByItem.get(i.id)
@@ -55,7 +57,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
   const visible = useMemo(() => {
     let live = items.filter((i) => !i.is_deleted)
     if (filterCategories && filterCategories.size > 0) {
-      live = live.filter((i) => filterCategories.has(categoryByItem.get(i.id) as Category))
+      live = live.filter((i) => filterCategories.has(categoryByItem.get(i.id) ?? ''))
     }
     const term = q.trim().toLowerCase()
     if (!term) return live
@@ -119,7 +121,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
                 </div>
                 <div className="px-3 py-2.5">
                   <p className="text-[13px] text-[#1A1A1A] truncate">{displayName(item) || 'Untitled item'}</p>
-                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{CATEGORY_LABELS[categoryByItem.get(item.id) ?? 'other']}</p>
+                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(categoryByItem.get(item.id) ?? 'other')}</p>
                 </div>
               </div>
             )
@@ -127,7 +129,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
         </div>
       )}
 
-      {editing && <EditItemDialog item={editing} saving={saving} onSave={save} onClose={() => setEditing(null)} />}
+      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} onSave={save} onClose={() => setEditing(null)} />}
     </div>
   )
 }
