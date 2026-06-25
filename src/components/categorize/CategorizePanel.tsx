@@ -7,8 +7,6 @@ import { CATEGORY_LABELS, SIDEBAR_STRUCTURE, type Category } from '@/lib/categor
 import { supabase } from '@/lib/supabase'
 import { CollectionTab } from './CollectionTab'
 
-const PROVISION_URL = 'https://atelierbywatson.com/looks/api/chat/provision'
-
 function ClientPicker({
   clients, value, onChange,
 }: { clients: { id: string; name: string }[]; value: string | null; onChange: (id: string) => void }) {
@@ -86,29 +84,6 @@ export function CategorizePanel() {
   const onGarmentCounts = useCallback((c: Map<Category, number>) => setGarmentCounts(c), [])
   const toggleGarment = (slug: Category) =>
     setActiveGarmentCats((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
-
-  // Enable client↔stylist chat for the active client: creates/links their private
-  // Slack channel + wires the conversation, via the lookbook provision endpoint
-  // (authed with this stylist's builder session token).
-  async function enableChat() {
-    if (!activeClient) return
-    setChatStatus('Enabling…')
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(PROVISION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ clientId: activeClient.id }),
-      })
-      const data = await res.json()
-      setChatStatus(res.ok ? `Chat on · #${data.channelName}` : `Failed: ${data.error || res.status}`)
-    } catch (e) {
-      setChatStatus('Failed: network error')
-    }
-  }
 
   // Share a look/capsule into the client's chat (lands as a card in their thread).
   async function shareToChat(itemId: string) {
@@ -228,11 +203,6 @@ export function CategorizePanel() {
         <div className="px-5 py-4 border-b border-[#E8E4DF]">
           <p className="text-[10px] tracking-[0.3em] uppercase text-[#888] mb-2">Categorize</p>
           <ClientPicker clients={clients} value={activeClient.id} onChange={pickClient} />
-          <button
-            onClick={enableChat}
-            className="mt-2 w-full text-[10px] tracking-[0.15em] uppercase py-1.5 rounded border border-[#E8E4DF] text-[#888] hover:text-[#1A1A1A] hover:border-[#1A1A1A] transition-colors"
-            title="Create/link this client's Slack channel and turn on their chat"
-          >Enable client chat</button>
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
         </div>
         <div className="px-5 py-3 border-b border-[#E8E4DF] flex-1 overflow-hidden flex flex-col">
