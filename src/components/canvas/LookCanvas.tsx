@@ -167,7 +167,20 @@ export function LookCanvas() {
   // Board dimensions come from the canvas state (Portrait / Square / Landscape).
   const CW = state.canvas.width
   const CH = state.canvas.height
-  const SCALE = Math.min(FIT_W / CW, FIT_H / CH)
+  // Scale the board to fit the ACTUAL available area (measured), so it's never
+  // clipped at the bottom and adapts to any window height / board aspect.
+  const fitRef = useRef<HTMLDivElement>(null)
+  const [avail, setAvail] = useState({ w: FIT_W, h: FIT_H })
+  useEffect(() => {
+    const el = fitRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const measure = () => setAvail({ w: el.clientWidth, h: el.clientHeight })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    measure()
+    return () => ro.disconnect()
+  }, [])
+  const SCALE = Math.max(0.05, Math.min((avail.w - 24) / CW, (avail.h - 24) / CH))
 
   // Register the Konva native export function so ChatPanel can call it.
   // Crops to content bounds WITHIN the frame — tight around items, never exceeds frame.
@@ -471,8 +484,9 @@ export function LookCanvas() {
         </button>
       </div>
 
-      {/* Canvas — the white look area */}
-      <div className="flex-1 flex items-center justify-center pb-4">
+      {/* Canvas — the white look area. min-h-0 lets the flex child shrink so the
+          board scales to fit instead of overflowing/clipping at the bottom. */}
+      <div ref={fitRef} className="flex-1 flex items-center justify-center pb-4 min-h-0 w-full">
         <div
           className="relative border border-border rounded bg-white shadow-sm"
           style={{ width: CW * SCALE, height: CH * SCALE }}
