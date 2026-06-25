@@ -3,6 +3,7 @@ import { Search, ChevronDown, Pencil, StickyNote } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useContentTags } from '@/hooks/useContentTags'
+import { resolveCategory, CATEGORY_LABELS, SIDEBAR_STRUCTURE, type Category } from '@/lib/categorize'
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
@@ -93,10 +94,10 @@ export function ClosetPanel() {
   const { clients } = useClients()
   const { activeClient, setActiveClient } = useClientStore()
   const { items, itemTagIds, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
-  const { categories, tags } = useContentTags()
+  const { tags } = useContentTags()
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
-  const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set())
+  const [activeCategories, setActiveCategories] = useState<Set<Category>>(new Set())
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
@@ -118,45 +119,37 @@ export function ClosetPanel() {
     refetch()
   }
 
-  const usedTagIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const tagIds of itemTagIds.values()) {
-      for (const tid of tagIds) ids.add(tid)
-    }
-    return ids
-  }, [itemTagIds])
+  // Resolve every item to ONE garment category, using the same resolver the
+  // lookbook uses (stylist override → content tag → name detection).
+  const tagNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of tags) m.set(t.id, String(t.display_name ?? ''))
+    return m
+  }, [tags])
 
-  // How many of this client's items carry each tag — shown as a count on the chip.
-  const tagCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const tagIds of itemTagIds.values()) {
-      for (const tid of tagIds) counts.set(tid, (counts.get(tid) ?? 0) + 1)
+  const categoryByItem = useMemo(() => {
+    const m = new Map<string, Category>()
+    for (const i of items) {
+      const tagNames = (itemTagIds.get(i.id) ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
+      m.set(i.id, resolveCategory({ name: displayName(i), category: i.category }, tagNames))
     }
+    return m
+  }, [items, itemTagIds, tagNameById])
+
+  // How many of this client's items fall in each category — shown on the chip.
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<Category, number>()
+    for (const cat of categoryByItem.values()) counts.set(cat, (counts.get(cat) ?? 0) + 1)
     return counts
-  }, [itemTagIds])
+  }, [categoryByItem])
 
-  function toggleTag(id: string) {
-    setActiveTagIds((prev) => {
+  function toggleCategory(slug: Category) {
+    setActiveCategories((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      next.has(slug) ? next.delete(slug) : next.add(slug)
       return next
     })
   }
-
-  const visibleCategories = useMemo(() => {
-    return categories.filter((c) => c.client_visible)
-  }, [categories])
-
-  const tagsByCategory = useMemo(() => {
-    const map = new Map<string, typeof tags>()
-    for (const cat of visibleCategories) {
-      const catTags = tags
-        .filter((t) => t.category_id === cat.id && usedTagIds.has(t.id))
-        .sort((a, b) => a.display_name.localeCompare(b.display_name))
-      if (catTags.length > 0) map.set(cat.id, catTags)
-    }
-    return map
-  }, [visibleCategories, tags, usedTagIds])
 
   const filtered = useMemo(() => {
     let result = items
@@ -170,14 +163,12 @@ export function ClosetPanel() {
           i.color?.toLowerCase().includes(q)
       )
     }
-    if (activeTagIds.size > 0) {
-      // Multi-select unions: an item shows if it carries ANY selected tag.
-      result = result.filter((i) =>
-        (itemTagIds.get(i.id) ?? []).some((tid) => activeTagIds.has(tid))
-      )
+    if (activeCategories.size > 0) {
+      // Multi-select unions: show items in ANY selected garment category.
+      result = result.filter((i) => activeCategories.has(categoryByItem.get(i.id) as Category))
     }
     return result
-  }, [items, itemTagIds, search, activeTagIds])
+  }, [items, search, activeCategories, categoryByItem])
 
   function addItemToCanvas(itemId: string, imageUrl: string | null) {
     const node: ClosetItemNode = {
@@ -238,7 +229,7 @@ export function ClosetPanel() {
                       setClientPickerOpen(false)
                       setClientSearch('')
                       setSearch('')
-                      setActiveTagIds(new Set())
+                      setActiveCategories(new Set())
                     }}
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-tile transition-colors ${
                       activeClient?.id === c.id ? 'bg-tile font-medium' : ''
@@ -268,45 +259,50 @@ export function ClosetPanel() {
             </div>
           </div>
 
-          {/* Tag filters grouped by category */}
-          {tagsByCategory.size > 0 && (
-            <div className="px-3 py-2 border-b border-border max-h-40 overflow-y-auto space-y-1.5">
+          {/* Garment-category filters (Clothing / Shoes / Handbags / Jewelry / Accessories) */}
+          {categoryCounts.size > 0 && (
+            <div className="px-3 py-2 border-b border-border max-h-48 overflow-y-auto space-y-1.5">
               <button
-                onClick={() => setActiveTagIds(new Set())}
+                onClick={() => setActiveCategories(new Set())}
                 className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
-                  activeTagIds.size === 0
+                  activeCategories.size === 0
                     ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
                     : 'border-border text-text-muted hover:border-blush'
                 }`}
               >
                 All
               </button>
-              {visibleCategories
-                .filter((cat) => tagsByCategory.has(cat.id))
-                .map((cat) => (
-                  <div key={cat.id}>
-                    <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">{cat.name}</p>
+              {SIDEBAR_STRUCTURE.map((node) => {
+                const slugs = node.kind === 'group' ? node.children : [node.slug]
+                const present = slugs.filter((s) => (categoryCounts.get(s) ?? 0) > 0)
+                if (present.length === 0) return null
+                return (
+                  <div key={node.kind === 'group' ? node.label : node.slug}>
+                    {node.kind === 'group' && (
+                      <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">{node.label}</p>
+                    )}
                     <div className="flex flex-wrap gap-1">
-                      {tagsByCategory.get(cat.id)!.map((t) => {
-                        const on = activeTagIds.has(t.id)
+                      {present.map((slug) => {
+                        const on = activeCategories.has(slug)
                         return (
                           <button
-                            key={t.id}
-                            onClick={() => toggleTag(t.id)}
+                            key={slug}
+                            onClick={() => toggleCategory(slug)}
                             className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
                               on
                                 ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
                                 : 'border-border text-text-muted hover:border-blush'
                             }`}
                           >
-                            {t.display_name}
-                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{tagCounts.get(t.id) ?? 0}</span>
+                            {CATEGORY_LABELS[slug]}
+                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{categoryCounts.get(slug) ?? 0}</span>
                           </button>
                         )
                       })}
                     </div>
                   </div>
-                ))}
+                )
+              })}
             </div>
           )}
 
