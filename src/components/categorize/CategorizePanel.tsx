@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Plus, Tag, X, Send, ChevronDown, Pencil, Check } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useClients } from '@/hooks/useClients'
 import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/hooks/useLookCategories'
+import { CATEGORY_LABELS, SIDEBAR_STRUCTURE, type Category } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
+import { CollectionTab } from './CollectionTab'
 
 const PROVISION_URL = 'https://atelierbywatson.com/looks/api/chat/provision'
 
@@ -55,7 +57,7 @@ function ClientPicker({
   )
 }
 
-type Mode = 'looks' | 'capsules'
+type Mode = 'looks' | 'capsules' | 'collection'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 export function CategorizePanel() {
@@ -78,6 +80,12 @@ export function CategorizePanel() {
   const [editing, setEditing] = useState<string | null>(null) // category ID being renamed
   const [editVal, setEditVal] = useState('')
   const [chatStatus, setChatStatus] = useState<string | null>(null)
+  // Collection mode uses garment categories (item-level), not the look-category brush.
+  const [garmentCounts, setGarmentCounts] = useState<Map<Category, number>>(new Map())
+  const [activeGarmentCats, setActiveGarmentCats] = useState<Set<Category>>(new Set())
+  const onGarmentCounts = useCallback((c: Map<Category, number>) => setGarmentCounts(c), [])
+  const toggleGarment = (slug: Category) =>
+    setActiveGarmentCats((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
 
   // Enable client↔stylist chat for the active client: creates/links their private
   // Slack channel + wires the conversation, via the lookbook provision endpoint
@@ -228,6 +236,46 @@ export function CategorizePanel() {
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
         </div>
         <div className="px-5 py-3 border-b border-[#E8E4DF] flex-1 overflow-hidden flex flex-col">
+          {mode === 'collection' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
+              <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
+                Garment categories from digitization. Click to filter the collection; edit any item with its pencil.
+              </p>
+              <div className="flex flex-col gap-1 overflow-y-auto pr-1">
+                <button
+                  onClick={() => setActiveGarmentCats(new Set())}
+                  className={`text-left px-3 py-2 rounded text-[12px] transition-colors ${activeGarmentCats.size === 0 ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+                >All items</button>
+                {SIDEBAR_STRUCTURE.map((node) => {
+                  const slugs = node.kind === 'group' ? node.children : [node.slug]
+                  const present = slugs.filter((s) => (garmentCounts.get(s) ?? 0) > 0)
+                  if (present.length === 0) return null
+                  return (
+                    <div key={node.kind === 'group' ? node.label : node.slug} className="mt-1">
+                      {node.kind === 'group' && (
+                        <p className="text-[8px] tracking-[0.3em] uppercase text-[#bbb] px-3 mb-0.5">{node.label}</p>
+                      )}
+                      {present.map((slug) => {
+                        const on = activeGarmentCats.has(slug)
+                        return (
+                          <button
+                            key={slug}
+                            onClick={() => toggleGarment(slug)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+                          >
+                            <span>{CATEGORY_LABELS[slug]}</span>
+                            <span className={on ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get(slug) ?? 0}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            <>
           <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Active category</p>
           <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
             Pick one, then click {mode} to tag them. Shift-click to multi-select. Pencil renames everywhere.
@@ -276,7 +324,10 @@ export function CategorizePanel() {
               )
             })}
           </div>
+            </>
+          )}
         </div>
+        {mode !== 'collection' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -291,13 +342,14 @@ export function CategorizePanel() {
             </button>
           </div>
         </div>
+        )}
       </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'capsules'] as const).map((m) => (
+            {(['looks', 'capsules', 'collection'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setSelected(new Set()) }}
@@ -306,6 +358,7 @@ export function CategorizePanel() {
             ))}
           </div>
 
+          {mode !== 'collection' && (
           <div className="flex items-center gap-1 bg-[#F8F7F5] rounded p-0.5">
             {statuses.map((s) => (
               <button
@@ -315,6 +368,7 @@ export function CategorizePanel() {
               >{s.label}</button>
             ))}
           </div>
+          )}
 
           {selected.size > 0 && (
             <div className="flex items-center gap-2 ml-auto">
@@ -334,7 +388,13 @@ export function CategorizePanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
+          {mode === 'collection' ? (
+            <CollectionTab
+              clientId={activeClient?.id ?? null}
+              filterCategories={activeGarmentCats}
+              onCategoryCounts={onGarmentCounts}
+            />
+          ) : loading ? (
             <p className="text-[#888] text-sm">Loading…</p>
           ) : visible.length === 0 ? (
             <p className="text-[#888] text-sm">
