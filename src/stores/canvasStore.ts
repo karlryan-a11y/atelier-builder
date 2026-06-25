@@ -92,6 +92,7 @@ interface CanvasStoreActions {
   loadLook: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
   markClean: () => void
   setBackground: (color: string) => void
+  setCanvasSize: (width: number, height: number) => void
 }
 
 type CanvasStore = CanvasStoreState & CanvasStoreActions
@@ -119,6 +120,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       state: newState,
       isDirty: true,
     })
+    saveDraft(newState)
+  },
+
+  setCanvasSize: (width, height) => {
+    const { state: current, past } = get()
+    const newState = { ...current, canvas: { ...current.canvas, width, height } }
+    set({ past: pushHistory(past, current), future: [], state: newState, isDirty: true })
     saveDraft(newState)
   },
 

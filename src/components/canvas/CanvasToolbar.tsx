@@ -9,6 +9,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore'
 import { styleCanvas } from '@/lib/style'
 import type { ClosetItemNode, TextNode } from '@/types/canvas'
+import { BOARD_PRESETS } from '@/types/canvas'
 
 const FONT_FAMILIES = [
   { value: 'Helvetica Neue, Helvetica, Arial, sans-serif', label: 'Sans Serif' },
@@ -30,7 +31,7 @@ export function CanvasToolbar() {
   const {
     state, selectedNodeIds, updateNode, removeNodes, duplicateNodes,
     moveLayer, addNode, undo, redo, past, future, alignNodes, distributeNodes,
-    isDirty, reset,
+    isDirty, reset, setCanvasSize,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
 
@@ -42,6 +43,9 @@ export function CanvasToolbar() {
   const hasSelection = selectedNodes.length > 0
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
+  // Auto-arrange ("Style") is tuned for the Portrait look frame; on Square/Landscape
+  // boards you arrange the free-form board manually.
+  const isPortraitLook = state.canvas.width === BOARD_PRESETS.portrait.width && state.canvas.height === BOARD_PRESETS.portrait.height
 
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
@@ -87,6 +91,21 @@ export function CanvasToolbar() {
 
   return (
     <div className="flex items-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+      {/* Board size — Portrait (look) / Square / Landscape */}
+      {(Object.keys(BOARD_PRESETS) as Array<keyof typeof BOARD_PRESETS>).map((key) => {
+        const p = BOARD_PRESETS[key]
+        const active = state.canvas.width === p.width && state.canvas.height === p.height
+        return (
+          <button
+            key={key}
+            onClick={() => setCanvasSize(p.width, p.height)}
+            title={`${p.label} board (${p.width}×${p.height})`}
+            className={`px-2 py-1 text-[9px] tracking-[0.12em] uppercase rounded-sm transition-colors ${active ? 'bg-[#1A1A1A] text-white' : 'text-text-muted hover:bg-tile'}`}
+          >{p.label}</button>
+        )
+      })}
+      <div className="w-px h-4 bg-border mx-0.5" />
+
       <button
         onClick={() => {
           if (isDirty && !confirm('You have unsaved changes. Start a new look?')) return
@@ -129,9 +148,9 @@ export function CanvasToolbar() {
 
       <button
         onClick={handleStyle}
-        disabled={styling || !hasClosetItems}
+        disabled={styling || !hasClosetItems || !isPortraitLook}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
-        title="Style — auto-arrange items with WSG proportions"
+        title={isPortraitLook ? 'Style — auto-arrange items with WSG proportions' : 'Auto-arrange is for Portrait looks — arrange Square/Landscape boards manually'}
       >
         {styling ? (
           <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />

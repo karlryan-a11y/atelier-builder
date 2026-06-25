@@ -97,10 +97,23 @@ export interface LookRefNode {
   detached?: boolean
 }
 
+/**
+ * Board-size presets (match GoodPix). The board IS the canvas + the export area.
+ * - Portrait 1200×1600 (3:4): the standard outfit "look".
+ * - Square 1080×1080: Instagram standard — default for capsules / shopping boards.
+ * - Landscape 1600×1200: big packing capsules.
+ */
+export const BOARD_PRESETS = {
+  portrait: { width: 1200, height: 1600, label: 'Portrait' },
+  square: { width: 1080, height: 1080, label: 'Square' },
+  landscape: { width: 1600, height: 1200, label: 'Landscape' },
+} as const
+export type BoardPreset = keyof typeof BOARD_PRESETS
+
 export function createDefaultLookCanvas(): LookCanvasState {
   return {
     version: 1,
-    canvas: { width: 1200, height: 1500, background: '#ffffff' },
+    canvas: { width: 1200, height: 1600, background: '#ffffff' },
     nodes: [],
   }
 }

@@ -9,15 +9,10 @@ import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3 } from 'lucide-react'
 import type { ClosetItemNode, TextNode } from '@/types/canvas'
 
-const CANVAS_W = 1200
-const CANVAS_H = 1500
-
-// Look Frame: the exportable region. Items should be arranged within this area.
-// Everything outside is workspace. Export captures only the frame.
-export const FRAME_X = 100
-export const FRAME_Y = 80
-export const FRAME_W = 1000
-export const FRAME_H = 1340  // ~3:4 aspect ratio (1000:1340)
+// The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
+// on-screen budget, preserving aspect, so Portrait / Square / Landscape all fit.
+const FIT_W = 620
+const FIT_H = 680
 
 interface ClosetItemImageProps {
   node: ClosetItemNode
@@ -169,6 +164,11 @@ export function LookCanvas() {
   const { state, selectedNodeIds, updateNode, setSelectedNodeIds, toggleNodeSelection } = store
   const stageRef = useRef<Konva.Stage>(null)
 
+  // Board dimensions come from the canvas state (Portrait / Square / Landscape).
+  const CW = state.canvas.width
+  const CH = state.canvas.height
+  const SCALE = Math.min(FIT_W / CW, FIT_H / CH)
+
   // Register the Konva native export function so ChatPanel can call it.
   // Crops to content bounds WITHIN the frame — tight around items, never exceeds frame.
   useEffect(() => {
@@ -179,40 +179,31 @@ export function LookCanvas() {
 
       const pixelRatio = opts?.pixelRatio ?? 2
 
-      // Hide UI elements during export
+      const BW = store.state.canvas.width
+      const BH = store.state.canvas.height
+
+      // Hide UI-only elements during export (selection transformers + the grid).
       const transformers = stage.find('Transformer')
       transformers.forEach((t: any) => t.hide())
-      const allRects = stage.find('Rect')
-      const hiddenRects: any[] = []
-      allRects.forEach((rect: any) => {
-        const attrs = rect.attrs
-        if (attrs.dash && attrs.x === FRAME_X && attrs.y === FRAME_Y) { rect.hide(); hiddenRects.push(rect) }
-        if (attrs.fill === 'rgba(0,0,0,0.03)') { rect.hide(); hiddenRects.push(rect) }
-      })
       const lines = stage.find('Line')
       lines.forEach((l: any) => l.hide())
 
-      // The on-screen stage is rendered at a reduced scale (Stage scaleX/Y below).
-      // toDataURL applies that scale to the drawn content but interprets the crop
-      // rect in post-scale pixels — so cropping the frame while scaled yields a
-      // shrunken, corner-offset image. Reset the stage to 1:1 / full size for the
-      // capture so the frame exports at full resolution, then restore.
+      // The on-screen stage is rendered at a reduced scale. Reset to 1:1 / full
+      // board size for the capture so the board exports at native resolution.
       const prevScaleX = stage.scaleX()
       const prevScaleY = stage.scaleY()
       const prevWidth = stage.width()
       const prevHeight = stage.height()
       stage.scale({ x: 1, y: 1 })
-      stage.size({ width: CANVAS_W, height: CANVAS_H })
+      stage.size({ width: BW, height: BH })
 
       try {
-        // Export the full frame — consistent 1000:1340 aspect ratio every time.
-        // The Style engine arranges items within the frame, so the full frame
-        // IS the look composition.
+        // Export the full board — the board IS the composition.
         return stage.toDataURL({
-          x: FRAME_X,
-          y: FRAME_Y,
-          width: FRAME_W,
-          height: FRAME_H,
+          x: 0,
+          y: 0,
+          width: BW,
+          height: BH,
           pixelRatio,
           mimeType: 'image/png',
         })
@@ -221,7 +212,6 @@ export function LookCanvas() {
         stage.size({ width: prevWidth, height: prevHeight })
         stage.batchDraw()
         transformers.forEach((t: any) => t.show())
-        hiddenRects.forEach((r: any) => r.show())
         lines.forEach((l: any) => l.show())
       }
     })
@@ -448,18 +438,18 @@ export function LookCanvas() {
     if (!showGrid) return null
     const lines: React.ReactElement[] = []
     const step = 100
-    for (let i = step; i < CANVAS_W; i += step) {
+    for (let i = step; i < CW; i += step) {
       lines.push(
-        <Line key={`gv${i}`} points={[i, 0, i, CANVAS_H]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
+        <Line key={`gv${i}`} points={[i, 0, i, CH]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
       )
     }
-    for (let i = step; i < CANVAS_H; i += step) {
+    for (let i = step; i < CH; i += step) {
       lines.push(
-        <Line key={`gh${i}`} points={[0, i, CANVAS_W, i]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
+        <Line key={`gh${i}`} points={[0, i, CW, i]} stroke="#B7AC9B" strokeWidth={1} listening={false} />
       )
     }
     return lines
-  }, [showGrid])
+  }, [showGrid, CW, CH])
 
   return (
     <main
@@ -485,14 +475,14 @@ export function LookCanvas() {
       <div className="flex-1 flex items-center justify-center pb-4">
         <div
           className="relative border border-border rounded bg-white shadow-sm"
-          style={{ width: CANVAS_W * 0.45, height: CANVAS_H * 0.45 }}
+          style={{ width: CW * SCALE, height: CH * SCALE }}
         >
         <Stage
           ref={stageRef}
-          width={CANVAS_W * 0.45}
-          height={CANVAS_H * 0.45}
-          scaleX={0.45}
-          scaleY={0.45}
+          width={CW * SCALE}
+          height={CH * SCALE}
+          scaleX={SCALE}
+          scaleY={SCALE}
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
@@ -500,24 +490,13 @@ export function LookCanvas() {
           style={{ background: state.canvas.background, borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
         >
           <Layer>
+            {/* The board itself is the export area — fill it with the background. */}
             <Rect
               x={0}
               y={0}
-              width={CANVAS_W}
-              height={CANVAS_H}
+              width={CW}
+              height={CH}
               fill={state.canvas.background}
-              listening={false}
-            />
-            {/* Look Frame — subtle boundary showing the export area */}
-            {/* Dim area outside the frame */}
-            <Rect x={0} y={0} width={CANVAS_W} height={FRAME_Y} fill="rgba(0,0,0,0.03)" listening={false} />
-            <Rect x={0} y={FRAME_Y + FRAME_H} width={CANVAS_W} height={CANVAS_H - FRAME_Y - FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
-            <Rect x={0} y={FRAME_Y} width={FRAME_X} height={FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
-            <Rect x={FRAME_X + FRAME_W} y={FRAME_Y} width={CANVAS_W - FRAME_X - FRAME_W} height={FRAME_H} fill="rgba(0,0,0,0.03)" listening={false} />
-            {/* Frame border — subtle dashed line */}
-            <Rect
-              x={FRAME_X} y={FRAME_Y} width={FRAME_W} height={FRAME_H}
-              stroke="#E8E4DF" strokeWidth={1.5} dash={[8, 6]}
               listening={false}
             />
             {gridLines}
