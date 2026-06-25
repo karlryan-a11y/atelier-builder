@@ -223,12 +223,21 @@ export async function searchForItems(
 
 type LayoutName = 'dress_centered' | 'separates_stack' | 'accessories_focused'
 
-// Look Frame: items are placed within this region.
-// Matches the export frame in LookCanvas.tsx.
-const FRAME_X = 100
-const FRAME_Y = 80
-const FRAME_W = 1000
-const FRAME_H = 1340
+// Placement frame — the region within the board where items are arranged.
+// The TARGET_HEIGHTS below are tuned to a reference frame height (REF_FRAME_H);
+// the actual frame is derived from the real board so Portrait / Square / Landscape
+// all arrange in-bounds and fill the space proportionally.
+export interface PlacementFrame { x: number; y: number; w: number; h: number; hScale: number }
+const REF_FRAME_H = 1340
+const DEFAULT_FRAME: PlacementFrame = { x: 100, y: 80, w: 1000, h: REF_FRAME_H, hScale: 1 }
+export function frameForBoard(board?: { width: number; height: number }): PlacementFrame {
+  if (!board) return DEFAULT_FRAME
+  const mx = Math.round(board.width * 0.06)
+  const my = Math.round(board.height * 0.05)
+  const w = board.width - mx * 2
+  const h = board.height - my * 2
+  return { x: mx, y: my, w, h, hScale: h / REF_FRAME_H }
+}
 
 /**
  * Target visual HEIGHT per category in pixels on the 1200×1500 canvas.
@@ -301,17 +310,18 @@ const CATEGORY_RULES: Record<string, {
 function centerToTopLeft(
   centerXPct: number,
   centerYPct: number,
-  category: string
+  category: string,
+  frame: PlacementFrame
 ): { x: number; y: number } {
-  const targetH = TARGET_HEIGHTS[category] ?? 200
+  const targetH = (TARGET_HEIGHTS[category] ?? 200) * frame.hScale
   const aspect = ASPECT_RATIOS[category] ?? 0.75
   const estWidth = targetH * aspect
   const estHeight = targetH
 
   // Place within the frame, not the full canvas
   return {
-    x: Math.round(FRAME_X + (centerXPct / 100) * FRAME_W - estWidth / 2),
-    y: Math.round(FRAME_Y + (centerYPct / 100) * FRAME_H - estHeight / 2),
+    x: Math.round(frame.x + (centerXPct / 100) * frame.w - estWidth / 2),
+    y: Math.round(frame.y + (centerYPct / 100) * frame.h - estHeight / 2),
   }
 }
 
@@ -325,7 +335,7 @@ interface PlacedItem {
 }
 
 /** Spread multiple items of the same category into a horizontal row */
-function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }[]): PlacedItem[] {
+function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }[], frame: PlacementFrame): PlacedItem[] {
   // Group by category
   const groups: Record<string, typeof items> = {}
   for (const item of items) {
@@ -339,10 +349,10 @@ function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }
   for (const [_cat, group] of Object.entries(groups)) {
     const cat = group[0].extraction.category
     const rule = CATEGORY_RULES[cat] || CATEGORY_RULES['other']
-    const targetH = TARGET_HEIGHTS[cat] ?? 200
+    const targetH = (TARGET_HEIGHTS[cat] ?? 200) * frame.hScale
 
     if (group.length === 1) {
-      const pos = centerToTopLeft(rule.x_pct, rule.y_pct, cat)
+      const pos = centerToTopLeft(rule.x_pct, rule.y_pct, cat, frame)
       result.push({
         extraction: group[0].extraction,
         selected: group[0].selected,
@@ -354,13 +364,13 @@ function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }
     } else {
       // Spread evenly in a horizontal row at the category's y position
       const centerY = rule.y_pct
-      const totalWidth = FRAME_W * 0.7  // 70% of frame — matches reference shoe spread
-      const startX = (FRAME_W - totalWidth) / 2
+      const totalWidth = frame.w * 0.7  // 70% of frame — matches reference shoe spread
+      const startX = (frame.w - totalWidth) / 2
       const spacing = totalWidth / group.length
 
       for (let i = 0; i < group.length; i++) {
-        const centerX = ((startX + spacing * (i + 0.5)) / FRAME_W) * 100
-        const pos = centerToTopLeft(centerX, centerY, cat)
+        const centerX = ((startX + spacing * (i + 0.5)) / frame.w) * 100
+        const pos = centerToTopLeft(centerX, centerY, cat, frame)
         result.push({
           extraction: group[i].extraction,
           selected: group[i].selected,
@@ -404,17 +414,19 @@ const BRAND_LABEL_SIZE = 32
 
 export function composeNodes(
   resolvedItems: ResolvedItem[],
-  layoutName: LayoutName
+  layoutName: LayoutName,
+  board?: { width: number; height: number }
 ): ComposedResult {
   const nodes: CanvasNode[] = []
   const imageUrls: Record<string, string> = {}
+  const frame = frameForBoard(board)
 
   const itemsToPlace = resolvedItems
     .filter((r) => r.selected)
     .map((r) => ({ extraction: r.extraction, selected: r.selected! }))
 
   // Place items using category rules
-  const placed = placeItems(itemsToPlace)
+  const placed = placeItems(itemsToPlace, frame)
 
   // Create closet_item nodes with target_height (scale computed at render time)
   for (const item of placed) {
@@ -482,9 +494,9 @@ export function composeNodes(
       labelY = item.y + th + 10
     }
 
-    // Clamp to canvas with generous margin so labels don't clip
-    labelX = Math.max(FRAME_X + 10, Math.min(FRAME_X + FRAME_W - 160, labelX))
-    labelY = Math.max(FRAME_Y + 10, Math.min(FRAME_Y + FRAME_H - 50, labelY))
+    // Clamp to the frame with generous margin so labels don't clip
+    labelX = Math.max(frame.x + 10, Math.min(frame.x + frame.w - 160, labelX))
+    labelY = Math.max(frame.y + 10, Math.min(frame.y + frame.h - 50, labelY))
 
     const textId = `txt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     nodes.push({

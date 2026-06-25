@@ -11,9 +11,19 @@
  */
 
 import { supabase } from './supabase'
-import { detectCategory } from './categorize'
+import { detectCategory, type Category } from './categorize'
 import { composeNodes, pickLayout, type ResolvedItem, type ExtractedItem } from './compose'
 import type { ClosetItemNode, CanvasNode } from '@/types/canvas'
+
+// detectCategory() returns the grouped CLOSET vocabulary (categorize.ts: 'dresses', 'tops', …);
+// the compose engine uses its own extraction vocabulary ('dress', 'top', …). Bridge the two so the
+// Style button keeps feeding compose valid categories.
+const COMPOSE_CATEGORY: Record<Category, ExtractedItem['category']> = {
+  dresses: 'dress', tops: 'top', skirts: 'bottom', pants: 'bottom', jeans: 'bottom',
+  shorts: 'bottom', outerwear: 'outerwear', swim: 'other', activewear: 'top',
+  shoes: 'shoes', bags: 'bag', jewelry: 'jewelry', belts: 'belt', scarves: 'scarf',
+  hats: 'hat', sunglasses: 'accessory', other: 'other',
+}
 
 export interface StyleResult {
   nodes: CanvasNode[]
@@ -28,7 +38,8 @@ export interface StyleResult {
  */
 export async function styleCanvas(
   currentNodes: CanvasNode[],
-  currentImageUrls: Record<string, string>
+  currentImageUrls: Record<string, string>,
+  board?: { width: number; height: number }
 ): Promise<StyleResult> {
   // Step 1: Get all closet_item nodes
   const closetNodes = currentNodes.filter(
@@ -57,7 +68,7 @@ export async function styleCanvas(
     const item = itemMap.get(node.closet_item_id)
     const name = item?.name ?? ''
     const brand = item?.brand ?? ''
-    const category = detectCategory(name)
+    const category = COMPOSE_CATEGORY[detectCategory(name)]
 
     const extraction: ExtractedItem = {
       description: name,
@@ -81,7 +92,7 @@ export async function styleCanvas(
   // Step 4: Pick layout and compose
   const extractedItems = resolvedItems.map((r) => r.extraction)
   const layoutName = pickLayout(extractedItems)
-  const composed = composeNodes(resolvedItems, layoutName)
+  const composed = composeNodes(resolvedItems, layoutName, board)
 
   // Preserve existing image URLs
   const mergedImageUrls = { ...currentImageUrls, ...composed.imageUrls }

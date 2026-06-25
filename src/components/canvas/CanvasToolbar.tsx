@@ -43,16 +43,13 @@ export function CanvasToolbar() {
   const hasSelection = selectedNodes.length > 0
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
-  // Auto-arrange ("Style") is tuned for the Portrait look frame; on Square/Landscape
-  // boards you arrange the free-form board manually.
-  const isPortraitLook = state.canvas.width === BOARD_PRESETS.portrait.width && state.canvas.height === BOARD_PRESETS.portrait.height
 
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
     setStyling(true)
     try {
       const store = useCanvasStore.getState()
-      const result = await styleCanvas(store.state.nodes, store.imageUrls)
+      const result = await styleCanvas(store.state.nodes, store.imageUrls, store.state.canvas)
 
       // Clear canvas and re-add all nodes with their image URLs.
       // This ensures each new node ID gets the correct image URL mapping.
@@ -148,9 +145,9 @@ export function CanvasToolbar() {
 
       <button
         onClick={handleStyle}
-        disabled={styling || !hasClosetItems || !isPortraitLook}
+        disabled={styling || !hasClosetItems}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
-        title={isPortraitLook ? 'Style — auto-arrange items with WSG proportions' : 'Auto-arrange is for Portrait looks — arrange Square/Landscape boards manually'}
+        title="Style — auto-arrange items to fit the current board"
       >
         {styling ? (
           <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />
