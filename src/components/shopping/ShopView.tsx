@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown, ShoppingBag, Clipboard, Sparkles, Copy, Check, FileText, Upload, ArrowLeft, Palette, Ruler, Tags, Save, Loader2 } from 'lucide-react'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useBoardStore } from '@/stores/boardStore'
 import { useAuth } from '@/hooks/useAuth'
 import { generateCoworkPrompt } from '@/lib/cowork-prompt'
 import { saveBrief, updateSessionMeta } from '@/lib/shopping-persistence'
-import { saveClientData } from '@/lib/client-data'
+import { saveClientData, loadClientData } from '@/lib/client-data'
 import { loadPlaybook } from '@/lib/shopping-playbook'
 import { loadClientLearnings, formatLearnings } from '@/lib/client-learnings'
-import { ClientSelector } from './ClientSelector'
+import { useClientStore } from '@/stores/clientStore'
 import { SessionHistory } from './SessionHistory'
 import { SizeForm } from './SizeForm'
 import { MeasurementsForm } from './MeasurementsForm'
@@ -147,6 +147,25 @@ export function ShopView() {
   const isTryonMode = session.status === 'tryon' && boardSlots.length > 0
   const isCheckoutMode = (session.status === 'checkout' || session.status === 'ordered') && boardSlots.length > 0
   const hasClient = !!session.profile.client_id
+
+  // The unified ClientBar (top-left) drives `activeClient`; Shop hydrates its session
+  // from it — pick a client up there and that client's shopping data loads here.
+  // Switching/clearing resets the shop context. Mirrors the old in-Shop selector.
+  const activeClient = useClientStore((s) => s.activeClient)
+  useEffect(() => {
+    const store = useShoppingStore.getState()
+    if (!activeClient) {
+      if (store.session.profile.client_id) {
+        store.clearClientData()
+        store.setProfile({ client_id: '', client_name: '', is_new_client: false })
+      }
+      return
+    }
+    if (store.session.profile.client_id === activeClient.id) return
+    store.setProfile({ client_id: activeClient.id, client_name: activeClient.name, is_new_client: false })
+    store.setProfileLoading(true)
+    loadClientData(activeClient.id).then(store.hydrateClientData).catch(() => store.setProfileLoading(false))
+  }, [activeClient])
   // Profile persistence only applies to real (existing) clients — a brand-new
   // client isn't in gp_clients, so there's no stable client_id to attach to yet.
   const canSaveProfile = hasClient && !session.profile.is_new_client
@@ -282,9 +301,11 @@ export function ShopView() {
         {/* Intake mode — all sections */}
         {!isReviewMode && !isTryonMode && !isCheckoutMode && (
           <>
-            <Section title="Client" icon={ShoppingBag} defaultOpen={true}>
-              <ClientSelector />
-            </Section>
+            {!hasClient && (
+              <div className="border border-wsg-border rounded-sm bg-white px-5 py-10 text-center">
+                <p className="text-sm text-text-muted">Select a client in the bar above to begin a shopping session.</p>
+              </div>
+            )}
 
             {hasClient && (
               <div className="border border-wsg-border rounded-sm bg-white px-5 py-4">

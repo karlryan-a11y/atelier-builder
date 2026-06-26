@@ -1,68 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Tag, X, Send, ChevronDown, Pencil, Check } from 'lucide-react'
+import { Plus, Tag, X, Send, Pencil, Check } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
-import { useClients } from '@/hooks/useClients'
 import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
 import { CollectionTab } from './CollectionTab'
+import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
-function ClientPicker({
-  clients, value, onChange,
-}: { clients: { id: string; name: string }[]; value: string | null; onChange: (id: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const current = clients.find((c) => c.id === value)
-  return (
-    <div className="relative">
-      <button
-        onClick={() => { setOpen(!open); setSearch('') }}
-        className="w-full flex items-center justify-between text-left px-3 py-2 rounded border border-[#E8E4DF] bg-white hover:border-[#1A1A1A] transition-colors"
-      >
-        <span className="text-[13px] text-[#1A1A1A]">{current?.name ?? 'Select client…'}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-[#888]" />
-      </button>
-      {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-[#E8E4DF] rounded shadow-lg z-50 max-h-72 flex flex-col overflow-hidden">
-          <div className="p-2 border-b border-[#E8E4DF]">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search clients…"
-              autoFocus
-              className="w-full bg-[#F8F7F5] rounded px-2.5 py-1.5 text-[12px] placeholder:text-[#888]/60 focus:outline-none focus:ring-1 focus:ring-[#F8E5E7]"
-            />
-          </div>
-          <div className="overflow-y-auto">
-            {clients
-              .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()))
-              .map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { onChange(c.id); setOpen(false); setSearch('') }}
-                  className={`w-full text-left px-3 py-2 text-[13px] hover:bg-[#F8F7F5] transition-colors ${
-                    value === c.id ? 'bg-[#F8F7F5] font-medium' : ''
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-type Mode = 'looks' | 'capsules' | 'collection'
+type Mode = 'looks' | 'capsules' | 'collection' | 'audit'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 export function CategorizePanel() {
-  const { activeClient, setActiveClient } = useClientStore()
-  const { clients } = useClients()
-  const pickClient = (id: string) => setActiveClient(clients.find((c) => c.id === id) ?? null)
+  const { activeClient } = useClientStore()
   const {
     loading, categories, looks, capsules, createCategory, renameCategory,
     assignLook, assignCapsule,
@@ -181,11 +132,9 @@ export function CategorizePanel() {
 
   if (!activeClient) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-5 bg-[#F8F7F5]">
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 bg-[#F8F7F5]">
         <p className="text-[#888] text-sm tracking-[0.1em] uppercase">Select a client to categorize</p>
-        <div className="w-[300px]">
-          <ClientPicker clients={clients} value={null} onChange={pickClient} />
-        </div>
+        <p className="text-[#aaa] text-xs">Use the client bar at the top left.</p>
       </div>
     )
   }
@@ -202,8 +151,7 @@ export function CategorizePanel() {
       {/* Left rail: category brush + rename + create */}
       <aside className="w-[260px] flex-none border-r border-[#E8E4DF] bg-white flex flex-col">
         <div className="px-5 py-4 border-b border-[#E8E4DF]">
-          <p className="text-[10px] tracking-[0.3em] uppercase text-[#888] mb-2">Categorize</p>
-          <ClientPicker clients={clients} value={activeClient.id} onChange={pickClient} />
+          <p className="text-[10px] tracking-[0.3em] uppercase text-[#888]">Categorize</p>
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
         </div>
         <div className="px-5 py-3 border-b border-[#E8E4DF] flex-1 overflow-hidden flex flex-col">
@@ -339,7 +287,7 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'capsules', 'collection'] as const).map((m) => (
+            {(['looks', 'capsules', 'collection', 'audit'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setSelected(new Set()) }}
@@ -348,7 +296,7 @@ export function CategorizePanel() {
             ))}
           </div>
 
-          {mode !== 'collection' && (
+          {(mode === 'looks' || mode === 'capsules') && (
           <div className="flex items-center gap-1 bg-[#F8F7F5] rounded p-0.5">
             {statuses.map((s) => (
               <button
@@ -377,6 +325,11 @@ export function CategorizePanel() {
           )}
         </div>
 
+        {mode === 'audit' ? (
+          <ErrorBoundary label="Audit couldn't render this collection">
+            <ReconciliationPanel />
+          </ErrorBoundary>
+        ) : (
         <div className="flex-1 overflow-y-auto p-6">
           {mode === 'collection' ? (
             <CollectionTab
@@ -470,6 +423,7 @@ export function CategorizePanel() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   )

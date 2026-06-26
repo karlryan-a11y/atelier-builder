@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/components/auth/LoginPage'
 import { Header } from '@/components/layout/Header'
 import { ClosetPanel } from '@/components/layout/ClosetPanel'
+import { ClientBar } from '@/components/layout/ClientBar'
 import { LookCanvas } from '@/components/canvas/LookCanvas'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AdminPanel } from '@/components/admin/AdminPanel'
@@ -120,8 +121,10 @@ function App() {
           <IntakeInbox />
         ) : activeView === 'style' ? (
           <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Sub-tabs within Style: the styling canvas + the Categorize board */}
-            <div className="flex items-center gap-1 px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
+            {/* Top bar: the ONE client selector (always visible) + the Style sub-tabs. */}
+            <div className="flex items-center gap-3 px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
+              <ClientBar />
+              <div className="w-px h-5 bg-[#E8E4DF]" />
               {(['canvas', 'categorize'] as const).map((t) => (
                 <button
                   key={t}
@@ -153,7 +156,13 @@ function App() {
             )}
           </div>
         ) : (
-          <ShopView />
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Same client bar, same place — so Shop shows who you're working on too. */}
+            <div className="flex items-center px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
+              <ClientBar />
+            </div>
+            <ShopView />
+          </div>
         )}
         {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
         {showSearch && (

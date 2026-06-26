@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Search, ChevronDown, Pencil, StickyNote } from 'lucide-react'
-import { useClients } from '@/hooks/useClients'
+import { Search, Pencil, StickyNote } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useContentTags } from '@/hooks/useContentTags'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
@@ -92,24 +91,21 @@ function DraggableItem({
 }
 
 export function ClosetPanel() {
-  const { clients } = useClients()
-  const { activeClient, setActiveClient } = useClientStore()
+  const { activeClient } = useClientStore()
   const { items, itemTagIds, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
   const { tags } = useContentTags()
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
-  const [clientPickerOpen, setClientPickerOpen] = useState(false)
-  const [clientSearch, setClientSearch] = useState('')
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
   const [savingItem, setSavingItem] = useState(false)
 
-  async function handleSaveItem(data: { name_override: string | null; color: string | null; style_note: string | null; category: string | null }) {
+  async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null }) {
     if (!editingItem) return
     setSavingItem(true)
     const { error } = await supabase
       .from('gp_closet_items')
-      .update({ name_override: data.name_override, color: data.color, style_note: data.style_note, category: data.category })
+      .update({ name_override: data.name_override, brand: data.brand, color: data.color, style_note: data.style_note, category: data.category })
       .eq('id', editingItem.id)
     setSavingItem(false)
     if (error) {
@@ -191,61 +187,6 @@ export function ClosetPanel() {
 
   return (
     <div className="w-72 border-r border-border bg-white flex flex-col overflow-hidden">
-      {/* Client picker */}
-      <div className="p-3 border-b border-border relative">
-        <button
-          onClick={() => {
-            setClientPickerOpen(!clientPickerOpen)
-            setClientSearch('')
-          }}
-          className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-tile transition-colors"
-        >
-          <div>
-            <p className="text-[10px] tracking-[0.35em] uppercase text-text-muted/60">Client</p>
-            <p className="text-sm font-medium text-text mt-0.5">
-              {activeClient?.name ?? 'Select client...'}
-            </p>
-          </div>
-          <ChevronDown className="h-3.5 w-3.5 text-text-muted" />
-        </button>
-
-        {clientPickerOpen && (
-          <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-border rounded-sm shadow-lg z-50 max-h-72 flex flex-col overflow-hidden">
-            <div className="p-2 border-b border-border">
-              <input
-                type="text"
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                placeholder="Search clients..."
-                autoFocus
-                className="w-full bg-tile rounded-sm px-2.5 py-1.5 text-[11px] tracking-[0.1em] placeholder:text-text-muted/40 placeholder:uppercase focus:outline-none focus:ring-1 focus:ring-blush"
-              />
-            </div>
-            <div className="overflow-y-auto">
-              {clients
-                .filter((c) => !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()))
-                .map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setActiveClient(c)
-                      setClientPickerOpen(false)
-                      setClientSearch('')
-                      setSearch('')
-                      setActiveCategories(new Set())
-                    }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-tile transition-colors ${
-                      activeClient?.id === c.id ? 'bg-tile font-medium' : ''
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
-      </div>
-
       {activeClient && (
         <>
           {/* Search */}
