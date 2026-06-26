@@ -7,6 +7,8 @@ import { categoryOf, labelForCategory, customCategoriesFromItems } from '@/lib/g
 import { supabase } from '@/lib/supabase'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+
 // COLLECTION tab inside Categorize: the stylist sees the client's collection the way the client
 // does (her lookbook's Collection grid) but with per-item edit — hover an item → pencil → edit
 // Name / Category / Color / Style Note. Saves to gp_closet_items (the same store the client view
@@ -23,6 +25,9 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
   const { tags } = useContentTags()
   const [editing, setEditing] = useState<ClosetItem | null>(null)
   const [saving, setSaving] = useState(false)
+  const [removingBg, setRemovingBg] = useState(false)
+  const [replacing, setReplacing] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const [q, setQ] = useState('')
 
   const tagNameById = useMemo(() => {
@@ -67,7 +72,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
       (i.brand ?? '').toLowerCase().includes(term))
   }, [items, q, filterCategories, categoryByItem])
 
-  async function save(data: { name_override: string | null; color: string | null; style_note: string | null; category: string | null }) {
+  async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null }) {
     if (!editing) return
     setSaving(true)
     const { error: e } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)
@@ -75,6 +80,68 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
     if (e) { console.error('Failed to save item edits:', e); return }
     setEditing(null)
     refetch()
+  }
+
+  // Archive the item — soft-delete (is_deleted=true). Removes it from the stylist's Collection
+  // view AND the client's lookbook closet (getClosetItems filters is_deleted=false). Reversible.
+  async function archive() {
+    if (!editing) return
+    if (!confirm(`Archive "${displayName(editing) || 'this item'}"?\n\nIt will be removed from the client's collection and lookbook. You can restore it later.`)) return
+    setArchiving(true)
+    const { error: e } = await supabase.from('gp_closet_items').update({ is_deleted: true }).eq('id', editing.id)
+    setArchiving(false)
+    if (e) { alert('Could not archive this item — ' + e.message); return }
+    setEditing(null)
+    refetch()
+  }
+
+  // Remove the item's background → transparent (deterministic strip; declines gracefully when it
+  // can't). Updates raw.processed_image (reversible). On success, refetch so the new image shows.
+  async function removeBg() {
+    if (!editing) return
+    setRemovingBg(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: editing.id, image_url: resolveItemImage(editing) }),
+      })
+      const d = await resp.json().catch(() => ({}))
+      if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      setEditing(null)
+      refetch()
+    } catch {
+      alert('Failed to remove background — try again.')
+    } finally {
+      setRemovingBg(false)
+    }
+  }
+
+  // Replace an item's image with a stylist-uploaded photo (cleaned through Photoroom on the way in).
+  // Reversible (raw.bg_backup). Updates the item → shows in builder + lookbook.
+  async function replacePhoto(file: File) {
+    if (!editing) return
+    setReplacing(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const fd = new FormData()
+      fd.append('item_id', editing.id)
+      fd.append('photo', file)
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-replace-closet-image`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}` }, // no Content-Type — browser sets the multipart boundary
+        body: fd,
+      })
+      const d = await resp.json().catch(() => ({}))
+      if (!resp.ok || !d?.ok) { alert(d?.error || 'Could not replace the photo.'); return }
+      setEditing(null)
+      refetch()
+    } catch {
+      alert('Failed to replace the photo — try again.')
+    } finally {
+      setReplacing(false)
+    }
   }
 
   if (!clientId) return <p className="text-[#888] text-sm">Select a client to view their collection.</p>
@@ -129,7 +196,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts }: 
         </div>
       )}
 
-      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} onSave={save} onClose={() => setEditing(null)} />}
+      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onArchive={archive} archiving={archiving} />}
     </div>
   )
 }

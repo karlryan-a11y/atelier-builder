@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, Save } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { X, Save, Eraser, Upload, Archive } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory } from '@/lib/garmentCategory'
@@ -9,13 +9,24 @@ interface EditItemDialogProps {
   saving: boolean
   /** Custom categories already used by this client, offered alongside the fixed ones. */
   customCategories?: { slug: string; label: string }[]
-  onSave: (data: { name_override: string | null; color: string | null; style_note: string | null; category: string | null }) => void
+  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null }) => void
   onClose: () => void
+  /** When provided, shows a "Remove BG" button that strips the item's image to transparent. */
+  onRemoveBackground?: () => void
+  removingBg?: boolean
+  /** When provided, shows a "Replace Photo" button that uploads a new image for this item. */
+  onReplacePhoto?: (file: File) => void
+  replacing?: boolean
+  /** When provided, shows an "Archive" button that removes the item from the client's collection & lookbook (reversible soft-delete). */
+  onArchive?: () => void
+  archiving?: boolean
 }
 
-export function EditItemDialog({ item, saving, customCategories = [], onSave, onClose }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onArchive, archiving }: EditItemDialogProps) {
+  const fileRef = useRef<HTMLInputElement>(null)
   // The name field is pre-filled with the effective name (override or scraped).
   const [name, setName] = useState(item.name_override?.trim() || item.name || '')
+  const [brand, setBrand] = useState(item.brand ?? '')
   const [color, setColor] = useState(item.color ?? '')
   const [styleNote, setStyleNote] = useState(item.style_note ?? '')
   const [category, setCategory] = useState(item.category ?? '')
@@ -28,6 +39,7 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
     onSave({
       // Only persist an override when it actually differs from the scraped name.
       name_override: trimmedName && trimmedName !== item.name ? trimmedName : null,
+      brand: brand.trim() || null,
       color: color.trim() || null,
       style_note: styleNote.trim() || null,
       category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
@@ -63,6 +75,17 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
                 Original: {item.name}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Brand</label>
+            <input
+              type="text"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="e.g. The Row"
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
+            />
           </div>
 
           <div>
@@ -140,7 +163,52 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+        <div className="px-5 py-4 border-t border-border flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {onRemoveBackground && (
+              <button
+                onClick={onRemoveBackground}
+                disabled={!!removingBg || !!replacing}
+                title="Remove this item's background → transparent (for items that came in with a background)"
+                className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
+              >
+                <Eraser className="h-3 w-3" />
+                {removingBg ? 'Removing…' : 'Remove BG'}
+              </button>
+            )}
+            {onReplacePhoto && (
+              <>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={!!replacing || !!removingBg}
+                  title="Upload a better photo to replace this item's image (cleaned automatically)"
+                  className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
+                >
+                  <Upload className="h-3 w-3" />
+                  {replacing ? 'Replacing…' : 'Replace Photo'}
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onReplacePhoto(f); e.target.value = '' }}
+                />
+              </>
+            )}
+            {onArchive && (
+              <button
+                onClick={onArchive}
+                disabled={!!archiving || !!removingBg || !!replacing}
+                title="Archive this item — removes it from the client's collection & lookbook (restorable)"
+                className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-[#a33] border border-[#e3c9c9] rounded-sm hover:bg-[#fbf3f3] hover:border-[#d9a8a8] transition-colors disabled:opacity-50"
+              >
+                <Archive className="h-3 w-3" />
+                {archiving ? 'Archiving…' : 'Archive'}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 text-[10px] tracking-[0.2em] uppercase text-text-muted hover:bg-tile rounded-sm transition-colors"
@@ -155,6 +223,7 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
             <Save className="h-3 w-3" />
             {saving ? 'Saving...' : 'Save'}
           </button>
+          </div>
         </div>
       </div>
     </div>
