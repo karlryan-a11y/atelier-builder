@@ -49,7 +49,7 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
-        className="bg-white rounded-sm shadow-xl w-[420px] max-h-[80vh] flex flex-col border border-border"
+        className="bg-white rounded-sm shadow-xl w-[480px] max-h-[80vh] flex flex-col border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -163,40 +163,46 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-border flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {onRemoveBackground && (
-              <button
-                onClick={onRemoveBackground}
-                disabled={!!removingBg || !!replacing}
-                title="Remove this item's background → transparent (for items that came in with a background)"
-                className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
-              >
-                <Eraser className="h-3 w-3" />
-                {removingBg ? 'Removing…' : 'Remove BG'}
-              </button>
-            )}
-            {onReplacePhoto && (
-              <>
+        <div className="border-t border-border">
+          {/* Image tools — secondary, on their own row so they don't crowd Save. */}
+          {(onRemoveBackground || onReplacePhoto) && (
+            <div className="flex items-center gap-2 px-5 pt-3 pb-1">
+              {onRemoveBackground && (
                 <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={!!replacing || !!removingBg}
-                  title="Upload a better photo to replace this item's image (cleaned automatically)"
+                  onClick={onRemoveBackground}
+                  disabled={!!removingBg || !!replacing}
+                  title="Remove this item's background → transparent (for items that came in with a background)"
                   className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
                 >
-                  <Upload className="h-3 w-3" />
-                  {replacing ? 'Replacing…' : 'Replace Photo'}
+                  <Eraser className="h-3 w-3" />
+                  {removingBg ? 'Removing…' : 'Remove BG'}
                 </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onReplacePhoto(f); e.target.value = '' }}
-                />
-              </>
-            )}
-            {onArchive && (
+              )}
+              {onReplacePhoto && (
+                <>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={!!replacing || !!removingBg}
+                    title="Upload a better photo to replace this item's image (cleaned automatically)"
+                    className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
+                  >
+                    <Upload className="h-3 w-3" />
+                    {replacing ? 'Replacing…' : 'Replace Photo'}
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) onReplacePhoto(f); e.target.value = '' }}
+                  />
+                </>
+              )}
+            </div>
+          )}
+          {/* Commit row: Archive (destructive, far left) · Cancel + Save (right). */}
+          <div className="px-5 py-4 flex items-center justify-between gap-2">
+            {onArchive ? (
               <button
                 onClick={onArchive}
                 disabled={!!archiving || !!removingBg || !!replacing}
@@ -206,23 +212,23 @@ export function EditItemDialog({ item, saving, customCategories = [], onSave, on
                 <Archive className="h-3 w-3" />
                 {archiving ? 'Archiving…' : 'Archive'}
               </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-[10px] tracking-[0.2em] uppercase text-text-muted hover:bg-tile rounded-sm transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
-          >
-            <Save className="h-3 w-3" />
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+            ) : <span />}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-[10px] tracking-[0.2em] uppercase text-text-muted hover:bg-tile rounded-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-6 py-2.5 bg-[#1A1A1A] text-white text-[11px] font-medium tracking-[0.18em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50 shadow-sm"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
