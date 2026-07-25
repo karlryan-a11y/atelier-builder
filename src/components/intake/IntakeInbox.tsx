@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Inbox, Check, X, Edit3, RefreshCw, Upload, Camera, Download, HardDrive } from 'lucide-react'
+import { Inbox, Check, X, Edit3, RefreshCw, RotateCw, Upload, Camera, Download, HardDrive, ChevronDown } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
@@ -14,15 +14,22 @@ import {
   type DriveFile,
   type PickedFolder,
 } from '@/lib/googleDrive'
-import { ensureJpegFiles } from '@/lib/heic'
+import { ensureJpegFiles, readCaptureTimes } from '@/lib/heic'
+import { IntakeConfirmBoard } from './IntakeConfirmBoard'
+import { slugifyCategory, labelForCategory, isFixedCategory } from '@/lib/garmentCategory'
+import { CATEGORY_LABELS } from '@/lib/categorize'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
-const CATEGORIES = [
-  'Dresses', 'Tops', 'Bottoms', 'Outerwear', 'Knitwear',
-  'Shoes', 'Bags', 'Accessories', 'Jewelry', 'Swimwear',
-  'Activewear', 'Intimates',
-]
+// Fixed categories offered in Needs Review = the SAME taxonomy the client Collection/lookbook
+// uses (categorize.ts CATEGORY_LABELS). This keeps the two in lockstep so a Needs-Review filing
+// always maps to a real, browsable Collection category. The old list (Bottoms/Knitwear/
+// Accessories/Intimates/Swimwear) had labels the lookbook has no home for, so items filed there
+// became orphan "junk" buckets — the Collection uses Skirts/Pants/Jeans/Shorts, Swim, Belts/
+// Scarves/Hats/Sunglasses instead. Values are stored as SLUGS, matching the Collection edit dialog.
+const FIXED_CATEGORIES = (Object.entries(CATEGORY_LABELS) as [string, string][])
+  .filter(([slug]) => slug !== 'other')
+  .map(([slug, label]) => ({ slug, label }))
 
 export function IntakeInbox() {
   const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
@@ -40,7 +47,7 @@ export function IntakeInbox() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
   const hookFilter = filter === 'in_progress' ? 'pending_review' : filter
-  const { items, loading, error, refresh, counts } = useIntakeItems(hookFilter, selectedClientId)
+  const { items, loading, error, refresh, refreshBackground, counts } = useIntakeItems(hookFilter, selectedClientId)
   const [showUpload, setShowUpload] = useState(false)
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
   const [_aiSpend, _setAiSpend] = useState<{ anthropic: number; openai: number; total: number } | null>(null)
@@ -48,6 +55,10 @@ export function IntakeInbox() {
   // Multi-select for bulk approve/reject (check items as you review → act on all at once)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkActing, setBulkActing] = useState('')
+  // Confirm board is collapsed by default so it can't eat the viewport and block scrolling to the
+  // item list below; the header bar shows how many batches are waiting so it's still discoverable.
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [confirmWaiting, setConfirmWaiting] = useState(0)
   const toggleSelect = (id: string) =>
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const handleBulkAction = async (action: 'approve' | 'reject') => {
@@ -91,24 +102,41 @@ export function IntakeInbox() {
     } catch (err) { alert(err instanceof Error ? err.message : 'Export failed') }
     finally { setBulkActing('') }
   }
-  const handleUploadReplace = async (files: FileList) => {
-    const arr = [...files]
-    let done = 0, matched = 0
-    for (const f of arr) {
-      const m = f.name.match(/(\d{1,4})/) // the number the stylist kept on the file
-      if (m) {
-        const form = new FormData()
-        form.append('photo', f)
-        form.append('export_number', String(parseInt(m[1], 10)))
-        if (selectedClientId) form.append('client_id', selectedClientId)
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-replace-rejected`, { method: 'POST', body: form })
-        if (resp.ok) matched++
+  // Bulk AI re-run for rejected items (Gemini). The intake-rerun-item function is self-contained:
+  // it re-renders (failure-routed — edit vs re-render-from-original), lands successes directly in
+  // pending_review (no cron dependency), and routes wrong-source "pairing" items to 'repair' (no
+  // AI spent) so they go back to the confirm board instead of burning a render. Sends the stylist's
+  // session token so the function's JWT verification stays ON (no --no-verify-jwt needed).
+  const handleBulkRerun = async () => {
+    const ids = selectedIds.size > 0 ? [...selectedIds] : items.map(i => i.id)
+    if (!ids.length || bulkActing) return
+    if (!confirm(`Re-run ${ids.length} rejected item${ids.length > 1 ? 's' : ''} with AI (Gemini)? The ones it can fix move to Needs Review for your approval; wrong-photo items get flagged to re-pair. ~$0.04 each. You can leave this running.`)) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { alert('Please sign in again.'); return }
+    const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }
+    const CONCURRENCY = 4
+    let done = 0, fixed = 0, repair = 0, failed = 0
+    const queue = [...ids]
+    const worker = async () => {
+      while (queue.length) {
+        const id = queue.shift()!
+        try {
+          const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-rerun-item`, {
+            method: 'POST', headers, body: JSON.stringify({ item_id: id }),
+          })
+          const j = await resp.json().catch(() => ({}))
+          if (j?.routed === 'repair') repair++
+          else if (resp.ok && j?.ok) fixed++
+          else failed++
+        } catch { failed++ }
+        done++
+        setBulkActing(`Re-running ${done} of ${ids.length}…  ✓${fixed} moved · ⟳${repair} re-pair · ✗${failed} failed`)
       }
-      done++
-      setBulkActing(`Uploading ${done} of ${arr.length}... (${matched} matched)`)
     }
-    setBulkActing('')
-    alert(`${matched} of ${arr.length} matched and moved to Needs Review for final approval.`)
+    setBulkActing(`Re-running 0 of ${ids.length}…`)
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker))
+    setSelectedIds(new Set()); setBulkActing('')
+    alert(`Re-run complete:\n• ${fixed} moved to Needs Review for approval\n• ${repair} need re-pairing (wrong source photo — re-pair on the confirm board)\n• ${failed} failed — select them and try again`)
     refresh()
   }
 
@@ -118,6 +146,42 @@ export function IntakeInbox() {
       setSelectedClientId(activeClient.id)
     }
   }, [activeClient?.id])
+
+  // The client's CUSTOM categories (the ones stylists created in Collection/Categorize),
+  // so a Needs-Review item can be filed straight into them — not just the fixed taxonomy.
+  // Derived the same way the Collection tab derives them: any non-fixed slug already in use
+  // on the client's closet items (category override or custom_categories[]). Paginated so
+  // it's complete even for clients with >1000 items (PostgREST caps a page at 1000).
+  const [customCats, setCustomCats] = useState<{ slug: string; label: string }[]>([])
+  useEffect(() => {
+    if (!selectedClientId) { setCustomCats([]); return }
+    let cancelled = false
+    ;(async () => {
+      const slugs = new Set<string>()
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('gp_closet_items')
+          .select('category, custom_categories')
+          .eq('client_id', selectedClientId)
+          .eq('is_deleted', false)
+          .order('id', { ascending: true }) // unique order → deterministic pagination past 1000 rows
+          .range(from, from + PAGE - 1)
+        if (error || !data) break
+        for (const r of data as Array<{ category: string | null; custom_categories: string[] | null }>) {
+          const c = (r.category ?? '').trim().toLowerCase()
+          if (c && !isFixedCategory(c)) slugs.add(c)
+          for (const cc of r.custom_categories ?? []) {
+            const s = slugifyCategory(String(cc))
+            if (s && !isFixedCategory(s)) slugs.add(s)
+          }
+        }
+        if (data.length < PAGE) break
+      }
+      if (!cancelled) setCustomCats([...slugs].sort().map((slug) => ({ slug, label: labelForCategory(slug) })))
+    })()
+    return () => { cancelled = true }
+  }, [selectedClientId])
 
   // Poll active batch count for the tab badge
   useEffect(() => {
@@ -132,6 +196,20 @@ export function IntakeInbox() {
     const iv = setInterval(check, 10000)
     return () => clearInterval(iv)
   }, [])
+
+  // Poll how many batches are waiting on the confirm board (client-scoped) so the collapsed
+  // "Confirm items" header shows a live count even while the board itself is unmounted.
+  useEffect(() => {
+    const check = async () => {
+      let q = supabase.from('intake_batches').select('id', { count: 'exact', head: true }).eq('status', 'pending_confirm')
+      if (selectedClientId) q = q.eq('client_id', selectedClientId)
+      const { count } = await q
+      setConfirmWaiting(count ?? 0)
+    }
+    check()
+    const iv = setInterval(check, 12000)
+    return () => clearInterval(iv)
+  }, [selectedClientId])
 
   // Load AI spend for current month
   useEffect(() => {
@@ -158,23 +236,46 @@ export function IntakeInbox() {
     return () => clearInterval(iv)
   }, [])
 
-  // Load clients that have intake items
-  useEffect(() => {
-    supabase
-      .from('intake_items')
-      .select('client_id')
-      .then(({ data }) => {
-        const ids = [...new Set((data ?? []).map((d: any) => d.client_id))]
-        if (ids.length > 0) {
-          supabase
-            .from('gp_clients')
-            .select('id, name')
-            .in('id', ids)
-            .order('name')
-            .then(({ data: clients }) => setClientOptions(clients ?? []))
-        }
-      })
+  // Load clients that have intake items OR any batch — including batches still parked on the
+  // confirm board (status 'pending_confirm'), which have no items yet. Without the batch union,
+  // a client whose upload is waiting to be confirmed would vanish from this filter entirely.
+  const loadClientOptions = useCallback(async () => {
+    // Only clients with VISIBLE inbox content: un-archived items, or batches still listed
+    // (not 'failed'). So clearing a client (archive items + fail batches) drops their chip too.
+    const [itemsRes, batchesRes] = await Promise.all([
+      supabase.from('intake_items').select('client_id').neq('inbox_archived', true),
+      supabase.from('intake_batches').select('client_id')
+        .in('status', ['uploading', 'verifying_order', 'pending_confirm', 'processing', 'complete', 'partial']),
+    ])
+    const ids = [...new Set([
+      ...((itemsRes.data ?? []).map((d: any) => d.client_id)),
+      ...((batchesRes.data ?? []).map((d: any) => d.client_id)),
+    ])].filter(Boolean)
+    if (ids.length > 0) {
+      const { data: clients } = await supabase
+        .from('gp_clients').select('id, name').in('id', ids).order('name')
+      setClientOptions(clients ?? [])
+    }
   }, [])
+
+  // Reload on mount and whenever the tab changes (so a just-uploaded client appears without a refresh).
+  useEffect(() => { loadClientOptions() }, [loadClientOptions, filter])
+
+  // While any sent-back item is mid-rework, poll so it flips from "being redone" back to
+  // reviewable on its own — no manual refresh needed.
+  useEffect(() => {
+    const hasRework = items.some((i) =>
+      i.status === 'rerun_requested' || i.status === 'qc_failed_restyle' ||
+      (i.status === 'pending_qc' && (i.reprocess_attempts ?? 0) > 0))
+    if (!hasRework) return
+    const iv = setInterval(() => {
+      // Don't yank the list out from under an active selection, and refresh in the BACKGROUND
+      // (no spinner) so the stylist's scroll position is preserved while they review.
+      if (selectedIds.size > 0) return
+      refreshBackground()
+    }, 15000)
+    return () => clearInterval(iv)
+  }, [items, refreshBackground, selectedIds])
 
   const tabs = [
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
@@ -270,6 +371,34 @@ export function IntakeInbox() {
         />
       )}
 
+      {/* Confirm board — COLLAPSIBLE (default collapsed) so it can never eat the viewport and block
+          scrolling to the item list below. The header bar always shows how many batches are waiting,
+          so confirm work stays discoverable; click to expand and tag. When expanded it's still
+          height-capped + internally scrollable. */}
+      <div className="shrink-0 bg-white border-b border-[#E8E4DF]">
+        <button
+          onClick={() => setShowConfirm(s => !s)}
+          className="w-full flex items-center justify-between px-4 md:px-6 py-2.5 hover:bg-[#FAFAF8] transition-colors"
+        >
+          <span className="text-[10px] tracking-[0.2em] uppercase text-[#888] flex items-center gap-2">
+            Confirm items
+            {confirmWaiting > 0 ? (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-blush text-[#1A1A1A] text-[9px] font-medium px-1.5">
+                {confirmWaiting} {confirmWaiting === 1 ? 'batch' : 'batches'} waiting
+              </span>
+            ) : (
+              <span className="text-[#bbb] normal-case tracking-normal">none waiting</span>
+            )}
+          </span>
+          <ChevronDown className={`h-4 w-4 text-[#888] transition-transform ${showConfirm ? '' : '-rotate-90'}`} />
+        </button>
+        {showConfirm && (
+          <div className="overflow-y-auto px-4 md:px-6 max-h-[45vh] border-t border-[#E8E4DF]">
+            <IntakeConfirmBoard clientId={selectedClientId} onDone={() => { refresh(); loadClientOptions() }} />
+          </div>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="flex border-b border-[#E8E4DF] bg-white shrink-0">
         {tabs.map(tab => (
@@ -333,7 +462,7 @@ export function IntakeInbox() {
       {/* Content — In Progress tab or item cards */}
       {filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">
-          <InProgressPanel onBatchCountChange={setActiveBatchCount} onRefreshItems={refresh} />
+          <InProgressPanel onBatchCountChange={setActiveBatchCount} onRefreshItems={refresh} clientId={selectedClientId} />
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto">
@@ -453,16 +582,16 @@ export function IntakeInbox() {
 
             {filter === 'rejected_final' && items.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-[#FAFAF8] border border-[#E8E4DF] rounded-sm">
-                <span className="text-[10px] tracking-[0.15em] uppercase text-[#888]">Fix in ChatGPT:</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase text-[#888]">Try AI re-run first:</span>
+                <button onClick={handleBulkRerun} disabled={!!bulkActing} className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50">
+                  <RefreshCw className="h-3.5 w-3.5" /> Re-run with Gemini{selectedIds.size > 0 ? ` (${selectedIds.size})` : ' (all)'}
+                </button>
+                <span className="text-[10px] tracking-[0.15em] uppercase text-[#888] ml-1">or fix in ChatGPT:</span>
                 <button onClick={handleDownloadRejected} disabled={!!bulkActing} className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50">
                   <Download className="h-3.5 w-3.5" /> Download for ChatGPT
                 </button>
-                <label className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E4DF] text-[#888] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:border-[#ccc] hover:text-[#1A1A1A] cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" /> Upload to replace
-                  <input type="file" multiple accept="image/*" className="hidden" onChange={e => { if (e.target.files) handleUploadReplace(e.target.files) }} />
-                </label>
                 {bulkActing && <span className="text-[11px] text-[#888]">{bulkActing}</span>}
-                <span className="text-[10px] text-[#aaa] ml-auto">Keep each file's number — finished images map back automatically</span>
+                <span className="text-[10px] text-[#aaa] ml-auto">After fixing in ChatGPT, add each photo in <b>Collection → ＋ Add Item</b> (then archive the reject here).</span>
               </div>
             )}
 
@@ -477,6 +606,9 @@ export function IntakeInbox() {
                     <button onClick={() => handleBulkAction('approve')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[#1A1A1A] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]">
                       <Check className="h-3.5 w-3.5" /> Approve selected
                     </button>
+                    <button onClick={handleBulkRerun} className="flex items-center gap-1.5 px-3 py-1.5 bg-blush text-[#1A1A1A] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:opacity-90">
+                      <RefreshCw className="h-3.5 w-3.5" /> Re-run with Gemini
+                    </button>
                     <button onClick={() => handleBulkAction('reject')} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/30 text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-white/10">
                       <X className="h-3.5 w-3.5" /> Reject selected
                     </button>
@@ -487,7 +619,7 @@ export function IntakeInbox() {
             )}
 
             {items.map(item => (
-              <InlineItemCard key={item.id} item={item} onAction={refresh} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} />
+              <InlineItemCard key={item.id} item={item} onAction={refreshBackground} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} customCategories={customCats} />
             ))}
           </div>
         )}
@@ -503,7 +635,7 @@ export function IntakeInbox() {
  * AI photo large on left, original + tag small below it,
  * metadata + actions on the right. One-tap approve.
  */
-function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void }) {
+function InlineItemCard({ item, onAction, selected, onToggle, customCategories = [] }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void; customCategories?: { slug: string; label: string }[] }) {
   const [editing, setEditing] = useState(false)
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
@@ -523,37 +655,114 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
   const [actionResult, setActionResult] = useState<'approved' | 'rejected' | null>(null)
 
   const handleRestyle = async () => {
-    // For restyle (has existing AI image), instructions are required.
-    // For first-time generate, empty instructions = use default prompt.
-    if (currentAiKey && !restyleNote.trim()) {
-      alert('Describe how you want the photo restyled')
-      return
-    }
+    // Uses the SAME updated engine as the bulk "Re-run with Gemini" (intake-rerun-item):
+    // Gemini-only, failure-routed, tuned prompt, self-contained (lands pending_review, no dead-cron
+    // strand). A typed note is OPTIONAL — the engine auto-pulls the item's QC notes/flags; the note
+    // just adds targeted guidance. Sends the stylist's session token (function verifies JWT).
     setRestyling(true)
     try {
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-restyle-item`, {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Please sign in again.')
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-rerun-item`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           item_id: item.id,
-          instructions: restyleNote.trim(),
+          instructions: restyleNote.trim() || undefined,
         }),
       })
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Restyle failed' }))
-        throw new Error(err.error || 'Restyle failed')
+      const data = await resp.json().catch(() => ({}))
+      if (data?.routed === 'repair') {
+        alert('This looks like a wrong-photo / pairing issue — re-pair it on the confirm board instead of re-rendering.')
+        return
       }
-
-      const data = await resp.json()
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || 'Re-run failed — try again')
       // Update the displayed AI image with the new one
       setCurrentAiKey(data.ai_image_r2_key)
       setRestyleNote('')
       setShowRestyle(false)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to restyle')
+      alert(err instanceof Error ? err.message : 'Failed to re-run')
     } finally {
       setRestyling(false)
+    }
+  }
+
+  // Rotate the SOURCE photo 90° and re-run — for an item that processed sideways/upside-down.
+  // Persists intake_photos.rotation (gen path applies it before the AI call), then re-runs.
+  const [rotating, setRotating] = useState(false)
+  const handleRotateRerun = async () => {
+    const pid = item.garment_photo?.id
+    if (!pid) { alert('No source photo to rotate.'); return }
+    setRotating(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Please sign in again.')
+      const { data: ph } = await supabase.from('intake_photos').select('rotation').eq('id', pid).single()
+      const next = ((((ph?.rotation as number) ?? 0) + 90) % 360)
+      await supabase.from('intake_photos').update({ rotation: next }).eq('id', pid)
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-rerun-item`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || 'Rotate + re-run failed — try again')
+      setCurrentAiKey(data.ai_image_r2_key)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to rotate + re-run')
+    } finally {
+      setRotating(false)
+    }
+  }
+
+  // "Get info" — backfill product metadata (name/brand/category/color) for an item that came back
+  // with no name (extraction never completed). Reads the photo with Claude vision; writes only the
+  // text fields (safe — never touches status/image). Refreshes the card to show the new name.
+  const [gettingInfo, setGettingInfo] = useState(false)
+  const handleGetInfo = async () => {
+    setGettingInfo(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Please sign in again.')
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-extract-metadata`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || 'Could not get info — try again')
+      onAction()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to get info')
+    } finally {
+      setGettingInfo(false)
+    }
+  }
+
+  // Archive a rejected item (Rejected column). Sets inbox_archived=true — hides it from every tab
+  // but is FULLY REVERSIBLE (the row + image stay; recoverable via restore). Gated by a one-step
+  // inline confirm ("Archive this item? Yes/Cancel"). No native dialog — archive isn't destructive.
+  const [confirmArchive, setConfirmArchive] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const handleArchive = async () => {
+    setArchiving(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Please sign in again.')
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-archive-item`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || 'Archive failed — try again')
+      onAction()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to archive')
+    } finally {
+      setArchiving(false)
+      setConfirmArchive(false)
     }
   }
 
@@ -676,6 +885,35 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
     )
   }
 
+  // Sent-back item mid-rework — read-only "being redone" card so it never looks lost.
+  // It stays here until the regenerated photo finishes QC and returns as pending_review.
+  const isReworking = item.status === 'rerun_requested' || item.status === 'qc_failed_restyle' ||
+    (item.status === 'pending_qc' && (item.reprocess_attempts ?? 0) > 0)
+  if (isReworking) {
+    return (
+      <div className="bg-amber-50/40 rounded-sm border border-amber-200 overflow-hidden">
+        <div className="flex items-center gap-4 p-4">
+          <div className="w-20 h-24 rounded-sm overflow-hidden border border-[#E8E4DF] bg-[#F8F7F5] shrink-0">
+            {item.garment_photo?.r2_key ? (
+              <ClickableSignedImage r2Key={item.garment_photo.r2_key} alt="Original photo" className="w-full h-full object-cover" label="Original photo" />
+            ) : null}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-amber-500 animate-spin" />
+              <span className="text-[12px] font-medium text-amber-800 tracking-[0.05em] uppercase">Being redone</span>
+            </div>
+            <p className="text-[13px] text-[#1A1A1A] font-medium mt-1 truncate">{item.extracted_name || 'Item'}</p>
+            <p className="text-[11px] text-[#888] mt-0.5">
+              You sent this back — a new photo is generating and will reappear here for review automatically. Usually a few minutes.
+            </p>
+            <p className="text-[10px] text-[#aaa] mt-1">{item.client_name}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white rounded-sm border border-[#E8E4DF] overflow-hidden">
       <div className="flex flex-col md:flex-row">
@@ -758,13 +996,26 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
               </div>
             </div>
             {(item.status === 'pending_review' || item.status === 'qc_passed') && !editing && (
-              <button
-                onClick={() => setEditing(true)}
-                className="flex items-center gap-1 text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors shrink-0 ml-4"
-              >
-                <Edit3 className="h-3 w-3" />
-                Edit
-              </button>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                {!item.extracted_name && (
+                  <button
+                    onClick={handleGetInfo}
+                    disabled={gettingInfo}
+                    title="Identify this item with AI — fills in name, brand, category, color from the photo"
+                    className="flex items-center gap-1 text-[10px] tracking-[0.15em] uppercase text-[#185FA5] hover:text-[#0d3a66] transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${gettingInfo ? 'animate-spin' : ''}`} />
+                    {gettingInfo ? 'Identifying…' : 'Get info'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setEditing(true)}
+                  className="flex items-center gap-1 text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
+                >
+                  <Edit3 className="h-3 w-3" />
+                  Edit
+                </button>
+              </div>
             )}
           </div>
 
@@ -776,7 +1027,7 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
             <MetadataField label="Brand" value={brand} editing={editing} onChange={setBrand} />
             <MetadataField label="Color" value={color} editing={editing} onChange={setColor} />
-            <MetadataField label="Category" value={category} editing={editing} onChange={setCategory} options={CATEGORIES} />
+            <CategoryField value={category} editing={editing} onChange={setCategory} customCategories={customCategories} />
             <MetadataField label="Material" value={material} editing={editing} onChange={setMaterial} />
           </div>
 
@@ -814,7 +1065,7 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
           {showRestyle && !rejecting && (item.status === 'pending_review' || item.status === 'qc_passed') && (
             <div className="mb-3 border border-[#E8E4DF] rounded-sm p-3 bg-[#FAFAF8]">
               <p className="text-[9px] tracking-[0.15em] uppercase text-[#888] mb-2">
-                {currentAiKey ? 'Restyle instructions' : 'Product photo instructions (optional)'}
+                {currentAiKey ? 'Restyle instructions (optional — AI uses the QC notes automatically)' : 'Product photo instructions (optional)'}
               </p>
               <textarea
                 value={restyleNote}
@@ -828,11 +1079,20 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
               <div className="flex gap-2">
                 <button
                   onClick={handleRestyle}
-                  disabled={restyling || (!!currentAiKey && !restyleNote.trim())}
+                  disabled={restyling}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333] disabled:opacity-50"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${restyling ? 'animate-spin' : ''}`} />
                   {restyling ? 'Restyling (~30s)...' : 'Restyle Photo'}
+                </button>
+                <button
+                  onClick={handleRotateRerun}
+                  disabled={restyling || rotating}
+                  title="Rotate the source photo 90° and re-run — for a sideways/upside-down item"
+                  className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E4DF] text-[10px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5] disabled:opacity-50"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 ${rotating ? 'animate-spin' : ''}`} />
+                  {rotating ? 'Rotating…' : 'Rotate 90°'}
                 </button>
                 <button
                   onClick={() => { setShowRestyle(false); setRestyleNote('') }}
@@ -952,13 +1212,43 @@ function InlineItemCard({ item, onAction, selected, onToggle }: { item: IntakeIt
                 <X className="h-4 w-4 text-red-500" />
                 <span className="text-sm text-red-600">Rejected</span>
               </div>
-              <button
-                onClick={() => handleRejectFinal(true)}
-                disabled={submitting}
-                className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline disabled:opacity-50"
-              >
-                Restore to Needs Review
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => handleRejectFinal(true)}
+                  disabled={submitting || archiving}
+                  className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline disabled:opacity-50"
+                >
+                  Restore to Needs Review
+                </button>
+                {!confirmArchive ? (
+                  <button
+                    onClick={() => setConfirmArchive(true)}
+                    disabled={archiving}
+                    title="Hide this item from the list — recoverable"
+                    className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] underline disabled:opacity-50"
+                  >
+                    Archive
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] tracking-[0.1em] uppercase text-[#666] font-medium">Archive this item?</span>
+                    <button
+                      onClick={handleArchive}
+                      disabled={archiving}
+                      className="text-[10px] tracking-[0.15em] uppercase font-semibold text-white bg-[#1A1A1A] hover:bg-[#333] px-2.5 py-1 rounded-sm disabled:opacity-50"
+                    >
+                      {archiving ? 'Archiving…' : 'Yes, archive'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmArchive(false)}
+                      disabled={archiving}
+                      className="text-[10px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A] disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -995,7 +1285,7 @@ interface ActiveBatch {
   items_to_review: number
 }
 
-function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountChange: (n: number) => void; onRefreshItems: () => void }) {
+function InProgressPanel({ onBatchCountChange, onRefreshItems, clientId }: { onBatchCountChange: (n: number) => void; onRefreshItems: () => void; clientId?: string | null }) {
   const [batches, setBatches] = useState<ActiveBatch[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1012,19 +1302,23 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
       // Get active batches + recently completed. 7-day window so a finished batch stays
       // visible (with its review-completion bar) until the stylist has reviewed every item.
       const yesterday = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      const { data: activeBatches } = await supabase
+      let activeQ = supabase
         .from('intake_batches')
         .select('id, client_id, batch_label, status, total_photos, estimated_pairs, created_at, completed_at')
-        .in('status', ['uploading', 'verifying_order', 'processing'])
+        .in('status', ['uploading', 'verifying_order', 'pending_confirm', 'processing'])
         .order('created_at', { ascending: false })
+      if (clientId) activeQ = activeQ.eq('client_id', clientId)
+      const { data: activeBatches } = await activeQ
 
-      const { data: recentDone } = await supabase
+      let doneQ = supabase
         .from('intake_batches')
         .select('id, client_id, batch_label, status, total_photos, estimated_pairs, created_at, completed_at')
         .in('status', ['complete', 'partial'])
         .gte('completed_at', yesterday)
         .order('completed_at', { ascending: false })
         .limit(10)
+      if (clientId) doneQ = doneQ.eq('client_id', clientId)
+      const { data: recentDone } = await doneQ
 
       const rawBatches = [...(activeBatches ?? []), ...(recentDone ?? [])]
 
@@ -1107,10 +1401,12 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
       }
     }
 
+    setLoading(true)
+    setBatches([])
     fetchBatches()
     const iv = setInterval(fetchBatches, 5000)
     return () => { mounted = false; clearInterval(iv) }
-  }, [])
+  }, [clientId])
 
   if (loading) {
     return (
@@ -1140,6 +1436,7 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
       {batches.map(batch => {
         const isUploading = batch.status === 'uploading'
         const isClassifying = batch.status === 'verifying_order'
+        const isAwaitingConfirm = batch.status === 'pending_confirm'
         const isProcessing = batch.status === 'processing'
         const isComplete = batch.status === 'complete' || batch.status === 'partial'
 
@@ -1182,6 +1479,11 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
           const remaining = batch.photos_total - batch.photos_classified
           const secLeft = Math.round(remaining * 1.5)
           timeEst = secLeft > 60 ? `~${Math.ceil(secLeft / 60)}min left` : `~${secLeft}s left`
+        } else if (isAwaitingConfirm) {
+          pct = 40
+          phase = 'Ready to sort — your turn'
+          detail = `Your ${batch.total_photos} photos are ready. Open the Digitize board above and tap each as an item or its tag, then hit Digitize.`
+          timeEst = ''
         } else if (isProcessing) {
           const total = batch.items_total || batch.estimated_pairs || Math.ceil(batch.total_photos / 2)
           if (total > 0 && batch.items_done > 0) {
@@ -1218,6 +1520,8 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems }: { onBatchCountC
                   </span>
                 ) : isComplete ? (
                   <span className="w-2.5 h-2.5 bg-[#C89B7B] rounded-full" />
+                ) : isAwaitingConfirm ? (
+                  <span className="w-2.5 h-2.5 bg-amber-400 rounded-full animate-pulse" />
                 ) : (
                   <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
                 )}
@@ -1328,7 +1632,9 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id ?? '')
   const [batchLabel, setBatchLabel] = useState('')
   const [category, setCategory] = useState('clothing')
-  const isAccessory = ['handbag', 'shoes', 'jewelry', 'belts'].includes(category)
+  // ONE PHOTO PER ITEM for every category now (no garment+tag pairing). Category is still
+  // chosen (it drives the per-category render prompt) but never changes the photo count.
+  const isAccessory = true
   const categoryLabel = category.charAt(0).toUpperCase() + category.slice(1)
   const [files, setFiles] = useState<File[]>([])
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
@@ -1400,7 +1706,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
       // Drive source replaces any locally-staged files (mutually exclusive)
       setFiles([])
       setDriveToken(picked.accessToken)
-      setDriveFolder({ id: '', name: picked.sourceName })
+      setDriveFolder({ id: picked.sourceFolderId ?? '', name: picked.sourceName })
       setDriveFiles(picked.files)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not connect to Google Drive'
@@ -1506,6 +1812,21 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
     const photoCount = fromDrive ? driveFiles.length : files.length
     if (photoCount === 0) { alert('Add photos'); return }
 
+    // Capture-time map (filename basename → ISO8601), read BEFORE any downscale strips EXIF.
+    // Drive supplies it via imageMediaMetadata.time; desktop files via exifr on the originals.
+    // Keyed by basename so a HEIC→JPEG rename (IMG_1.HEIC → IMG_1.jpg) still matches server-side.
+    const baseName = (n: string) => n.replace(/\.[^.]+$/, '')
+    const rawTimes: Record<string, string> = fromDrive
+      ? Object.fromEntries(driveFiles.filter(d => d.captureTime).map(d => [d.name, d.captureTime as string]))
+      : await readCaptureTimes(files)
+    const captureTimes: Record<string, string> = {}
+    for (const [name, t] of Object.entries(rawTimes)) captureTimes[baseName(name)] = t
+
+    // Drive provenance (basename → Drive file id), mirroring the capture-time map, so the
+    // server can store each photo's exact Drive origin for automatic reconciliation.
+    const driveFileIds: Record<string, string> = {}
+    if (fromDrive) for (const d of driveFiles) driveFileIds[baseName(d.name)] = d.id
+
     // Fetch one chunk's worth of File objects. For Drive, download just-in-time so we
     // never hold more than CHUNK photos in memory — keeps large batches (500+) safe.
     // The ~1h Drive token can expire mid-batch; on a 401 we silently refresh it once
@@ -1555,6 +1876,12 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
         formData.append('client_id', selectedClientId)
         if (batchLabel.trim() && !batchId) formData.append('batch_label', batchLabel.trim())
         if (!batchId) formData.append('batch_category', category)
+        if (Object.keys(captureTimes).length) formData.append('capture_times', JSON.stringify(captureTimes))
+        if (fromDrive && Object.keys(driveFileIds).length) formData.append('drive_file_ids', JSON.stringify(driveFileIds))
+        if (!batchId && fromDrive && driveFolder?.id) {
+          formData.append('drive_folder_id', driveFolder.id)
+          if (driveFolder.name) formData.append('drive_folder_name', driveFolder.name)
+        }
         chunk.forEach(f => formData.append('photos', f))
 
         // Retry each chunk up to 3x. Once we have a batchId, retries reuse it.
@@ -1869,8 +2196,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                   <div className="min-w-0">
                     <p className="text-sm text-[#1A1A1A] font-medium truncate">{driveFolder?.name}</p>
                     <p className="text-[10px] text-[#888]">
-                      {driveFiles.length} photos · {(isAccessory ? driveFiles.length : Math.ceil(driveFiles.length / 2))} items from Google Drive
-                      {driveFiles.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
+                      {driveFiles.length} {driveFiles.length === 1 ? 'item' : 'items'} from Google Drive
                     </p>
                   </div>
                 </div>
@@ -1909,13 +2235,11 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1.5 md:gap-2 mb-3">
                 {files.map((f, i) => (
                   <div key={i} className="relative group">
-                    <div className={`aspect-[4/5] rounded-sm overflow-hidden border ${i % 2 === 0 ? 'border-[#1A1A1A]' : 'border-blush'}`}>
+                    <div className="aspect-[4/5] rounded-sm overflow-hidden border border-[#1A1A1A]">
                       <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
                     </div>
-                    <span className={`absolute top-0.5 left-0.5 text-[6px] md:text-[7px] tracking-[0.1em] uppercase px-0.5 md:px-1 rounded-sm ${
-                      i % 2 === 0 ? 'bg-[#1A1A1A] text-white' : 'bg-blush text-[#1A1A1A]'
-                    }`}>
-                      {i % 2 === 0 ? 'item' : 'tag'}
+                    <span className="absolute top-0.5 left-0.5 text-[6px] md:text-[7px] tracking-[0.1em] uppercase px-0.5 md:px-1 rounded-sm bg-[#1A1A1A] text-white">
+                      item
                     </span>
                     <button
                       onClick={() => removeFile(i)}
@@ -1928,8 +2252,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
               </div>
               <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 <p className="text-[10px] text-[#888] text-center md:text-left">
-                  {files.length} photos · {(isAccessory ? files.length : Math.ceil(files.length / 2))} items
-                  {files.length % 2 !== 0 && <span className="text-amber-600 ml-1">(odd — last item has no tag)</span>}
+                  {files.length} {files.length === 1 ? 'item' : 'items'}
                 </p>
                 <button
                   onClick={runPipeline}
@@ -2032,6 +2355,88 @@ function MetadataField({
         )
       ) : (
         <p className="text-sm text-[#1A1A1A] font-medium">{value || '—'}</p>
+      )}
+    </div>
+  )
+}
+
+// Category picker for a Needs-Review item. Same options as the Collection tab's edit
+// dialog: the fixed taxonomy PLUS the client's custom categories PLUS "New category…",
+// so stylists can file an item into a category they made without leaving Needs Review.
+// Fixed picks keep their existing label value (lowercased to a slug on read); custom
+// picks are stored as slugs to match how Collection/Categorize persist them.
+function CategoryField({
+  value, editing, onChange, customCategories,
+}: {
+  value: string
+  editing: boolean
+  onChange: (v: string) => void
+  customCategories: { slug: string; label: string }[]
+}) {
+  const [customMode, setCustomMode] = useState(false)
+  const [customName, setCustomName] = useState('')
+
+  // Does the current value already match one of the listed options? If not (e.g. a custom
+  // slug just typed this session, or an AI-extracted label not in the fixed list), show it
+  // as its own option so the select stays in sync instead of silently blanking.
+  const lower = (value ?? '').trim().toLowerCase()
+  const inFixed = FIXED_CATEGORIES.some(c => c.slug === value || c.slug === lower)
+  const inCustom = customCategories.some(c => c.slug === value || c.slug === lower)
+  const extra = value && !inFixed && !inCustom ? value : null
+
+  if (!editing) {
+    return (
+      <div>
+        <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-0.5">Category</label>
+        <p className="text-sm text-[#1A1A1A] font-medium">{value ? labelForCategory(value) : '—'}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-0.5">Category</label>
+      {customMode ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            autoFocus
+            value={customName}
+            onChange={e => setCustomName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && customName.trim()) { onChange(slugifyCategory(customName)); setCustomMode(false); setCustomName('') }
+              if (e.key === 'Escape') { setCustomMode(false); setCustomName('') }
+            }}
+            placeholder="e.g. Rompers"
+            className="flex-1 border border-[#E8E4DF] rounded-sm px-2 py-1.5 text-sm text-[#1A1A1A] bg-white"
+          />
+          <button
+            type="button"
+            onClick={() => { if (customName.trim()) { onChange(slugifyCategory(customName)); setCustomMode(false); setCustomName('') } }}
+            className="px-2 py-1.5 text-[10px] tracking-[0.1em] uppercase bg-[#1A1A1A] text-white rounded-sm"
+          >Add</button>
+          <button
+            type="button"
+            onClick={() => { setCustomMode(false); setCustomName('') }}
+            className="px-1.5 py-1.5 text-[10px] tracking-[0.1em] uppercase text-[#888]"
+          >×</button>
+        </div>
+      ) : (
+        <select
+          value={value}
+          onChange={e => { if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') } else onChange(e.target.value) }}
+          className="w-full border border-[#E8E4DF] rounded-sm px-2 py-1.5 text-sm text-[#1A1A1A] bg-white"
+        >
+          <option value="">—</option>
+          {FIXED_CATEGORIES.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
+          {customCategories.length > 0 && (
+            <optgroup label="Custom">
+              {customCategories.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
+            </optgroup>
+          )}
+          {extra && <option value={extra}>{labelForCategory(extra)}</option>}
+          <option value="__new__">＋ New category…</option>
+        </select>
       )}
     </div>
   )

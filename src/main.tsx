@@ -3,20 +3,12 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Dismiss the W preloader once React renders
-function dismissPreloader() {
-  const el = document.getElementById('atelier-preloader')
-  if (el) {
-    el.classList.add('is-done')
-    setTimeout(() => el.remove(), 1000) // clean up after fade-out
-  }
-}
+// NOTE: the "Watson W" preloader (index.html) is dismissed by <App/> once AUTH RESOLVES
+// (see App.tsx) — NOT on a fixed timer here. A timer dismissed the W mid-auth and exposed
+// the login-page flash; keeping the W up until we know who's logged in fixes that.
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 )
-
-// Dismiss after a brief minimum display (prevents flash on fast loads)
-setTimeout(dismissPreloader, 600)

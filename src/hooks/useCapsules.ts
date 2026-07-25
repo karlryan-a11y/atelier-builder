@@ -57,6 +57,7 @@ export function useCapsules(clientId: string | null) {
     lookIds: string[]
     closetItemIds: string[]
     imageBase64?: string  // PNG base64 for the capsule hero
+    canvasState?: any     // full canvas state — set for board-composed capsules so they can be re-opened/edited later
   }) => {
     const id = generateBoardId()
 
@@ -94,9 +95,10 @@ export function useCapsules(clientId: string | null) {
       raw: {
         source: 'builder',
         look_ids: opts.lookIds,
+        ...(opts.canvasState ? { canvas_state: opts.canvasState } : {}),
         ...(imageR2Key ? {
           image_r2_key: imageR2Key,
-          image_url: `https://images.atelierbywatson.com/${imageR2Key}`,
+          image_url: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(imageR2Key)}`,
         } : {}),
       },
     }

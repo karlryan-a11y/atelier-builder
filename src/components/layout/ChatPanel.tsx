@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { LookGallery } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
 import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
+import { SaveAsCapsuleDialog } from '@/components/canvas/SaveAsCapsuleDialog'
 import {
   runComposePipeline,
   resolveDisambiguation,
@@ -31,10 +32,11 @@ export function ChatPanel() {
   const [saving, setSaving] = useState(false)
   const { user } = useAuth()
   const { activeClient } = useClientStore()
-  const { state, currentLookId, isDirty, loadLook, reset, markClean, addNode } = useCanvasStore()
+  const { state, currentLookId, isDirty, loadLook, loadLookAsNew, reset, markClean, addNode } = useCanvasStore()
   const { looks, loading, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
+  const [showSaveAsCapsuleDialog, setShowSaveAsCapsuleDialog] = useState(false)
   const [savingCapsule, setSavingCapsule] = useState(false)
 
   // Compose state
@@ -136,38 +138,95 @@ export function ChatPanel() {
     setShowCapsuleDialog(false)
   }, [activeClient, looks, saveCapsule])
 
-  const handleSelectLook = useCallback(async (look: LookRow) => {
-    if (isDirty && !confirm('You have unsaved changes. Discard and load this look?')) return
+  // Save the CURRENT board (the canvas as arranged — e.g. a Landscape packing
+  // capsule) directly as a capsule, without first saving it as looks. The board
+  // export becomes the capsule image; its closet items become the packing list.
+  const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string }) => {
+    if (!activeClient) return
+    setSavingCapsule(true)
 
-    const canvasState = look.canvas_state as LookCanvasState | null
-    if (!canvasState) return
+    const canvasState = useCanvasStore.getState().state
 
-    const closetNodes = canvasState.nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item')
-    const closetItemIds = closetNodes.map((n) => n.closet_item_id)
-
-    const newImageUrls: Record<string, string> = {}
-
-    if (closetItemIds.length > 0) {
-      const { data: items } = await supabase
-        .from('closet_items')
-        .select('id, raw')
-        .in('id', closetItemIds)
-
-      if (items) {
-        const urlMap = new Map<string, string>()
-        for (const item of items as Pick<ClosetItem, 'id' | 'raw'>[]) {
-          const url = item.raw?.processed_image ?? item.raw?.image ?? item.raw?.images?.[0] ?? null
-          if (url) urlMap.set(item.id, url)
-        }
-        for (const node of closetNodes) {
-          const url = urlMap.get(node.closet_item_id)
-          if (url) newImageUrls[node.id] = url
-        }
-      }
+    let imageBase64: string | undefined
+    try {
+      const pngDataUrl = exportCanvasImage({ pixelRatio: 2 })
+      if (pngDataUrl) imageBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, '')
+    } catch (err) {
+      console.error('Canvas export failed:', err)
     }
 
+    const closetItemIds = [...new Set(
+      canvasState.nodes
+        .filter((n: any) => n.type === 'closet_item')
+        .map((n: any) => n.closet_item_id as string)
+    )]
+
+    await saveCapsule({
+      clientId: activeClient.id,
+      name: data.name,
+      description: data.description,
+      lookIds: [],
+      closetItemIds,
+      imageBase64,
+      canvasState,
+    })
+
+    setSavingCapsule(false)
+    setShowSaveAsCapsuleDialog(false)
+  }, [activeClient, saveCapsule])
+
+  // Resolve node-id → image URL for a look's canvas the SAME way the collection grid does.
+  // Digitized (intake_pipeline) items store their image as an R2 key, not in `raw` — they must
+  // go through the image-proxy or the garment loads blank (only text labels showed). GoodPix
+  // items still use raw. Shared by "open" (handleSelectLook) and "duplicate".
+  const resolveLookImageUrls = useCallback(async (canvasState: LookCanvasState): Promise<Record<string, string>> => {
+    const closetNodes = canvasState.nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item')
+    const closetItemIds = closetNodes.map((n) => n.closet_item_id)
+    const newImageUrls: Record<string, string> = {}
+    if (closetItemIds.length === 0) return newImageUrls
+
+    const { data: items } = await supabase
+      .from('gp_closet_items')
+      .select('id, raw, source, processed_image_hash, primary_image_hash')
+      .in('id', closetItemIds)
+
+    if (items) {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+      const urlMap = new Map<string, string>()
+      for (const item of items as Array<{ id: string; raw: ClosetItem['raw']; source?: string; processed_image_hash?: string | null; primary_image_hash?: string | null }>) {
+        let url: string | null = null
+        if (item.source === 'intake_pipeline') {
+          const key = item.processed_image_hash ?? item.primary_image_hash
+          if (key) url = `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+        }
+        if (!url) url = item.raw?.processed_image ?? item.raw?.image ?? item.raw?.images?.[0] ?? null
+        if (url) urlMap.set(item.id, url)
+      }
+      for (const node of closetNodes) {
+        const url = urlMap.get(node.closet_item_id)
+        if (url) newImageUrls[node.id] = url
+      }
+    }
+    return newImageUrls
+  }, [])
+
+  const handleSelectLook = useCallback(async (look: LookRow) => {
+    if (isDirty && !confirm('You have unsaved changes. Discard and load this look?')) return
+    const canvasState = look.canvas_state as LookCanvasState | null
+    if (!canvasState) return
+    const newImageUrls = await resolveLookImageUrls(canvasState)
     loadLook(look.id, canvasState, newImageUrls)
-  }, [isDirty, loadLook])
+  }, [isDirty, loadLook, resolveLookImageUrls])
+
+  // Duplicate: load this look's items/layout onto the board as a NEW unsaved look so the stylist
+  // can swap a few pieces and Save without touching the original.
+  const handleDuplicateLook = useCallback(async (look: LookRow) => {
+    if (isDirty && !confirm('You have unsaved changes. Discard and duplicate this look?')) return
+    const canvasState = look.canvas_state as LookCanvasState | null
+    if (!canvasState) return
+    const newImageUrls = await resolveLookImageUrls(canvasState)
+    loadLookAsNew(canvasState, newImageUrls)
+  }, [isDirty, loadLookAsNew, resolveLookImageUrls])
 
   const handleNewLook = useCallback(() => {
     if (isDirty && !confirm('You have unsaved changes. Start a new look?')) return
@@ -356,15 +415,27 @@ export function ChatPanel() {
           </div>
         )}
 
-        {/* Capsule button */}
+        {/* Save the current board directly as a capsule (e.g. a Landscape packing capsule) */}
+        {activeClient && state.nodes.length > 0 && (
+          <div className="px-3 py-1.5 border-b border-border">
+            <button
+              onClick={() => setShowSaveAsCapsuleDialog(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-[#1A1A1A] text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text"
+            >
+              Save as Capsule
+            </button>
+          </div>
+        )}
+
+        {/* Bundle several already-saved looks into a capsule grid */}
         {activeClient && looks.length > 0 && (
           <div className="px-3 py-1.5 border-b border-border">
             <button
               onClick={() => setShowCapsuleDialog(true)}
               className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-border text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text-muted"
             >
-              <span>📦</span>
-              Create Capsule ({looks.length} looks available)
+              <span>🧩</span>
+              Capsule from Looks ({looks.length} available)
             </button>
           </div>
         )}
@@ -388,6 +459,7 @@ export function ChatPanel() {
               loading={loading}
               currentLookId={currentLookId}
               onSelect={handleSelectLook}
+              onDuplicate={handleDuplicateLook}
               onDelete={(id) => deleteLook(id)}
               onNew={handleNewLook}
             />
@@ -544,6 +616,15 @@ export function ChatPanel() {
           saving={savingCapsule}
           onSave={handleCreateCapsule}
           onClose={() => setShowCapsuleDialog(false)}
+        />
+      )}
+
+      {showSaveAsCapsuleDialog && (
+        <SaveAsCapsuleDialog
+          itemCount={state.nodes.filter((n: any) => n.type === 'closet_item').length}
+          saving={savingCapsule}
+          onSave={handleSaveAsCapsule}
+          onClose={() => setShowSaveAsCapsuleDialog(false)}
         />
       )}
     </>

@@ -20,7 +20,11 @@ export interface ClosetItemNode {
   closet_item_id: string
   x: number
   y: number
+  /** Horizontal scale (width). `flipped` flips its sign for rendering. */
   scale: number
+  /** Vertical scale (height). Absent = uniform (same as `scale`). Set when a stylist drags a
+   *  side/top/bottom handle to make a garment wider or taller/shorter independently. */
+  scale_y?: number
   rotation: number
   flipped: boolean
   z_index: number
@@ -99,8 +103,8 @@ export interface LookRefNode {
 
 /**
  * Board-size presets (match GoodPix). The board IS the canvas + the export area.
- * - Portrait 1200×1600 (3:4): the standard outfit "look".
- * - Square 1080×1080: Instagram standard — default for capsules / shopping boards.
+ * - Square 1080×1080: Instagram standard — the DEFAULT board for new looks / capsules / shopping boards.
+ * - Portrait 1200×1600 (3:4): the classic outfit "look" ratio (one tap in the toolbar).
  * - Landscape 1600×1200: big packing capsules.
  */
 export const BOARD_PRESETS = {
@@ -113,7 +117,9 @@ export type BoardPreset = keyof typeof BOARD_PRESETS
 export function createDefaultLookCanvas(): LookCanvasState {
   return {
     version: 1,
-    canvas: { width: 1200, height: 1600, background: '#ffffff' },
+    // Square 1080×1080 is the default board; Portrait/Landscape remain one tap away
+    // in the toolbar (BOARD_PRESETS). Existing saved looks keep their stored size.
+    canvas: { width: 1080, height: 1080, background: '#ffffff' },
     nodes: [],
   }
 }

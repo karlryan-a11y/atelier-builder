@@ -5,13 +5,23 @@ import {
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
   Sparkles, FilePlus, Bold, Underline, AlignCenter,
+  Eraser, BringToFront, SendToBack, Loader2,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { supabase } from '@/lib/supabase'
 import { styleCanvas } from '@/lib/style'
 import type { ClosetItemNode, TextNode } from '@/types/canvas'
 import { BOARD_PRESETS } from '@/types/canvas'
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+
+// Amalfi Coast (the WSG brand script) is the default for every new label — first in the list
+// and used by handleAddText below, so manual labels match the AI-composed brand labels.
+const DEFAULT_FONT = "'Amalfi Coast', cursive"
 const FONT_FAMILIES = [
+  { value: DEFAULT_FONT, label: 'Amalfi Coast' },
+  { value: "'Neue Haas', 'Helvetica Neue', Arial, sans-serif", label: 'Neue Haas' },
+  { value: "'Schnyder', Georgia, serif", label: 'Schnyder' },
   { value: 'Helvetica Neue, Helvetica, Arial, sans-serif', label: 'Sans Serif' },
   { value: "'Playfair Display SC', serif", label: 'Playfair SC' },
   { value: "'Playfair Display', serif", label: 'Playfair' },
@@ -30,10 +40,35 @@ const TEXT_COLORS = [
 export function CanvasToolbar() {
   const {
     state, selectedNodeIds, updateNode, removeNodes, duplicateNodes,
-    moveLayer, addNode, undo, redo, past, future, alignNodes, distributeNodes,
-    isDirty, reset, setCanvasSize,
+    moveLayer, setNodeImageUrl, flipNodes, addNode, undo, redo, past, future, alignNodes, distributeNodes,
+    isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit, rememberTextStyle,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
+  const [removingBg, setRemovingBg] = useState(false)
+
+  // Remove a canvas item's background → transparent (Photoroom via intake-remove-bg-item),
+  // so an opaque white-background piece stops blocking the rest of the look. Persists to the
+  // closet item (fixes it everywhere) and swaps the image on the board in place.
+  async function handleRemoveBg(node: ClosetItemNode) {
+    if (removingBg) return
+    setRemovingBg(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const currentUrl = useCanvasStore.getState().imageUrls[node.id]
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: node.closet_item_id, image_url: currentUrl }),
+      })
+      const d = await resp.json().catch(() => ({}))
+      if (!resp.ok || !d?.ok || !d?.url) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      setNodeImageUrl(node.id, d.url)
+    } catch {
+      alert('Failed to remove background — try again.')
+    } finally {
+      setRemovingBg(false)
+    }
+  }
 
   const selectedNodes = selectedNodeIds
     .map((id) => state.nodes.find((n) => n.id === id))
@@ -43,6 +78,7 @@ export function CanvasToolbar() {
   const hasSelection = selectedNodes.length > 0
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
+  const selectedClosetItems = selectedNodes.filter((n): n is ClosetItemNode => !!n && n.type === 'closet_item')
 
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
@@ -74,8 +110,10 @@ export function CanvasToolbar() {
       id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'text',
       content: 'Text',
-      font_family: FONT_FAMILIES[0].value,
-      font_size: 32,
+      // Font ALWAYS starts as Amalfi Coast (the brand script) — a stylist can still change a
+      // specific label from the dropdown. Size still reuses the last one the stylist chose.
+      font_family: DEFAULT_FONT,
+      font_size: lastTextStyle?.font_size ?? 32,
       fill: '#1A1A1A',
       x: 600,
       y: 750,
@@ -84,6 +122,8 @@ export function CanvasToolbar() {
     }
     addNode(node)
     useCanvasStore.getState().setSelectedNodeIds([node.id])
+    // Open the inline editor immediately with the placeholder selected → just start typing.
+    requestTextEdit(node.id)
   }
 
   return (
@@ -163,7 +203,7 @@ export function CanvasToolbar() {
             <div className="w-px h-4 bg-border mx-0.5" />
             <select
               value={tn.font_family}
-              onChange={(e) => updateNode(tn.id, { font_family: e.target.value })}
+              onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle({ font_family: e.target.value, font_size: tn.font_size }) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer max-w-[100px]"
             >
               {FONT_FAMILIES.map((f) => (
@@ -172,7 +212,7 @@ export function CanvasToolbar() {
             </select>
             <select
               value={tn.font_size}
-              onChange={(e) => updateNode(tn.id, { font_size: Number(e.target.value) })}
+              onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle({ font_family: tn.font_family, font_size: Number(e.target.value) }) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer w-12"
             >
               {FONT_SIZES.map((s) => (
@@ -223,16 +263,24 @@ export function CanvasToolbar() {
         <>
           <div className="w-px h-4 bg-border mx-0.5" />
 
-          {singleNode?.type === 'closet_item' && (
+          {selectedClosetItems.length > 0 && (
             <button
-              onClick={() => {
-                const item = singleNode as ClosetItemNode
-                updateNode(item.id, { flipped: !item.flipped })
-              }}
+              onClick={() => flipNodes(selectedClosetItems.map((it) => it.id))}
               className="p-1.5 hover:bg-tile rounded-sm transition-colors"
-              title="Flip horizontal"
+              title={selectedClosetItems.length > 1 ? `Flip ${selectedClosetItems.length} items horizontally (F)` : 'Flip horizontal (F)'}
             >
               <FlipHorizontal className="h-3.5 w-3.5 text-text-muted" />
+            </button>
+          )}
+
+          {singleNode?.type === 'closet_item' && (
+            <button
+              onClick={() => handleRemoveBg(singleNode as ClosetItemNode)}
+              disabled={removingBg}
+              className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-40"
+              title="Remove background — make this piece transparent so it stops blocking the look"
+            >
+              {removingBg ? <Loader2 className="h-3.5 w-3.5 text-text-muted animate-spin" /> : <Eraser className="h-3.5 w-3.5 text-text-muted" />}
             </button>
           )}
 
@@ -259,6 +307,20 @@ export function CanvasToolbar() {
             title="Send backward"
           >
             <ChevronDown className="h-3.5 w-3.5 text-text-muted" />
+          </button>
+          <button
+            onClick={() => moveLayer(selectedNodeIds, 'top')}
+            className="p-1.5 hover:bg-tile rounded-sm transition-colors"
+            title="Bring to front"
+          >
+            <BringToFront className="h-3.5 w-3.5 text-text-muted" />
+          </button>
+          <button
+            onClick={() => moveLayer(selectedNodeIds, 'bottom')}
+            className="p-1.5 hover:bg-tile rounded-sm transition-colors"
+            title="Send to back"
+          >
+            <SendToBack className="h-3.5 w-3.5 text-text-muted" />
           </button>
 
           <button

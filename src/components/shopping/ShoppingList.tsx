@@ -10,19 +10,18 @@ const CATEGORIES = [
 // Valid <select> values (lowercased)
 const CATEGORY_VALUES = new Set(CATEGORIES.map((c) => c.toLowerCase()))
 
-// Map detectCategory() output → a ShoppingList category value
+// Map detectCategory() output (shared garment taxonomy) → a ShoppingList value.
 const CATEGORY_MAP: Record<string, string> = {
-  top: 'top',
-  bottom: 'bottom',
-  dress: 'dress',
+  dresses: 'dress',
+  tops: 'top',
+  skirts: 'bottom', pants: 'bottom', jeans: 'bottom', shorts: 'bottom',
   outerwear: 'outerwear',
+  swim: 'swimwear',
+  activewear: 'activewear',
   shoes: 'shoe',
-  bag: 'bag',
-  jewelry: 'accessory',
-  belt: 'accessory',
-  scarf: 'accessory',
-  hat: 'accessory',
-  accessory: 'accessory',
+  bags: 'bag',
+  jewelry: 'accessory', belts: 'accessory', scarves: 'accessory', hats: 'accessory', sunglasses: 'accessory',
+  other: '',
 }
 
 /** Parse one pasted line into slot fields. Splits "Description — notes", and

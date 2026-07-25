@@ -23,7 +23,7 @@ export function toKonvaConfig(node: CanvasNode): KonvaNodeConfig {
         x: node.x,
         y: node.y,
         scaleX: node.flipped ? -node.scale : node.scale,
-        scaleY: node.scale,
+        scaleY: node.scale_y ?? node.scale,
         rotation: node.rotation,
         draggable: !node.locked,
         closetItemId: node.closet_item_id,
@@ -82,11 +82,15 @@ export function fromKonvaTransform(
 ): Partial<ClosetItemNode> {
   const scale = Math.abs(attrs.scaleX)
   const flipped = attrs.scaleX < 0
+  // Capture width (scale) AND height (scale_y) independently so side/top/bottom handles stick.
+  // Clear target_height so the render layer uses these explicit scales, not the composed height.
   return {
     x: attrs.x,
     y: attrs.y,
     scale,
+    scale_y: attrs.scaleY,
     flipped,
     rotation: attrs.rotation,
+    target_height: undefined,
   }
 }

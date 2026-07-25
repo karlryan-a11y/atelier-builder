@@ -14,6 +14,12 @@
 ALTER TABLE gp_closet_items ADD COLUMN IF NOT EXISTS category text;
 ALTER TABLE gp_closet_items ADD COLUMN IF NOT EXISTS custom_categories text[];
 
+-- AI first-pass SUGGESTION (pending stylist approval). The lookbook NEVER reads
+-- this — only `category`. The Builder shows it as an "AI suggests …" chip; on
+-- Approve the value is copied into `category` (goes live), on Dismiss it's cleared.
+-- So no AI guess is ever visible to a client without a stylist signing off.
+ALTER TABLE gp_closet_items ADD COLUMN IF NOT EXISTS category_suggested text;
+
 CREATE INDEX IF NOT EXISTS idx_closet_items_category
   ON gp_closet_items(client_id, category);
 CREATE INDEX IF NOT EXISTS idx_closet_items_custom_cats
@@ -47,3 +53,13 @@ CREATE POLICY client_categories_read ON client_categories
 DROP POLICY IF EXISTS client_categories_write ON client_categories;
 CREATE POLICY client_categories_write ON client_categories
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- NOTE: we intentionally do NOT recreate the `closet_items` view here. CREATE OR
+-- REPLACE VIEW must keep the live view's columns as an exact prefix, and a mismatch
+-- aborts (and rolls back) the whole migration. The Builder reads these new override
+-- columns straight from `gp_closet_items` instead (the lookbook already does), so
+-- the view is left untouched. gp_closet_items already has an authenticated UPDATE
+-- policy (cynthia_item_write, migration 009), so stylist writes to `category` work.
+
+-- Refresh PostgREST so the API exposes the new columns immediately.
+NOTIFY pgrst, 'reload schema';

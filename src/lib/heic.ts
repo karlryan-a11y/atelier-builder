@@ -130,3 +130,25 @@ export async function ensureJpegFiles(files: File[]): Promise<File[]> {
   }
   return out
 }
+
+// Read EXIF capture time (DateTimeOriginal/CreateDate) from the ORIGINAL files BEFORE any
+// downscale — the canvas re-encode in downscaleJpeg() strips EXIF, so this must run first.
+// Returns { filename: ISO8601 } only for files that actually carry a capture time. exifr is
+// loaded lazily so it's not in the critical bundle path.
+export async function readCaptureTimes(files: File[]): Promise<Record<string, string>> {
+  const map: Record<string, string> = {}
+  let exifr: typeof import('exifr')
+  try {
+    exifr = await import('exifr')
+  } catch {
+    return map // lib unavailable → no times; pairing falls back to other signals
+  }
+  for (const f of files) {
+    try {
+      const ex = await exifr.parse(f, ['DateTimeOriginal', 'CreateDate'])
+      const d = ex?.DateTimeOriginal ?? ex?.CreateDate
+      if (d instanceof Date && !isNaN(d.getTime())) map[f.name] = d.toISOString()
+    } catch { /* no/unreadable EXIF on this file — skip */ }
+  }
+  return map
+}

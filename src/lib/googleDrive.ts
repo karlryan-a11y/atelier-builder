@@ -31,6 +31,9 @@ export interface DriveFile {
   name: string
   mimeType: string
   size: number
+  captureTime?: string  // EXIF DateTimeOriginal from Drive's imageMediaMetadata.time (when available)
+  folderId?: string     // the immediate Drive folder this file was found in (provenance)
+  thumbnailLink?: string // Google-generated JPEG thumbnail (decodable even for HEIC) — used for deep photo match
 }
 
 export interface PickedFolder {
@@ -251,7 +254,7 @@ function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
  * Expands any picked folders into their images, sorts everything by filename, and
  * returns the flat image list + a display name. Null if the stylist cancels.
  */
-export async function signInAndPickPhotos(): Promise<{ accessToken: string; files: DriveFile[]; sourceName: string } | null> {
+export async function signInAndPickPhotos(): Promise<{ accessToken: string; files: DriveFile[]; sourceName: string; sourceFolderId?: string } | null> {
   await ensureLoaded()
   const accessToken = await ensureAccessToken()
   // Surface token/account/Drive-API problems cleanly before the Picker opens.
@@ -273,18 +276,36 @@ export async function signInAndPickPhotos(): Promise<{ accessToken: string; file
   const seen = new Set<string>()
   const deduped = files.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)))
 
+  // When a single folder is picked, record its id so the batch can store the source
+  // folder for automatic reconciliation later. Multi-pick / loose files → no single id.
+  const sourceFolderId = docs.length === 1 && docs[0].isFolder ? docs[0].id : undefined
   const sourceName = docs.length === 1 && docs[0].isFolder ? docs[0].name : `${deduped.length} photos`
-  return { accessToken, files: deduped, sourceName }
+  return { accessToken, files: deduped, sourceName, sourceFolderId }
 }
 
-/** List every image (incl. HEIC) directly inside a folder, sorted by filename. */
+/**
+ * List every image (incl. HEIC) inside a folder AND all of its nested subfolders,
+ * sorted by filename. Recursing means "here's the whole client's digitization folder"
+ * (with 27 subfolders inside) imports everything in one pick. Each file is tagged with
+ * the immediate `folderId` it was found in (Drive provenance). Cycle-guarded.
+ */
 export async function listImagesInFolder(folderId: string, accessToken: string): Promise<DriveFile[]> {
   const files: DriveFile[] = []
+  await walkFolder(folderId, accessToken, files, new Set<string>())
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+  return files
+}
+
+async function walkFolder(folderId: string, accessToken: string, out: DriveFile[], seen: Set<string>): Promise<void> {
+  if (seen.has(folderId)) return
+  seen.add(folderId)
+  const subfolders: string[] = []
   let pageToken: string | undefined
   do {
     const params = new URLSearchParams({
-      q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-      fields: 'nextPageToken, files(id, name, mimeType, size)',
+      // No mimeType filter here — we need the subfolders too, so we can recurse into them.
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: 'nextPageToken, files(id, name, mimeType, size, imageMediaMetadata/time, thumbnailLink)',
       pageSize: '1000',
       orderBy: 'name_natural',
       supportsAllDrives: 'true',
@@ -301,16 +322,16 @@ export async function listImagesInFolder(folderId: string, accessToken: string):
     }
     const json = await resp.json()
     for (const f of json.files ?? []) {
+      if (f.mimeType === 'application/vnd.google-apps.folder') { subfolders.push(f.id); continue }
       const isImage = f.mimeType?.startsWith('image/') || f.name?.toLowerCase().endsWith('.heic')
       if (isImage) {
-        files.push({ id: f.id, name: f.name, mimeType: f.mimeType || 'image/jpeg', size: Number(f.size) || 0 })
+        out.push({ id: f.id, name: f.name, mimeType: f.mimeType || 'image/jpeg', size: Number(f.size) || 0, captureTime: f.imageMediaMetadata?.time, folderId, thumbnailLink: f.thumbnailLink })
       }
     }
     pageToken = json.nextPageToken
   } while (pageToken)
 
-  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
-  return files
+  for (const sub of subfolders) await walkFolder(sub, accessToken, out, seen)
 }
 
 /** Download a single Drive file's bytes into a File object (preserves the original name). */

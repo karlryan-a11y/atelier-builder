@@ -4,10 +4,10 @@ import type Konva from 'konva'
 import { useCanvasStore, registerCanvasExport, unregisterCanvasExport } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
-import { toKonvaConfig, fromKonvaDrag, fromKonvaTransform } from './CanvasAdapter'
+import { toKonvaConfig, fromKonvaTransform } from './CanvasAdapter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3 } from 'lucide-react'
-import type { ClosetItemNode, TextNode } from '@/types/canvas'
+import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
 // on-screen budget, preserving aspect, so Portrait / Square / Landscape all fit.
@@ -18,14 +18,72 @@ interface ClosetItemImageProps {
   node: ClosetItemNode
   image: HTMLImageElement | undefined
   isSelected: boolean
+  /** True only when this is the ONLY selected node — then it shows its own resize box.
+   *  When several are selected, a single group box (in the parent) resizes them together. */
+  solo: boolean
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart?: () => void
+  onDragMove?: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (attrs: { x: number; y: number; scaleX: number; scaleY: number; rotation: number }) => void
 }
 
-function ClosetItemImage({ node, image, isSelected, onSelect, onDragEnd, onTransformEnd }: ClosetItemImageProps) {
+function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart, onDragMove, onDragEnd, onTransformEnd }: ClosetItemImageProps) {
   const imageRef = useRef<Konva.Image>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
+  // For sparse/thin cut-outs (earrings, jewelry, belts) the clickable area is a generous
+  // rectangle over the item's CONTENT (see the hit effect) — null means pixel-perfect.
+  const [hitBox, setHitBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+
+  // Report this item's natural dimensions once its image loads, so flip-in-place can
+  // compensate the position by the rendered width (see store.flipNodes).
+  useEffect(() => {
+    if (image && image.naturalWidth) useCanvasStore.getState().setNodeDims(node.id, image.naturalWidth, image.naturalHeight)
+  }, [image, node.id])
+
+  // Clickable hit area. A cut-out photo's see-through margins shouldn't steal clicks from
+  // neighbouring items — so a SOLID garment uses a pixel-accurate hit (its opaque pixels only).
+  // But a SPARSE item (earrings = two thin shapes with a big transparent gap) is nearly
+  // unclickable that way (Cynthia: "I can't click on earrings like the others"). So we measure
+  // the opaque coverage: if the content is sparse/thin, give it a forgiving rectangle over just
+  // the content box (earrings + the gap between them) instead of the pixel-perfect shape.
+  useEffect(() => {
+    const n = imageRef.current
+    if (!n || !image) return
+    let sparse = false
+    let bbox: { x: number; y: number; width: number; height: number } | null = null
+    try {
+      const NW = image.naturalWidth, NH = image.naturalHeight
+      const s = Math.min(1, 96 / Math.max(NW, NH)) // scan a downscaled copy (≤96px) — cheap
+      const w = Math.max(1, Math.round(NW * s)), h = Math.max(1, Math.round(NH * s))
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d', { willReadFrequently: true })!
+      ctx.drawImage(image, 0, 0, w, h)
+      const data = ctx.getImageData(0, 0, w, h).data
+      let minX = w, minY = h, maxX = -1, maxY = -1, opaque = 0
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > 10) { opaque++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
+      }
+      if (maxX >= minX && maxY >= minY) {
+        const bw = maxX - minX + 1, bh = maxY - minY + 1
+        // Fraction of the CONTENT box that's actually opaque. Solid garments/bags/shoes ≈ 0.8+;
+        // earrings, necklaces and thin jewelry sit well under 0.6 (mostly gaps) → give them the
+        // forgiving rectangle. Erring generous: a mis-flagged solid item only risks minor
+        // neighbour-steal, whereas a missed earring is the actual complaint.
+        sparse = opaque / (bw * bh) < 0.6
+        bbox = { x: minX / s, y: minY / s, width: bw / s, height: bh / s }
+      }
+    } catch { /* tainted/unreadable image → fall through to the default (full-rect) hit */ }
+
+    if (sparse && bbox) {
+      n.clearCache()
+      setHitBox(bbox)
+      n.getLayer()?.batchDraw()
+    } else {
+      setHitBox(null)
+      try { n.cache(); n.drawHitFromCache(); n.getLayer()?.batchDraw() } catch { /* not laid out yet; harmless */ }
+    }
+  }, [image])
 
   // If compose set a target_height AND the image is loaded, compute the exact scale
   // so the item renders at the correct pixel height on the canvas.
@@ -64,11 +122,20 @@ function ClosetItemImage({ node, image, isSelected, onSelect, onDragEnd, onTrans
           draggable={config.draggable}
           onClick={onSelect}
           onTap={onSelect}
+          onDragStart={() => onDragStart?.()}
+          onDragMove={(e) => onDragMove?.(e.target.x(), e.target.y())}
           onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
           onTransformEnd={handleTransformEnd}
+          hitFunc={hitBox ? (ctx: Konva.Context, shape: Konva.Shape) => {
+            // Generous rectangle over the item's content (sparse cut-outs like earrings).
+            ctx.beginPath()
+            ctx.rect(hitBox.x, hitBox.y, hitBox.width, hitBox.height)
+            ctx.closePath()
+            ctx.fillStrokeShape(shape)
+          } : undefined}
         />
       )}
-      {isSelected && image && (
+      {isSelected && solo && image && (
         <Transformer
           ref={(ref) => {
             if (ref && imageRef.current) {
@@ -78,7 +145,8 @@ function ClosetItemImage({ node, image, isSelected, onSelect, onDragEnd, onTrans
             ;(transformerRef as React.MutableRefObject<Konva.Transformer | null>).current = ref
           }}
           rotateEnabled
-          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={false}
+          enabledAnchors={['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']}
           boundBoxFunc={(oldBox, newBox) => {
             if (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20) return oldBox
             return newBox
@@ -92,13 +160,17 @@ function ClosetItemImage({ node, image, isSelected, onSelect, onDragEnd, onTrans
 interface TextNodeProps {
   node: TextNode
   isSelected: boolean
+  solo: boolean
+  editing: boolean
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart?: () => void
+  onDragMove?: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onDblClick: () => void
   onResize: (width: number) => void
 }
 
-function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick, onResize }: TextNodeProps) {
+function TextNodeElement({ node, isSelected, solo, editing, onSelect, onDragStart, onDragMove, onDragEnd, onDblClick, onResize }: TextNodeProps) {
   const textRef = useRef<Konva.Text>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
 
@@ -119,6 +191,7 @@ function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick, on
         ref={textRef}
         id={node.id}
         text={node.content}
+        visible={!editing}
         x={node.x}
         y={node.y}
         fontFamily={node.font_family}
@@ -134,11 +207,13 @@ function TextNodeElement({ node, isSelected, onSelect, onDragEnd, onDblClick, on
         onTap={onSelect}
         onDblClick={onDblClick}
         onDblTap={onDblClick}
+        onDragStart={() => onDragStart?.()}
+        onDragMove={(e) => onDragMove?.(e.target.x(), e.target.y())}
         onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
         onTransform={() => applyWidth(false)}
         onTransformEnd={() => applyWidth(true)}
       />
-      {isSelected && (
+      {isSelected && solo && !editing && (
         <Transformer
           ref={(ref) => {
             if (ref && textRef.current) {
@@ -163,6 +238,41 @@ export function LookCanvas() {
   const store = useCanvasStore()
   const { state, selectedNodeIds, updateNode, setSelectedNodeIds, toggleNodeSelection } = store
   const stageRef = useRef<Konva.Stage>(null)
+
+  // Group move: when you drag a node that's part of a multi-selection, all selected nodes
+  // travel together. We snapshot every selected node's start position, move the others'
+  // Konva nodes live by the same delta during the drag, then commit them in ONE history step.
+  const dragGroup = useRef<{ id: string; ox: number; oy: number; others: { id: string; sx: number; sy: number }[] } | null>(null)
+  const handleGroupDragStart = useCallback((id: string) => {
+    const { selectedNodeIds: ids, state: s } = useCanvasStore.getState()
+    const dragged = s.nodes.find((n) => n.id === id)
+    if (!dragged || !ids.includes(id) || ids.length < 2) { dragGroup.current = null; return }
+    const others = ids
+      .filter((i) => i !== id)
+      .map((i) => { const n = s.nodes.find((x) => x.id === i); return n ? { id: i, sx: n.x, sy: n.y } : null })
+      .filter((o): o is { id: string; sx: number; sy: number } => !!o)
+    dragGroup.current = { id, ox: dragged.x, oy: dragged.y, others }
+  }, [])
+  const handleGroupDragMove = useCallback((id: string, x: number, y: number) => {
+    const g = dragGroup.current
+    if (!g || g.id !== id) return
+    const dx = x - g.ox, dy = y - g.oy
+    const stage = stageRef.current
+    if (!stage) return
+    for (const o of g.others) { const kn = stage.findOne('#' + o.id); if (kn) kn.position({ x: o.sx + dx, y: o.sy + dy }) }
+    stage.batchDraw()
+  }, [])
+  const handleGroupDragEnd = useCallback((id: string, x: number, y: number) => {
+    const g = dragGroup.current
+    const s = useCanvasStore.getState()
+    if (g && g.id === id) {
+      const dx = x - g.ox, dy = y - g.oy
+      s.updateNodes([{ id, updates: { x, y } }, ...g.others.map((o) => ({ id: o.id, updates: { x: o.sx + dx, y: o.sy + dy } }))])
+      dragGroup.current = null
+    } else {
+      s.updateNode(id, { x, y })
+    }
+  }, [])
 
   // Board dimensions come from the canvas state (Portrait / Square / Landscape).
   const CW = state.canvas.width
@@ -232,20 +342,29 @@ export function LookCanvas() {
     return () => unregisterCanvasExport()
   }, [store.state.nodes])
 
-  // Web fonts (Playfair Display SC, Playfair, Great Vibes) must be loaded before
-  // Konva measures/draws text, or it renders with a fallback until the next redraw.
+  // Web fonts (Amalfi Coast + the others) must be loaded before Konva measures/draws text,
+  // or it renders with a fallback until the next redraw (the "flash then swaps to our font"
+  // bug). Kick off the loads, redraw once they're ready, AND redraw whenever the browser
+  // finishes loading a font later ('loadingdone') or a look with text is opened — so any
+  // residual race resolves in a single clean repaint instead of a lingering fallback.
+  const textNodeCount = state.nodes.filter((n) => n.type === 'text').length
   useEffect(() => {
     let cancelled = false
-    const families = ["'Playfair Display SC'", "'Playfair Display'", "'Great Vibes'"]
+    const families = ["'Amalfi Coast'", "'Playfair Display SC'", "'Playfair Display'", "'Great Vibes'", "'Neue Haas'", "'Schnyder'"]
     const docFonts = (document as Document & { fonts?: FontFaceSet }).fonts
     if (!docFonts) return
-    Promise.all(families.map((f) => docFonts.load(`16px ${f}`).catch(() => undefined)))
+    const redraw = () => { if (!cancelled) stageRef.current?.batchDraw() }
+    Promise.all(families.map((f) => docFonts.load(`32px ${f}`).catch(() => undefined)))
       .then(() => docFonts.ready)
-      .then(() => { if (!cancelled) stageRef.current?.batchDraw() })
-    return () => { cancelled = true }
-  }, [])
+      .then(redraw)
+    docFonts.addEventListener('loadingdone', redraw)
+    return () => { cancelled = true; docFonts.removeEventListener('loadingdone', redraw) }
+  }, [textNodeCount])
 
   const [showGrid, setShowGrid] = useState(false)
+  // Which text node is currently being edited — its on-canvas copy is hidden DECLARATIVELY
+  // (visible={!editing}) so a re-render can't un-hide it and produce the "double text box".
+  const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const selectionStart = useRef<{ x: number; y: number } | null>(null)
   const isDraggingSelection = useRef(false)
@@ -279,29 +398,37 @@ export function LookCanvas() {
       if (target.isContentEditable) return
 
       const mod = e.metaKey || e.ctrlKey
+      // Normalise single-char keys so Caps Lock (or Shift) doesn't break the shortcuts —
+      // with Caps Lock on, e.key for Cmd+A is 'A', not 'a', and select-all would silently fail.
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
       const { selectedNodeIds: ids, state: s } = useCanvasStore.getState()
 
-      if (mod && e.key === 'z' && !e.shiftKey) {
+      if (mod && key === 'z' && !e.shiftKey) {
         e.preventDefault()
         useCanvasStore.getState().undo()
         return
       }
-      if (mod && e.key === 'z' && e.shiftKey) {
+      if (mod && key === 'z' && e.shiftKey) {
         e.preventDefault()
         useCanvasStore.getState().redo()
         return
       }
-      if (mod && e.key === 'd' && ids.length > 0) {
+      if (mod && key === 'a') {
+        e.preventDefault()
+        useCanvasStore.getState().setSelectedNodeIds(s.nodes.map((n) => n.id))
+        return
+      }
+      if (mod && key === 'd' && ids.length > 0) {
         e.preventDefault()
         useCanvasStore.getState().duplicateNodes(ids)
         return
       }
-      if (mod && e.key === 'c' && ids.length > 0) {
+      if (mod && key === 'c' && ids.length > 0) {
         e.preventDefault()
         useCanvasStore.getState().copyNodes(ids)
         return
       }
-      if (mod && e.key === 'v') {
+      if (mod && key === 'v') {
         e.preventDefault()
         useCanvasStore.getState().pasteNodes()
         return
@@ -309,6 +436,15 @@ export function LookCanvas() {
       if ((e.key === 'Delete' || e.key === 'Backspace') && ids.length > 0) {
         e.preventDefault()
         useCanvasStore.getState().removeNodes(ids)
+        return
+      }
+      // F — flip the selected closet item(s) horizontally (mirror; e.g. shoes).
+      if ((e.key === 'f' || e.key === 'F') && !mod && ids.length > 0) {
+        const items = s.nodes.filter((n) => n.type === 'closet_item' && ids.includes(n.id))
+        if (items.length) {
+          e.preventDefault()
+          useCanvasStore.getState().flipNodes(items.map((it) => it.id))
+        }
         return
       }
 
@@ -372,8 +508,19 @@ export function LookCanvas() {
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       if (isDraggingSelection.current && selectionRect) {
         const r = selectionRect
+        const stage = e.target.getStage()
+        // Select any node whose RENDERED bounding box overlaps the marquee — the intuitive
+        // "drag a box over these items" behaviour. The old test only checked whether a node's
+        // top-left anchor point sat inside the box, so items the box clearly covered were missed
+        // whenever their anchor fell outside it (the flaky "sometimes works" bug). getClientRect
+        // ({relativeTo: stage}) gives the box in board coords (accounts for scale/rotation/size);
+        // fall back to the anchor point only if the Konva node isn't found (e.g. image not loaded).
+        const overlaps = (b: { x: number; y: number; width: number; height: number }) =>
+          !(b.x > r.x + r.width || b.x + b.width < r.x || b.y > r.y + r.height || b.y + b.height < r.y)
         const hits = state.nodes.filter((n) => {
-          return n.x >= r.x && n.y >= r.y && n.x <= r.x + r.width && n.y <= r.y + r.height
+          const kn = stage?.findOne('#' + n.id)
+          const box = kn ? kn.getClientRect({ relativeTo: stage as Konva.Stage }) : { x: n.x, y: n.y, width: 0, height: 0 }
+          return overlaps(box)
         })
         setSelectedNodeIds(hits.map((n) => n.id))
       } else if (e.target === e.target.getStage()) {
@@ -392,51 +539,122 @@ export function LookCanvas() {
       if (evt.shiftKey || evt.metaKey) {
         toggleNodeSelection(nodeId)
       } else {
+        // If this item is already part of a multi-selection, KEEP the group — otherwise a plain
+        // click (before a drag) would collapse to a single item and break moving them together.
+        const cur = useCanvasStore.getState().selectedNodeIds
+        if (cur.length > 1 && cur.includes(nodeId)) return
         setSelectedNodeIds([nodeId])
       }
     },
     [setSelectedNodeIds, toggleNodeSelection]
   )
 
-  const handleTextDblClick = useCallback((node: TextNode) => {
+  // Group resize: when 2+ nodes are selected, ONE box wraps them all and scales/rotates them
+  // together (uniform). Single selection keeps the per-node box (free resize + rotate).
+  const groupTrRef = useRef<Konva.Transformer>(null)
+  useEffect(() => {
+    const tr = groupTrRef.current
+    const stage = stageRef.current
+    if (!tr || !stage) return
+    if (selectedNodeIds.length > 1) {
+      const nodes = selectedNodeIds.map((id) => stage.findOne('#' + id)).filter((n): n is Konva.Node => !!n)
+      tr.nodes(nodes)
+    } else {
+      tr.nodes([])
+    }
+    tr.getLayer()?.batchDraw()
+  }, [selectedNodeIds, state.nodes, images])
+
+  const handleGroupTransformEnd = useCallback(() => {
+    const tr = groupTrRef.current
+    if (!tr) return
+    const s = useCanvasStore.getState()
+    const patches: { id: string; updates: Partial<CanvasNode> }[] = []
+    for (const kn of tr.nodes()) {
+      const id = kn.id()
+      const n = s.state.nodes.find((x) => x.id === id)
+      if (!n) continue
+      if (n.type === 'text') {
+        const tn = n as TextNode
+        const sc = Math.abs(kn.scaleY()) || 1
+        patches.push({ id, updates: {
+          x: kn.x(), y: kn.y(), rotation: kn.rotation(),
+          font_size: Math.max(6, Math.round(tn.font_size * sc)),
+          ...(tn.width ? { width: Math.max(20, tn.width * (Math.abs(kn.scaleX()) || 1)) } : {}),
+        } as Partial<CanvasNode> })
+        kn.scaleX(1); kn.scaleY(1)
+      } else {
+        patches.push({ id, updates: { ...fromKonvaTransform(n as ClosetItemNode, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() }), target_height: undefined } as Partial<CanvasNode> })
+      }
+    }
+    if (patches.length) s.updateNodes(patches)
+  }, [])
+
+  const handleTextDblClick = useCallback((node: TextNode, opts?: { isNew?: boolean }) => {
     const stage = stageRef.current
     if (!stage) return
 
-    const textKonva = stage.findOne(`#${node.id}`)
+    const textKonva = stage.findOne(`#${node.id}`) as Konva.Text | null
     if (!textKonva) return
 
     const textPosition = textKonva.absolutePosition()
     const stageBox = stage.container().getBoundingClientRect()
     const scale = stage.scaleX()
 
+    // Hide the on-canvas text while editing so the stylist never sees two copies / an "extra
+    // box" — the textarea sits exactly on top and looks like the text itself. This MUST be
+    // declarative (state → visible={!editing}); an imperative .hide() gets undone by the very
+    // next re-render, which was the "double text box" bug.
+    setEditingTextId(node.id)
+
     const textarea = document.createElement('textarea')
     textarea.value = node.content
+    // Seamless, box-free overlay: transparent, borderless, matches the text's font,
+    // weight, decoration, alignment and colour so editing looks in-place.
     textarea.style.position = 'absolute'
     textarea.style.top = `${stageBox.top + textPosition.y * scale}px`
     textarea.style.left = `${stageBox.left + textPosition.x * scale}px`
-    textarea.style.width = `${(textKonva.width() * scale) + 20}px`
+    textarea.style.width = `${(textKonva.width() * scale) + 4}px`
+    textarea.style.height = `${(textKonva.height() * scale) + 2}px`
     textarea.style.fontSize = `${node.font_size * scale}px`
     textarea.style.fontFamily = node.font_family
+    textarea.style.fontWeight = node.bold ? 'bold' : 'normal'
+    textarea.style.textDecoration = node.underline ? 'underline' : 'none'
+    textarea.style.textAlign = node.align ?? 'left'
     textarea.style.color = node.fill
-    textarea.style.border = '2px solid #F8E5E7'
-    textarea.style.borderRadius = '2px'
-    textarea.style.padding = '2px 4px'
+    textarea.style.border = 'none'
+    textarea.style.padding = '0'
     textarea.style.margin = '0'
     textarea.style.overflow = 'hidden'
-    textarea.style.background = 'white'
+    textarea.style.background = 'transparent'
     textarea.style.outline = 'none'
     textarea.style.resize = 'none'
-    textarea.style.lineHeight = '1.2'
+    textarea.style.lineHeight = '1'
     textarea.style.zIndex = '100'
+    if (node.rotation) {
+      textarea.style.transform = `rotate(${node.rotation}deg)`
+      textarea.style.transformOrigin = 'top left'
+    }
 
     document.body.appendChild(textarea)
     textarea.focus()
     textarea.select()
 
+    let done = false
     const finish = () => {
-      const newContent = textarea.value || 'Text'
-      updateNode(node.id, { content: newContent })
+      if (done) return
+      done = true
+      const value = textarea.value
       textarea.remove()
+      setEditingTextId(null) // reveal the on-canvas text again (or it's about to be removed)
+      // Drop empty text, and drop a freshly-added placeholder the stylist never typed into —
+      // no stray "Text" box left on the board. Otherwise persist the edit.
+      const isUntouchedPlaceholder = opts?.isNew && value === node.content
+      if (value.trim() === '' || isUntouchedPlaceholder) {
+        useCanvasStore.getState().removeNode(node.id)
+        return
+      }
+      updateNode(node.id, { content: value })
     }
 
     textarea.addEventListener('blur', finish)
@@ -445,6 +663,18 @@ export function LookCanvas() {
       if (ke.key === 'Enter' && !ke.shiftKey) { ke.preventDefault(); textarea.blur() }
     })
   }, [updateNode])
+
+  // When a text node is added via the toolbar, open its inline editor immediately (GoodPix-style)
+  // so the stylist can just start typing over the selected placeholder — no extra click.
+  const pendingEditTextId = store.pendingEditTextId
+  useEffect(() => {
+    if (!pendingEditTextId) return
+    const node = state.nodes.find((n) => n.id === pendingEditTextId && n.type === 'text') as TextNode | undefined
+    const clear = () => useCanvasStore.getState().requestTextEdit(null)
+    if (!node) { clear(); return }
+    const raf = requestAnimationFrame(() => { handleTextDblClick(node, { isNew: true }); clear() })
+    return () => cancelAnimationFrame(raf)
+  }, [pendingEditTextId, state.nodes, handleTextDblClick])
 
   // Grid lines
   const gridLines = useMemo(() => {
@@ -523,11 +753,11 @@ export function LookCanvas() {
                     node={cNode}
                     image={images.get(node.id)}
                     isSelected={selectedNodeIds.includes(node.id)}
+                    solo={selectedNodeIds.length === 1}
                     onSelect={(e) => handleNodeSelect(node.id, e)}
-                    onDragEnd={(x, y) => {
-                      const updates = fromKonvaDrag(cNode, x, y)
-                      updateNode(node.id, updates)
-                    }}
+                    onDragStart={() => handleGroupDragStart(node.id)}
+                    onDragMove={(x, y) => handleGroupDragMove(node.id, x, y)}
+                    onDragEnd={(x, y) => handleGroupDragEnd(node.id, x, y)}
                     onTransformEnd={(attrs) => {
                       const updates = fromKonvaTransform(cNode, attrs)
                       // Clear target_height so user's manual resize sticks
@@ -543,8 +773,12 @@ export function LookCanvas() {
                     key={node.id}
                     node={tNode}
                     isSelected={selectedNodeIds.includes(node.id)}
+                    solo={selectedNodeIds.length === 1}
+                    editing={editingTextId === node.id}
                     onSelect={(e) => handleNodeSelect(node.id, e)}
-                    onDragEnd={(x, y) => updateNode(node.id, { x, y })}
+                    onDragStart={() => handleGroupDragStart(node.id)}
+                    onDragMove={(x, y) => handleGroupDragMove(node.id, x, y)}
+                    onDragEnd={(x, y) => handleGroupDragEnd(node.id, x, y)}
                     onDblClick={() => handleTextDblClick(tNode)}
                     onResize={(width) => updateNode(node.id, { width })}
                   />
@@ -552,6 +786,15 @@ export function LookCanvas() {
               }
               return null
             })}
+            {/* One box that resizes/rotates the whole selection together (2+ nodes). */}
+            <Transformer
+              ref={groupTrRef}
+              rotateEnabled
+              keepRatio
+              enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+              boundBoxFunc={(oldBox, newBox) => (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20 ? oldBox : newBox)}
+              onTransformEnd={handleGroupTransformEnd}
+            />
             {selectionRect && (
               <Rect
                 x={selectionRect.x}

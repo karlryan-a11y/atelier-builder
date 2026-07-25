@@ -11,7 +11,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { hybridSearch, textSearch, type SearchResult } from './search'
+import { LAYOUT_RULES } from './layout-rules'
 import type { ClosetItemNode, TextNode, CanvasNode } from '@/types/canvas'
+
+// LEARNED LAYOUT — opt-in flag (per-browser, isolated). When on, placement uses the data-derived
+// rules mined from thousands of GoodPix looks instead of the 3-reference-look rules. Toggle in the
+// browser console: localStorage.setItem('atelier_learned_layout','1') (or '0' to turn off).
+export const useLearnedLayout = () =>
+  typeof localStorage !== 'undefined' && localStorage.getItem('atelier_learned_layout') === '1'
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -386,6 +393,68 @@ function placeItems(items: { extraction: ExtractedItem; selected: SearchResult }
   return result
 }
 
+// Z-order per category (back → front), matching the reference-look layering.
+const Z_ORDER: Record<string, number> = {
+  outerwear: 0, dress: 1, bottom: 1, bag: 1, shoes: 1, accessory: 1, scarf: 1, hat: 1, top: 2, jewelry: 2, belt: 3, other: 1,
+}
+
+// DATA-DRIVEN placement using the learned layout rules. Same output shape as placeItems, but x/y/
+// size come from the ARCHETYPE (the exact set of categories in the look) — falling back to the
+// global median, then a safe default. Multiples (2 shoes, etc.) use learned left→right positions.
+// Non-portrait boards get a vertical-centering pass so the look isn't top-heavy (the learned % come
+// from portrait-shaped look images).
+function placeItemsLearned(
+  items: { extraction: ExtractedItem; selected: SearchResult }[],
+  board?: { width: number; height: number }
+): PlacedItem[] {
+  const W = board?.width ?? 1200
+  const H = board?.height ?? 1500
+  const cats = [...new Set(items.map((i) => i.extraction.category))].sort()
+  const arche = LAYOUT_RULES.archetypes[cats.join('+')]
+  const ruleFor = (cat: string): { x: number; y: number; size: number } =>
+    arche?.cats?.[cat] ?? LAYOUT_RULES.global[cat] ?? LAYOUT_RULES.global['other'] ?? { x: 50, y: 50, size: 25 }
+
+  const groups: Record<string, typeof items> = {}
+  for (const it of items) (groups[it.extraction.category] ||= []).push(it)
+
+  const result: PlacedItem[] = []
+  for (const [cat, group] of Object.entries(groups)) {
+    const rule = ruleFor(cat)
+    const targetH = (rule.size / 100) * H
+    const aspect = ASPECT_RATIOS[cat] ?? 0.75
+    const estW = targetH * aspect
+    const z = Z_ORDER[cat] ?? 1
+    const cy = (rule.y / 100) * H
+    const learnedMult = LAYOUT_RULES.multiples[cat]?.[String(group.length)]
+
+    for (let i = 0; i < group.length; i++) {
+      let cxPct: number
+      if (group.length === 1) cxPct = rule.x
+      else if (learnedMult && learnedMult[i] != null) cxPct = learnedMult[i]
+      else { const span = 40; cxPct = 50 - span / 2 + (span / group.length) * (i + 0.5) }
+      const cx = (cxPct / 100) * W
+      result.push({
+        extraction: group[i].extraction,
+        selected: group[i].selected,
+        x: Math.round(cx - estW / 2),
+        y: Math.round(cy - targetH / 2),
+        target_height: Math.round(targetH),
+        z_order: z,
+      })
+    }
+  }
+
+  // Shape-fit: vertically center the arrangement on non-portrait boards (fixes square top-heaviness).
+  const portrait = H >= W * 1.15
+  if (!portrait && result.length > 1) {
+    let minY = Infinity, maxY = -Infinity
+    for (const p of result) { minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y + p.target_height) }
+    const dy = Math.round((H - (maxY - minY)) / 2 - minY)
+    for (const p of result) p.y += dy
+  }
+  return result
+}
+
 const LAYOUT_LABELS: Record<LayoutName, string> = {
   dress_centered: 'Dress Centered',
   separates_stack: 'Separates Stack',
@@ -425,8 +494,8 @@ export function composeNodes(
     .filter((r) => r.selected)
     .map((r) => ({ extraction: r.extraction, selected: r.selected! }))
 
-  // Place items using category rules
-  const placed = placeItems(itemsToPlace, frame)
+  // Place items — learned data-driven rules when the flag is on, else the reference-look rules.
+  const placed = useLearnedLayout() ? placeItemsLearned(itemsToPlace, board) : placeItems(itemsToPlace, frame)
 
   // Create closet_item nodes with target_height (scale computed at render time)
   for (const item of placed) {

@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/Header'
 import { ClosetPanel } from '@/components/layout/ClosetPanel'
 import { ClientBar } from '@/components/layout/ClientBar'
 import { LookCanvas } from '@/components/canvas/LookCanvas'
+import { LookItemsPanel } from '@/components/canvas/LookItemsPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AdminPanel } from '@/components/admin/AdminPanel'
 import { SearchDebug } from '@/components/admin/SearchDebug'
@@ -30,6 +31,12 @@ function App() {
   const { addNode, state } = useCanvasStore()
   const activeView = useViewStore((s) => s.activeView)
   const setActiveView = useViewStore((s) => s.setActiveView)
+
+  // Dismiss the "Watson W" preloader (index.html) only once auth has resolved — so the W
+  // shows continuously through the auth check, never the app's loading screen or a login flash.
+  useEffect(() => {
+    if (!loading) document.getElementById('atelier-preloader')?.classList.add('is-done')
+  }, [loading])
 
   // Handle hash-based routing for platform nav tabs
   useEffect(() => {
@@ -76,13 +83,15 @@ function App() {
       const data = active.data.current as { type?: string; closetItemId?: string; imageUrl?: string } | undefined
       if (data?.type !== 'closet_item' || !data.closetItemId) return
 
+      const off = (state.nodes.length % 6) * 30
       const node: ClosetItemNode = {
         id: `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'closet_item',
         closet_item_id: data.closetItemId,
-        x: 300 + Math.random() * 200,
-        y: 400 + Math.random() * 200,
+        x: Math.round(state.canvas.width / 2 - 140 + off),
+        y: Math.round(state.canvas.height / 2 - 190 + off),
         scale: 1,
+        target_height: 340,
         rotation: 0,
         flipped: false,
         z_index: state.nodes.length,
@@ -91,23 +100,20 @@ function App() {
 
       addNode(node, data.imageUrl ?? undefined)
     },
-    [addNode, state.nodes.length]
+    [addNode, state.nodes.length, state.canvas.width, state.canvas.height]
   )
 
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#1A1A1A]">
-        <div className="text-center">
-          <img src="/brand/atelier-logo-inverse.svg" alt="Atelier" className="h-10 mx-auto mb-3" />
-          <p className="text-[10px] tracking-[0.35em] uppercase text-white/30">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return <LoginPage />
-  }
+  // While auth is resolving, render nothing — the "Watson W" preloader (index.html) stays
+  // on top. We dismiss it only once `loading` is false, so the W shows continuously through
+  // the auth check instead of flashing the app's loading screen or the login page.
+  if (loading) return null
+  if (!user) return <LoginPage />
+  // Defense-in-depth: this internal tool is staff-only. Clients aren't in the `users` table (so
+  // `user` is already null for them), but guard the role explicitly too so a non-staff account can
+  // never reach the styling UI. `stylist_scoped` is a single-client-scoped stylist (e.g. a hiring
+  // candidate on a styling assessment): they use the same builder UI, but RLS limits every client
+  // read/write to the clients assigned to them in client_assignments.
+  if (!['admin', 'stylist', 'support', 'stylist_scoped'].includes(user.role)) return <LoginPage />
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -149,6 +155,7 @@ function App() {
               <div className="flex flex-1 overflow-hidden">
                 <ClosetPanel />
                 <LookCanvas />
+                <LookItemsPanel />
                 <ChatPanel />
               </div>
             ) : (

@@ -30,6 +30,7 @@ export interface TaggableLook {
   categoryIds: string[]
   published: boolean
   archived: boolean
+  sort_order: number | null
 }
 export interface TaggableCapsule {
   id: string
@@ -38,6 +39,7 @@ export interface TaggableCapsule {
   categoryIds: string[]
   published: boolean
   archived: boolean
+  sort_order: number | null
 }
 
 const slugify = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -57,12 +59,18 @@ export function useLookCategories(clientId: string | null) {
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
-        .select('id, name, thumbnail_url, raw, published, archived')
+        .select('id, name, thumbnail_url, raw, published, archived, sort_order')
         .eq('client_id', clientId)
+        // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
+        .is('transitioned_at', null)
+        // Match the client lookbook's ordering so "On lookbook" == what she sees.
+        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false }),
       supabase.from('gp_boards')
-        .select('id, name, raw, published, is_deleted')
+        .select('id, name, raw, published, is_deleted, sort_order')
         .eq('client_id', clientId)
+        // Match the client lookbook's ordering so "On lookbook" == what she sees.
+        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false }),
     ])
 
@@ -96,6 +104,7 @@ export function useLookCategories(clientId: string | null) {
       categoryIds: byLook.get(l.id) ?? [],
       published: !!l.published,
       archived: !!l.archived,
+      sort_order: l.sort_order ?? null,
     })))
     setCapsules((capsRes.data ?? []).map((b: any) => ({
       id: b.id,
@@ -104,6 +113,7 @@ export function useLookCategories(clientId: string | null) {
       categoryIds: byBoard.get(b.id) ?? [],
       published: !!b.published,
       archived: !!b.is_deleted,
+      sort_order: b.sort_order ?? null,
     })))
     setLoading(false)
   }, [clientId])
@@ -189,6 +199,39 @@ export function useLookCategories(clientId: string | null) {
     const { error } = await supabase.from('gp_looks').update({ archived: false, published: false }).eq('id', id)
     if (error) { console.error('restoreLook:', error.message); await fetchAll() }
   }, [fetchAll])
+  // ── manual display order (drives the client lookbook's Looks gallery) ──
+  // orderedIds is the full published set in the stylist's desired order; we
+  // persist each look's index as gp_looks.sort_order. Optimistic + reconciling.
+  const reorderLooks = useCallback(async (orderedIds: string[]) => {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]))
+    setLooks((prev) =>
+      prev
+        .map((l) => (pos.has(l.id) ? { ...l, sort_order: pos.get(l.id)! } : l))
+        .sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9)),
+    )
+    const results = await Promise.all(
+      orderedIds.map((id, i) => supabase.from('gp_looks').update({ sort_order: i }).eq('id', id)),
+    )
+    const failed = results.find((r) => r.error)
+    if (failed) { console.error('reorderLooks:', failed.error?.message); await fetchAll() }
+  }, [fetchAll])
+
+  // Same as reorderLooks but for capsules → gp_boards.sort_order (the lookbook's
+  // getBoards already orders by it, so this drives the client's Capsules gallery).
+  const reorderCapsules = useCallback(async (orderedIds: string[]) => {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]))
+    setCapsules((prev) =>
+      prev
+        .map((c) => (pos.has(c.id) ? { ...c, sort_order: pos.get(c.id)! } : c))
+        .sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9)),
+    )
+    const results = await Promise.all(
+      orderedIds.map((id, i) => supabase.from('gp_boards').update({ sort_order: i }).eq('id', id)),
+    )
+    const failed = results.find((r) => r.error)
+    if (failed) { console.error('reorderCapsules:', failed.error?.message); await fetchAll() }
+  }, [fetchAll])
+
   const restoreCapsule = useCallback(async (id: string) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, archived: false, published: false } : c)))
     const { error } = await supabase.from('gp_boards').update({ is_deleted: false, published: false }).eq('id', id)
@@ -202,6 +245,7 @@ export function useLookCategories(clientId: string | null) {
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
+    reorderLooks, reorderCapsules,
     refetch: fetchAll,
   }
 }

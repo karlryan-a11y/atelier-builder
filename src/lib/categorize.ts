@@ -1,172 +1,186 @@
 /**
- * Detect the clothing category of a closet item from its name.
+ * Closet categorization for the client lookbook sidebar.
  *
- * GoodPix items follow a "category-brand-description" naming convention
- * for ~43% of items (31,806 of 73,742). For the rest, we keyword-match
- * against the full name.
+ * Resolves every closet item to ONE garment category (Bergdorf-aligned
+ * taxonomy). Resolution precedence:
+ *   1. stylist override   — Phase B (gp_closet_items.category), not yet present
+ *   2. GoodPix content_tag — the ~32% of items the stylist tagged in GoodPix
+ *   3. name detection      — fills the ~68% GoodPix left untagged
+ *   4. 'other'
  *
- * Returns a category compatible with the compose layout engine.
+ * This deliberately keeps GoodPix's categories (normalized + deduped) and only
+ * generates a category where GoodPix had none. NON-garment tags (occasion,
+ * season, one-offs like "university of texas") are intentionally NOT categories
+ * here — they stay searchable via the search index, never lost.
  */
 
-import type { ExtractedItem } from './compose'
+export type Category =
+  | 'dresses' | 'tops' | 'skirts' | 'pants' | 'jeans' | 'shorts' | 'outerwear' | 'swim' | 'activewear'
+  | 'shoes' | 'bags' | 'jewelry'
+  | 'belts' | 'scarves' | 'hats' | 'sunglasses'
+  | 'other'
 
-type Category = ExtractedItem['category']
-
-/** Prefix patterns from GoodPix naming convention (e.g., "dress-brand-color") */
-const PREFIX_MAP: Record<string, Category> = {
-  dress: 'dress',
-  gown: 'dress',
-  jumpsuit: 'dress',
-  romper: 'dress',
-
-  top: 'top',
-  blouse: 'top',
-  tee: 'top',
-  shirt: 'top',
-  tank: 'top',
-  cami: 'top',
-  sweater: 'top',
-  turtleneck: 'top',
-  bodysuit: 'top',
-  polo: 'top',
-  hoodie: 'top',
-
-  pant: 'bottom',
-  pants: 'bottom',
-  jean: 'bottom',
-  jeans: 'bottom',
-  shorts: 'bottom',
-  skirt: 'bottom',
-  legging: 'bottom',
-  leggings: 'bottom',
-  trouser: 'bottom',
-  trousers: 'bottom',
-
-  jacket: 'outerwear',
-  blazer: 'outerwear',
-  coat: 'outerwear',
-  cardigan: 'outerwear',
-  vest: 'outerwear',
-  puffer: 'outerwear',
-  cape: 'outerwear',
-  poncho: 'outerwear',
-  shacket: 'outerwear',
-
-  heels: 'shoes',
-  boots: 'shoes',
-  boot: 'shoes',
-  sneakers: 'shoes',
-  sandals: 'shoes',
-  sandal: 'shoes',
-  loafer: 'shoes',
-  loafers: 'shoes',
-  pumps: 'shoes',
-  pump: 'shoes',
-  flats: 'shoes',
-  flat: 'shoes',
-  mules: 'shoes',
-  mule: 'shoes',
-  slides: 'shoes',
-  slide: 'shoes',
-  espadrille: 'shoes',
-  shoes: 'shoes',
-  shoe: 'shoes',
-  booties: 'shoes',
-  bootie: 'shoes',
-  wedge: 'shoes',
-
-  bag: 'bag',
-  tote: 'bag',
-  clutch: 'bag',
-  purse: 'bag',
-  handbag: 'bag',
-  crossbody: 'bag',
-  backpack: 'bag',
-  satchel: 'bag',
-
-  earrings: 'jewelry',
-  earring: 'jewelry',
-  necklace: 'jewelry',
-  bracelet: 'jewelry',
-  ring: 'jewelry',
-  pendant: 'jewelry',
-  brooch: 'jewelry',
-  cuff: 'jewelry',
-  watch: 'jewelry',
-  chain: 'jewelry',
-
-  belt: 'belt',
-
-  scarf: 'scarf',
-  wrap: 'scarf',
-  shawl: 'scarf',
-  stole: 'scarf',
-
-  hat: 'hat',
-  cap: 'hat',
-  beanie: 'hat',
-  beret: 'hat',
-  fedora: 'hat',
-
-  sunglasses: 'accessory',
-  glasses: 'accessory',
-  gloves: 'accessory',
-  accessories: 'accessory',
+/** Display labels for each category slug. */
+export const CATEGORY_LABELS: Record<Category, string> = {
+  dresses: 'Dresses',
+  tops: 'Tops',
+  skirts: 'Skirts',
+  pants: 'Pants',
+  jeans: 'Denim', // slug stays `jeans` (internal); client-facing label is Denim. `denim`/`jean` both fold into this bucket.
+  shorts: 'Shorts',
+  outerwear: 'Outerwear',
+  swim: 'Swim',
+  activewear: 'Activewear',
+  shoes: 'Shoes',
+  bags: 'Handbags',
+  jewelry: 'Jewelry',
+  belts: 'Belts',
+  scarves: 'Scarves',
+  hats: 'Hats',
+  sunglasses: 'Sunglasses',
+  other: 'Other',
 }
 
-/** Keyword patterns to match in the full name when prefix fails */
-const KEYWORD_PATTERNS: [RegExp, Category][] = [
-  // Dresses
-  [/\b(dress|gown|jumpsuit|romper|caftan|kaftan|shirtdress)\b/i, 'dress'],
-  // Shoes (before bottoms — "boot" must match before "bottom" patterns)
-  [/(boots|boot|bootie|booties|heel|heels|sneaker|sneakers|sandal|sandals|loafer|loafers|pump|pumps|flat|flats|mule|mules|slide|slides|espadrille|shoe|shoes|wedge|slingback|oxford|derby|kitten)/i, 'shoes'],
-  // Bottoms
-  [/\b(pants?|trousers?|jeans?|denim|skirt|shorts?|leggings?|culottes?|chinos?|joggers?|wide[- ]leg)\b/i, 'bottom'],
-  // Tops
-  [/\b(top|blouse|shirt|tee|tank|cami|sweater|turtleneck|pullover|henley|bodysuit|tunic|polo|hoodie|sweatshirt|shell)\b/i, 'top'],
-  // Outerwear
-  [/\b(jacket|blazer|coat|cardigan|vest|puffer|cape|poncho|trench|anorak|parka|shacket|overcoat|peacoat)\b/i, 'outerwear'],
-  // Bags
-  [/\b(bag|tote|clutch|purse|handbag|crossbody|backpack|satchel)\b/i, 'bag'],
-  // Jewelry
-  [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?)\b/i, 'jewelry'],
-  // Belt
-  [/\b(belt)\b/i, 'belt'],
-  // Scarf
-  [/\b(scarf|shawl|stole)\b/i, 'scarf'],
-  // Hat
-  [/\b(hat|cap|beanie|beret|fedora|visor)\b/i, 'hat'],
-  // Accessories
-  [/\b(sunglasses|glasses|gloves|umbrella)\b/i, 'accessory'],
+/**
+ * Sidebar structure (Bergdorf Goodman / Neiman's pattern): grouped section
+ * headers with the split-out categories nested under them. Standalone entries
+ * (Shoes, Handbags, Jewelry) are their own top-level filter. Empty buckets are
+ * hidden at render time.
+ */
+export type SidebarNode =
+  | { kind: 'standalone'; slug: Category; label: string }
+  | { kind: 'group'; label: string; children: Category[] }
+
+export const SIDEBAR_STRUCTURE: SidebarNode[] = [
+  { kind: 'group', label: 'Clothing', children: ['dresses', 'tops', 'skirts', 'pants', 'jeans', 'shorts', 'outerwear', 'swim', 'activewear'] },
+  { kind: 'standalone', slug: 'shoes', label: 'Shoes' },
+  { kind: 'standalone', slug: 'bags', label: 'Handbags' },
+  { kind: 'standalone', slug: 'jewelry', label: 'Jewelry' },
+  { kind: 'group', label: 'Accessories', children: ['belts', 'scarves', 'hats', 'sunglasses'] },
+  { kind: 'standalone', slug: 'other', label: 'Other' },
 ]
 
-/**
- * Detect category from item name. Returns the compose-compatible category string.
- *
- * Strategy:
- * 1. Try prefix match (first word before dash) — works for GoodPix format
- * 2. Try keyword match in full name — catches natural-language names
- * 3. Default to 'other'
- */
+/** Map a GoodPix content_tag NAME to a garment category (null = not a garment tag). */
+const CONTENT_TAG_TO_CATEGORY: Record<string, Category> = {
+  // dresses
+  dress: 'dresses', dresses: 'dresses', gown: 'dresses', gowns: 'dresses',
+  jumpsuit: 'dresses', jumpsuits: 'dresses', romper: 'dresses', rompers: 'dresses',
+  // tops
+  top: 'tops', tops: 'tops', blouse: 'tops', tee: 'tops', tank: 'tops', cami: 'tops',
+  sweater: 'tops', sweaters: 'tops', turtleneck: 'tops', bodysuit: 'tops', bodysuits: 'tops',
+  polo: 'tops', shell: 'tops', tunic: 'tops', dickey: 'tops', dickeys: 'tops',
+  'tanks and short sleeve tees': 'tops', 'long sleeve tops': 'tops',
+  // bottoms (split: skirts / pants / jeans / shorts)
+  pant: 'pants', pants: 'pants', trouser: 'pants', trousers: 'pants', leggings: 'pants',
+  tights: 'pants', chino: 'pants', chinos: 'pants', joggers: 'pants', slacks: 'pants',
+  jean: 'jeans', jeans: 'jeans', denim: 'jeans',
+  skirt: 'skirts', skirts: 'skirts', skort: 'skirts', skorts: 'skirts',
+  short: 'shorts', shorts: 'shorts', 'shorts and skorts': 'shorts',
+  // outerwear
+  jacket: 'outerwear', jackets: 'outerwear', blazer: 'outerwear', blazers: 'outerwear',
+  'jackets/blazers': 'outerwear', coat: 'outerwear', coats: 'outerwear',
+  cardigan: 'outerwear', cardigans: 'outerwear', vest: 'outerwear', vests: 'outerwear',
+  furs: 'outerwear', 'fur collar': 'outerwear', outerwear: 'outerwear', puffer: 'outerwear',
+  cape: 'outerwear', poncho: 'outerwear',
+  // swim / activewear
+  swim: 'swim', swimwear: 'swim',
+  activewear: 'activewear', 'athletic vests': 'activewear', 'athletic pants': 'activewear',
+  // shoes / bags / jewelry
+  shoe: 'shoes', shoes: 'shoes',
+  bag: 'bags', bags: 'bags', handbag: 'bags', handbags: 'bags',
+  jewelry: 'jewelry',
+  // accessories (split out)
+  belt: 'belts', belts: 'belts',
+  scarf: 'scarves', scarves: 'scarves',
+  hat: 'hats', hats: 'hats',
+  sunglasses: 'sunglasses',
+}
+
+/** First-word / prefix patterns (GoodPix "category-brand-color" naming). */
+const PREFIX_MAP: Record<string, Category> = {
+  dress: 'dresses', gown: 'dresses', jumpsuit: 'dresses', romper: 'dresses',
+  top: 'tops', blouse: 'tops', tee: 'tops', shirt: 'tops', tank: 'tops', cami: 'tops',
+  sweater: 'tops', turtleneck: 'tops', bodysuit: 'tops', polo: 'tops', hoodie: 'tops',
+  pant: 'pants', pants: 'pants', trouser: 'pants', trousers: 'pants', legging: 'pants', leggings: 'pants',
+  chino: 'pants', chinos: 'pants', jogger: 'pants', joggers: 'pants', slacks: 'pants',
+  jean: 'jeans', jeans: 'jeans',
+  skirt: 'skirts', skort: 'skirts',
+  short: 'shorts', shorts: 'shorts',
+  jacket: 'outerwear', blazer: 'outerwear', coat: 'outerwear', cardigan: 'outerwear',
+  vest: 'outerwear', puffer: 'outerwear', cape: 'outerwear', poncho: 'outerwear', shacket: 'outerwear',
+  heels: 'shoes', boots: 'shoes', boot: 'shoes', sneakers: 'shoes', sandals: 'shoes', sandal: 'shoes',
+  loafer: 'shoes', loafers: 'shoes', pumps: 'shoes', pump: 'shoes', flats: 'shoes', flat: 'shoes',
+  mules: 'shoes', mule: 'shoes', slides: 'shoes', slide: 'shoes', espadrille: 'shoes',
+  shoes: 'shoes', shoe: 'shoes', booties: 'shoes', bootie: 'shoes', wedge: 'shoes',
+  bag: 'bags', tote: 'bags', clutch: 'bags', purse: 'bags', handbag: 'bags',
+  crossbody: 'bags', backpack: 'bags', satchel: 'bags',
+  earrings: 'jewelry', earring: 'jewelry', necklace: 'jewelry', bracelet: 'jewelry',
+  ring: 'jewelry', pendant: 'jewelry', brooch: 'jewelry', cuff: 'jewelry', watch: 'jewelry', chain: 'jewelry',
+  belt: 'belts',
+  scarf: 'scarves', wrap: 'scarves', shawl: 'scarves', stole: 'scarves',
+  hat: 'hats', cap: 'hats', beanie: 'hats', beret: 'hats', fedora: 'hats',
+  sunglasses: 'sunglasses',
+  swim: 'swim', swimsuit: 'swim', bikini: 'swim',
+}
+
+/** Keyword patterns matched against the full name when prefix fails. Order matters. */
+const KEYWORD_PATTERNS: [RegExp, Category][] = [
+  // Accessories / bags / shoes are matched FIRST, so "Top Handle Satchel" and
+  // "Denim Tote Bag" resolve to bags (not tops/jeans) and "Faux Fur Beanie" to a
+  // hat (not outerwear). Dresses also runs early so "wrap dress" beats "wrap" scarf.
+  [/\b(dress|gown|jumpsuit|romper|caftan|kaftan|shirtdress)\b/i, 'dresses'],
+  [/(boots|boot|bootie|booties|heel|heels|sneaker|sneakers|sandal|sandals|loafer|loafers|pump|pumps|flat|flats|mule|mules|slide|slides|espadrille|shoe|shoes|wedge|slingback|oxford|derby|kitten)/i, 'shoes'],
+  [/\b(bag|tote|clutch|purse|handbag|crossbody|cross-body|backpack|satchel|birkin|kelly|pochette|hobo|minaudiere|duffle|duffel|top handle)\b/i, 'bags'],
+  [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|ring)\b/i, 'jewelry'],
+  [/\b(belt)\b/i, 'belts'],
+  [/\b(scarf|shawl|stole|wrap|foulard)\b/i, 'scarves'],
+  [/\b(hat|cap|beanie|beret|fedora|visor)\b/i, 'hats'],
+  [/\b(sunglasses|sunnies)\b/i, 'sunglasses'],
+  [/\b(bikini|swimsuit|one[- ]piece|swim|swimwear)\b/i, 'swim'],
+  [/\b(legging|leggings|sports bra|athletic)\b/i, 'activewear'],
+  // Bottoms split into specifics; jeans/skirt/shorts before the generic "pants".
+  [/\b(jeans?|denim)\b/i, 'jeans'],
+  [/\b(skirt|skort)\b/i, 'skirts'],
+  [/\b(shorts?)\b/i, 'shorts'],
+  [/\b(pants?|trousers?|culottes?|chinos?|joggers?|wide[- ]leg|tights|slacks?|capris?)\b/i, 'pants'],
+  [/\b(top|blouse|shirt|tee|tank|cami|sweater|turtleneck|pullover|henley|bodysuit|tunic|polo|hoodie|sweatshirt|shell)\b/i, 'tops'],
+  [/\b(jacket|blazer|coat|cardigan|vest|puffer|cape|poncho|trench|anorak|parka|shacket|overcoat|peacoat|fur)\b/i, 'outerwear'],
+]
+
+/** Detect a garment category from an item name. Returns 'other' when nothing matches. */
 export function detectCategory(name: string): Category {
   if (!name) return 'other'
-
   const lower = name.toLowerCase().trim()
 
-  // Strategy 1: GoodPix prefix (e.g., "dress-brand-description")
   if (lower.includes('-')) {
     const prefix = lower.split('-')[0].trim()
     if (PREFIX_MAP[prefix]) return PREFIX_MAP[prefix]
   }
-
-  // Also check first word even without dash
   const firstWord = lower.split(/[\s\-,]+/)[0]
   if (PREFIX_MAP[firstWord]) return PREFIX_MAP[firstWord]
 
-  // Strategy 2: Keyword match in full name
   for (const [pattern, category] of KEYWORD_PATTERNS) {
     if (pattern.test(lower)) return category
   }
-
   return 'other'
+}
+
+/**
+ * Resolve an item's garment category.
+ * @param item       closet item (uses .category override if present, else .name)
+ * @param tagNames   the item's content_tag names (resolved from content_tag_ids)
+ */
+export function resolveCategory(item: { name?: string; category?: string | null }, tagNames: string[]): Category {
+  // 1. stylist override (Phase B) — a stored, valid category slug wins outright
+  const override = (item.category ?? '').toLowerCase().trim()
+  if (override && override in CATEGORY_LABELS) return override as Category
+
+  // 2. GoodPix content_tag — first garment-type tag wins
+  for (const raw of tagNames) {
+    const hit = CONTENT_TAG_TO_CATEGORY[(raw ?? '').toLowerCase().trim()]
+    if (hit) return hit
+  }
+
+  // 3. name detection
+  return detectCategory(item.name ?? '')
 }

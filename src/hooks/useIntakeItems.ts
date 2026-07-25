@@ -38,6 +38,10 @@ interface UseIntakeItemsResult {
   loading: boolean
   error: string | null
   refresh: () => void
+  // Re-fetch WITHOUT toggling `loading` — the list isn't unmounted/replaced by the spinner, so the
+  // user's scroll position is preserved (stable card keys reconcile in place). Used by the 15s
+  // auto-poll and post-action refreshes so scrolling/approving never snaps back to the top.
+  refreshBackground: () => void
   counts: { qc_passed: number; pending: number; approved: number; rejected: number }
 }
 
@@ -50,8 +54,10 @@ export function useIntakeItems(
   const [error, setError] = useState<string | null>(null)
   const [counts, setCounts] = useState({ qc_passed: 0, pending: 0, approved: 0, rejected: 0 })
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    // Background refreshes update the data in place without tearing the list down (no spinner),
+    // which is what preserves scroll position during the auto-poll and after an approve/reject.
+    if (!opts?.background) setLoading(true)
     setError(null)
     try {
       // Fetch items with garment and tag photo joins
@@ -70,7 +76,14 @@ export function useIntakeItems(
         .order('created_at', { ascending: false })
         .neq('inbox_archived', true) // hide approved items that were auto/ manually cleared
 
-      if (filter !== 'all') {
+      if (filter === 'pending_review') {
+        // Needs Review also surfaces items the stylist sent back that are mid-rework
+        // (rerun_requested / qc_failed_restyle / a reprocessing pending_qc) so a sent-back
+        // item never "disappears" — it shows a "being redone" card until the new photo returns.
+        query = query.or(
+          'status.eq.pending_review,status.eq.rerun_requested,status.eq.qc_failed_restyle,and(status.eq.pending_qc,reprocess_attempts.gt.0)',
+        )
+      } else if (filter !== 'all') {
         query = query.eq('status', filter)
       }
 
@@ -110,28 +123,40 @@ export function useIntakeItems(
 
       // Get counts — also filtered by client if specified
       const buildCountQuery = (status: string) => {
-        let q = supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', status)
+        // Match the list query: archived (cleared) items don't show, so they mustn't be counted either.
+        let q = supabase.from('intake_items').select('id', { count: 'exact', head: true })
+          .eq('status', status).neq('inbox_archived', true)
         if (clientId) q = q.eq('client_id', clientId)
         return q
       }
 
-      const [qcPassedRes, pendingRes, approvedRes, rejectedRes] = await Promise.all([
+      // Items mid-rework count toward Needs Review too (they show as "being redone" cards there).
+      const buildReworkCountQuery = () => {
+        let q = supabase.from('intake_items').select('id', { count: 'exact', head: true })
+          .or('status.eq.rerun_requested,status.eq.qc_failed_restyle,and(status.eq.pending_qc,reprocess_attempts.gt.0)')
+          .neq('inbox_archived', true)
+        if (clientId) q = q.eq('client_id', clientId)
+        return q
+      }
+
+      const [qcPassedRes, pendingRes, approvedRes, rejectedRes, reworkRes] = await Promise.all([
         buildCountQuery('qc_passed'),
         buildCountQuery('pending_review'),
         buildCountQuery('approved'),
         buildCountQuery('rejected_final'),
+        buildReworkCountQuery(),
       ])
 
       setCounts({
         qc_passed: qcPassedRes.count ?? 0,
-        pending: pendingRes.count ?? 0,
+        pending: (pendingRes.count ?? 0) + (reworkRes.count ?? 0),
         approved: approvedRes.count ?? 0,
         rejected: rejectedRes.count ?? 0,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load items')
     } finally {
-      setLoading(false)
+      if (!opts?.background) setLoading(false)
     }
   }, [filter, clientId])
 
@@ -139,5 +164,7 @@ export function useIntakeItems(
     load()
   }, [load])
 
-  return { items, loading, error, refresh: load, counts }
+  const refreshBackground = useCallback(() => { load({ background: true }) }, [load])
+
+  return { items, loading, error, refresh: load, refreshBackground, counts }
 }

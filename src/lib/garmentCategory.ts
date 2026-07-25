@@ -19,24 +19,49 @@ export function labelForCategory(slug: string): string {
     ?? slug.replace(/(^|[\s-])(\w)/g, (_m, p: string, c: string) => p + c.toUpperCase())
 }
 
-/** Effective category for an item: stored override (fixed OR custom) wins; else resolve. */
+/** Effective PRIMARY category for an item: stored override (fixed OR custom) wins; else resolve. */
 export function categoryOf(item: ClosetItem, tagNames: string[] = []): string {
   const override = (item.category ?? '').trim().toLowerCase()
   if (override) return override
   return resolveCategory({ name: displayName(item), category: null }, tagNames)
 }
 
-/** Turn a typed label into a stable slug, e.g. "Rompers" -> "rompers". */
-export function slugifyCategory(label: string): string {
-  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+/**
+ * ALL categories an item belongs to: its primary garment category first, then any
+ * additional "Also in" groupings from `custom_categories[]` (e.g. an item that is a
+ * Top AND in the client's "49ers" custom category). Deduped; empties dropped.
+ */
+export function categoriesOf(item: ClosetItem, tagNames: string[] = []): string[] {
+  const out: string[] = []
+  const primary = categoryOf(item, tagNames)
+  if (primary) out.push(primary)
+  for (const c of item.custom_categories ?? []) {
+    const slug = slugifyCategory(String(c))
+    if (slug && !out.includes(slug)) out.push(slug)
+  }
+  return out
 }
 
-/** Distinct custom categories (slug + label) actually used across a client's items. */
+/** Turn a typed label into a stable slug, e.g. "Rompers" -> "rompers". */
+export function slugifyCategory(label: string): string {
+  return label.trim().toLowerCase()
+    // Strip accents/diacritics first (è→e, é→e, ñ→n) so "Brassières" → "brassieres",
+    // not "brassi-res" — otherwise accented letters get turned into stray dashes.
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+/** Distinct custom categories (slug + label) actually used across a client's items —
+ *  from BOTH the primary `category` slug and the `custom_categories[]` "Also in" groupings. */
 export function customCategoriesFromItems(items: ClosetItem[]): { slug: string; label: string }[] {
   const slugs = new Set<string>()
   for (const i of items) {
     const c = (i.category ?? '').trim().toLowerCase()
     if (c && !isFixedCategory(c)) slugs.add(c)
+    for (const cc of i.custom_categories ?? []) {
+      const s = slugifyCategory(String(cc))
+      if (s && !isFixedCategory(s)) slugs.add(s)
+    }
   }
   return [...slugs].sort().map((slug) => ({ slug, label: labelForCategory(slug) }))
 }

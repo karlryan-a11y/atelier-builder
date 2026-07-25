@@ -1,4 +1,4 @@
-import { Trash2, Plus } from 'lucide-react'
+import { Trash2, Plus, Copy } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
 
 interface LookGalleryProps {
@@ -6,11 +6,12 @@ interface LookGalleryProps {
   loading: boolean
   currentLookId: string | null
   onSelect: (look: LookRow) => void
+  onDuplicate: (look: LookRow) => void
   onDelete: (id: string) => void
   onNew: () => void
 }
 
-export function LookGallery({ looks, loading, currentLookId, onSelect, onDelete, onNew }: LookGalleryProps) {
+export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-3 gap-2 p-3">
@@ -67,6 +68,16 @@ export function LookGallery({ looks, loading, currentLookId, onSelect, onDelete,
                     </span>
                   </div>
                 )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDuplicate(look)
+                  }}
+                  title="Duplicate this look"
+                  className="absolute top-1 left-1 p-1 bg-white/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blush/20"
+                >
+                  <Copy className="h-2.5 w-2.5 text-text-muted" />
+                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()

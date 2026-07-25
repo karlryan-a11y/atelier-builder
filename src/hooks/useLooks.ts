@@ -35,11 +35,14 @@ export function useLooks(clientId: string | null) {
       return
     }
     setLoading(true)
+    // Read gp_looks base (not the `looks` view) so we can exclude transitioned looks — the view
+    // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
     const { data, error } = await supabase
-      .from('looks')
+      .from('gp_looks')
       .select('id, client_id, name, canvas_state, thumbnail_url, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
       .eq('client_id', clientId)
       .eq('source', 'builder')
+      .is('transitioned_at', null)
       .order('updated_at', { ascending: false })
 
     if (!error && data) {
@@ -112,7 +115,7 @@ export function useLooks(clientId: string | null) {
     if (r2ImageKey) {
       row.raw = {
         main_image_r2_key: r2ImageKey,
-        main_image_url: `https://images.atelierbywatson.com/${r2ImageKey}`,
+        main_image_url: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2ImageKey)}`,
       }
     }
 

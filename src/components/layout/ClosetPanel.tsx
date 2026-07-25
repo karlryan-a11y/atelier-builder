@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react'
-import { Search, Pencil, StickyNote } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
-import { useContentTags } from '@/hooks/useContentTags'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { categoryOf, labelForCategory, isFixedCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { useClientStore } from '@/stores/clientStore'
@@ -16,11 +15,13 @@ function DraggableItem({
   item,
   onAdd,
   onEdit,
+  onZoom,
   hasNote,
 }: {
   item: { id: string; name: string; brand: string; color: string | null; imageUrl: string | null }
   onAdd: () => void
   onEdit: () => void
+  onZoom: () => void
   hasNote: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -50,6 +51,15 @@ function DraggableItem({
       }}
     >
       <div className="relative aspect-[3/4] bg-tile rounded-sm overflow-hidden mb-1.5 flex items-center justify-center">
+        <button
+          type="button"
+          title="View larger"
+          onClick={(e) => { e.stopPropagation(); onZoom() }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-1 right-7 z-10 p-1 rounded-sm bg-white/90 text-text-muted opacity-0 group-hover:opacity-100 hover:text-text transition-opacity shadow-sm"
+        >
+          <ZoomIn className="h-3 w-3" />
+        </button>
         <button
           type="button"
           title="Edit item"
@@ -90,15 +100,125 @@ function DraggableItem({
   )
 }
 
+// Click the magnifier on a tile → an enlarged view of the garment with its details, and
+// prev/next stepping through the CURRENT filtered list (Cynthia: telling apart "so many
+// similar tops"). Backdrop / ✕ / Esc closes; ← → (buttons or arrow keys) step.
+function ClosetLightbox({
+  items,
+  index,
+  onIndexChange,
+  onClose,
+  onAdd,
+}: {
+  items: ClosetItem[]
+  index: number
+  onIndexChange: (i: number) => void
+  onClose: () => void
+  onAdd: (item: ClosetItem) => void
+}) {
+  const item = items[index]
+  const atStart = index <= 0
+  const atEnd = index >= items.length - 1
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft' && index > 0) onIndexChange(index - 1)
+      else if (e.key === 'ArrowRight' && index < items.length - 1) onIndexChange(index + 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [index, items.length, onClose, onIndexChange])
+
+  if (!item) return null
+  const imageUrl = resolveItemImage(item)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-white rounded-sm shadow-xl max-w-lg w-full max-h-[88vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          title="Close"
+          onClick={onClose}
+          className="absolute top-2 right-2 z-10 p-1.5 rounded-sm bg-white/90 text-text-muted hover:text-text shadow-sm transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {/* Image */}
+        <div className="flex-1 min-h-0 bg-tile flex items-center justify-center p-6">
+          {imageUrl ? (
+            <img src={imageUrl} alt={displayName(item)} className="max-w-full max-h-[62vh] object-contain" />
+          ) : (
+            <span className="text-[10px] tracking-[0.2em] uppercase text-text-muted/40">No image</span>
+          )}
+        </div>
+
+        {/* Prev / next */}
+        {items.length > 1 && (
+          <>
+            <button
+              type="button"
+              title="Previous"
+              onClick={() => !atStart && onIndexChange(index - 1)}
+              disabled={atStart}
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/90 shadow-sm text-text-muted hover:text-text disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              title="Next"
+              onClick={() => !atEnd && onIndexChange(index + 1)}
+              disabled={atEnd}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/90 shadow-sm text-text-muted hover:text-text disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </>
+        )}
+
+        {/* Details */}
+        <div className="border-t border-border px-4 py-3">
+          <p className="text-[13px] font-medium text-text">{displayName(item)}</p>
+          <p className="text-[11px] text-text-muted mt-0.5">
+            {item.brand}
+            {item.color ? <span className="text-text-muted/60">{item.brand ? ' · ' : ''}{item.color}</span> : null}
+          </p>
+          {item.style_note?.trim() && (
+            <p className="text-[11px] text-text-muted/80 italic mt-1.5 leading-snug">{item.style_note}</p>
+          )}
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-[9px] tracking-[0.2em] uppercase text-text-muted/40">{index + 1} / {items.length}</span>
+            <button
+              type="button"
+              onClick={() => { onAdd(item); onClose() }}
+              className="flex items-center gap-1 text-[9px] tracking-[0.2em] uppercase px-3 py-1 rounded-full border border-border text-text-muted hover:border-blush hover:text-text transition-colors"
+            >
+              <Plus className="h-3 w-3" /> Add to look
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ClosetPanel() {
   const { activeClient } = useClientStore()
-  const { items, itemTagIds, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
-  const { tags } = useContentTags()
+  const { items, tagNameById, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
   const { addNode, state } = useCanvasStore()
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
   const [savingItem, setSavingItem] = useState(false)
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null)
 
   async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null }) {
     if (!editingItem) return
@@ -116,22 +236,16 @@ export function ClosetPanel() {
     refetch()
   }
 
-  // Resolve every item to ONE garment category, using the same resolver the
-  // lookbook uses (stylist override → content tag → name detection).
-  const tagNameById = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const t of tags) m.set(t.id, String(t.display_name ?? ''))
-    return m
-  }, [tags])
-
+  // Resolve every item to ONE garment category, using the same resolver AND tag source the lookbook
+  // uses: stylist override → content tag (from the item's content_tag_ids column) → name detection.
   const categoryByItem = useMemo(() => {
     const m = new Map<string, string>()
     for (const i of items) {
-      const tagNames = (itemTagIds.get(i.id) ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
+      const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
       m.set(i.id, categoryOf(i, tagNames))
     }
     return m
-  }, [items, itemTagIds, tagNameById])
+  }, [items, tagNameById])
 
   const customCats = useMemo(() => customCategoriesFromItems(items), [items])
 
@@ -170,13 +284,17 @@ export function ClosetPanel() {
   }, [items, search, activeCategories, categoryByItem])
 
   function addItemToCanvas(itemId: string, imageUrl: string | null) {
+    // Drop near the board center at a readable height (target_height) so it's easy to grab and
+    // resize — not full source resolution. Cascade a little so repeated adds don't stack exactly.
+    const off = (state.nodes.length % 6) * 30
     const node: ClosetItemNode = {
       id: `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'closet_item',
       closet_item_id: itemId,
-      x: 200 + Math.random() * 400,
-      y: 300 + Math.random() * 400,
+      x: Math.round(state.canvas.width / 2 - 140 + off),
+      y: Math.round(state.canvas.height / 2 - 190 + off),
       scale: 1,
+      target_height: 340,
       rotation: 0,
       flipped: false,
       z_index: state.nodes.length,
@@ -305,7 +423,7 @@ export function ClosetPanel() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {filtered.map((item) => {
+                {filtered.map((item, idx) => {
                   const imageUrl = resolveItemImage(item)
                   return (
                     <DraggableItem
@@ -320,6 +438,7 @@ export function ClosetPanel() {
                       hasNote={!!item.style_note?.trim()}
                       onAdd={() => addItemToCanvas(item.id, imageUrl)}
                       onEdit={() => setEditingItem(item)}
+                      onZoom={() => setZoomIndex(idx)}
                     />
                   )
                 })}
@@ -349,6 +468,16 @@ export function ClosetPanel() {
           customCategories={customCats}
           onSave={handleSaveItem}
           onClose={() => setEditingItem(null)}
+        />
+      )}
+
+      {zoomIndex !== null && filtered[zoomIndex] && (
+        <ClosetLightbox
+          items={filtered}
+          index={zoomIndex}
+          onIndexChange={setZoomIndex}
+          onClose={() => setZoomIndex(null)}
+          onAdd={(item) => addItemToCanvas(item.id, resolveItemImage(item))}
         />
       )}
     </div>

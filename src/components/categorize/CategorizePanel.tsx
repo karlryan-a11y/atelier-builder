@@ -6,10 +6,15 @@ import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
 import { CollectionTab } from './CollectionTab'
+import { LookArrangeGrid } from './LookArrangeGrid'
+import { ReviewTab } from './ReviewTab'
+import { TransitionsTab } from './TransitionsTab'
+import { useTransitions } from '@/hooks/useTransitions'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
+import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
-type Mode = 'looks' | 'capsules' | 'collection' | 'audit'
+type Mode = 'looks' | 'capsules' | 'collection' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 export function CategorizePanel() {
@@ -20,7 +25,13 @@ export function CategorizePanel() {
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
+    reorderLooks, reorderCapsules,
   } = useLookCategories(activeClient?.id ?? null)
+
+  // Transitioned pieces + looks for this client. Instantiated at the panel so the pink tab badge
+  // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
+  const transitions = useTransitions(activeClient?.id ?? null)
+  const transitionCount = transitions.items.length + transitions.looks.length
 
   const [mode, setMode] = useState<Mode>('looks')
   const [brush, setBrush] = useState<string | null>(null)   // category ID
@@ -155,7 +166,26 @@ export function CategorizePanel() {
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
         </div>
         <div className="px-5 py-3 border-b border-[#E8E4DF] flex-1 overflow-hidden flex flex-col">
-          {mode === 'collection' ? (
+          {mode === 'audit' ? (
+            <ReconcileFilterRail />
+          ) : mode === 'transitions' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Transitions</p>
+              <p className="text-[10px] text-[#888] leading-relaxed">
+                Pieces the client (or you) marked as no longer owned, and the looks pulled from her
+                lookbook as a result. Restore a piece to bring it — and any look it alone was holding
+                back — straight back to the lookbook.
+              </p>
+            </>
+          ) : mode === 'review' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Review</p>
+              <p className="text-[10px] text-[#888] leading-relaxed">
+                Clean up her collection: recover pieces hidden by mistake, fill in missing designers or
+                categories so search works, and fix color mismatches. Use the pills on the right.
+              </p>
+            </>
+          ) : mode === 'collection' ? (
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
               <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
@@ -164,8 +194,11 @@ export function CategorizePanel() {
               <div className="flex flex-col gap-1 overflow-y-auto pr-1">
                 <button
                   onClick={() => setActiveGarmentCats(new Set())}
-                  className={`text-left px-3 py-2 rounded text-[12px] transition-colors ${activeGarmentCats.size === 0 ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
-                >All items</button>
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${activeGarmentCats.size === 0 ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+                >
+                  <span>All items</span>
+                  <span className={activeGarmentCats.size === 0 ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get('__total__') ?? 0}</span>
+                </button>
                 {SIDEBAR_STRUCTURE.map((node) => {
                   const slugs = node.kind === 'group' ? node.children : [node.slug]
                   const present = slugs.filter((s) => (garmentCounts.get(s) ?? 0) > 0)
@@ -192,7 +225,7 @@ export function CategorizePanel() {
                   )
                 })}
                 {(() => {
-                  const customSlugs = [...garmentCounts.keys()].filter((s) => !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== '__total__' && !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
                   if (customSlugs.length === 0) return null
                   return (
                     <div className="mt-1">
@@ -265,7 +298,7 @@ export function CategorizePanel() {
             </>
           )}
         </div>
-        {mode !== 'collection' && (
+        {mode !== 'collection' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -287,12 +320,17 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'capsules', 'collection', 'audit'] as const).map((m) => (
+            {(['looks', 'capsules', 'collection', 'audit', 'review', 'transitions'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setSelected(new Set()) }}
-                className={`px-4 py-1.5 text-[12px] tracking-[0.18em] uppercase rounded transition-colors ${mode === m ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A]'}`}
-              >{m}</button>
+                className={`relative px-4 py-1.5 text-[12px] tracking-[0.18em] uppercase rounded transition-colors ${mode === m ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A]'}`}
+              >
+                {m}
+                {m === 'transitions' && transitionCount > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{transitionCount}</span>
+                )}
+              </button>
             ))}
           </div>
 
@@ -329,6 +367,18 @@ export function CategorizePanel() {
           <ErrorBoundary label="Audit couldn't render this collection">
             <ReconciliationPanel />
           </ErrorBoundary>
+        ) : mode === 'review' ? (
+          <ErrorBoundary label="Review couldn't render">
+            <div className="flex-1 overflow-y-auto p-6">
+              <ReviewTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
+            </div>
+          </ErrorBoundary>
+        ) : mode === 'transitions' ? (
+          <ErrorBoundary label="Transitions couldn't render">
+            <div className="flex-1 overflow-y-auto p-6">
+              <TransitionsTab {...transitions} />
+            </div>
+          </ErrorBoundary>
         ) : (
         <div className="flex-1 overflow-y-auto p-6">
           {mode === 'collection' ? (
@@ -336,6 +386,7 @@ export function CategorizePanel() {
               clientId={activeClient?.id ?? null}
               filterCategories={activeGarmentCats}
               onCategoryCounts={onGarmentCounts}
+              onTransitioned={transitions.refetch}
             />
           ) : loading ? (
             <p className="text-[#888] text-sm">Loading…</p>
@@ -343,6 +394,22 @@ export function CategorizePanel() {
             <p className="text-[#888] text-sm">
               {status === 'draft' ? `No ${mode} waiting in the queue — all caught up.` : `No ${mode} here.`}
             </p>
+          ) : (mode === 'looks' || mode === 'capsules') && status === 'published' ? (
+            <LookArrangeGrid
+              items={visible as (TaggableLook | TaggableCapsule)[]}
+              labelOf={labelOf}
+              onReorder={mode === 'looks' ? reorderLooks : reorderCapsules}
+              onRemove={(id) => setItemPublished(id, false)}
+              onArchive={archiveItem}
+              galleryName={mode === 'looks' ? 'Looks gallery' : 'Capsules'}
+              activeBrushId={activeBrush}
+              selected={selected}
+              onCardClick={(item, shiftKey) => {
+                if (shiftKey) {
+                  setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
+                } else { onCardClick(item) }
+              }}
+            />
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
               {visible.map((item) => {

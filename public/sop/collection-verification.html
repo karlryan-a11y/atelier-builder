@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Collection Verification SOP — Danielle York · Atelier</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<style>
+  :root{
+    --ground:#faf8f5; --surface:#ffffff; --raised:#f4f1ec;
+    --text:#1a1a1a; --muted:#8a8378; --faint:#b4ab9f; --line:#e7e1d8;
+    --blush:#f6e3e6; --rose:#b9727e; --ink-accent:#8a5a63;
+    --good:#3f7d55; --good-bg:#e7f0ea;
+    --warn:#a9791f; --warn-bg:#f6edda;
+    --crit:#b0453c; --crit-bg:#f6e3e0;
+    --shadow:0 1px 2px rgba(26,26,26,.05),0 8px 24px rgba(26,26,26,.05);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#17150f; --surface:#201d16; --raised:#2a261d;
+      --text:#f3efe7; --muted:#a99f8f; --faint:#7c7263; --line:#332e24;
+      --blush:#3a2a2d; --rose:#d59aa4; --ink-accent:#e2b7bf;
+      --good:#7fb894; --good-bg:#1e2b22;
+      --warn:#d8b061; --warn-bg:#2c2415;
+      --crit:#e0938a; --crit-bg:#2c1a17;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#17150f; --surface:#201d16; --raised:#2a261d;
+    --text:#f3efe7; --muted:#a99f8f; --faint:#7c7263; --line:#332e24;
+    --blush:#3a2a2d; --rose:#d59aa4; --ink-accent:#e2b7bf;
+    --good:#7fb894; --good-bg:#1e2b22; --warn:#d8b061; --warn-bg:#2c2415;
+    --crit:#e0938a; --crit-bg:#2c1a17; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    --ground:#faf8f5; --surface:#ffffff; --raised:#f4f1ec;
+    --text:#1a1a1a; --muted:#8a8378; --faint:#b4ab9f; --line:#e7e1d8;
+    --blush:#f6e3e6; --rose:#b9727e; --ink-accent:#8a5a63;
+    --good:#3f7d55; --good-bg:#e7f0ea; --warn:#a9791f; --warn-bg:#f6edda;
+    --crit:#b0453c; --crit-bg:#f6e3e0; --shadow:0 1px 2px rgba(26,26,26,.05),0 8px 24px rgba(26,26,26,.05);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--ground); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:820px; margin:0 auto; padding:56px 28px 96px}
+  .serif{font-family:Georgia,"Times New Roman",serif}
+  h1{font-family:Georgia,serif; font-weight:600; font-size:clamp(2rem,5vw,2.9rem); line-height:1.08; letter-spacing:-.01em; text-wrap:balance; margin:0 0 .4rem}
+  h2{font-family:Georgia,serif; font-weight:600; font-size:1.5rem; letter-spacing:-.01em; margin:0; text-wrap:balance}
+  h3{font-size:.95rem; font-weight:650; letter-spacing:.01em; margin:0 0 .35rem}
+  p{margin:.5rem 0}
+  .eyebrow{font-size:.68rem; letter-spacing:.28em; text-transform:uppercase; color:var(--muted); font-weight:600}
+  .lede{font-size:1.08rem; color:var(--text); max-width:64ch}
+  .muted{color:var(--muted)}
+  a{color:var(--ink-accent)}
+
+  header.head{border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:8px}
+  .kicker-row{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap}
+  .owner{font-size:.8rem; color:var(--muted)}
+  .owner b{color:var(--text)}
+
+  section.block{padding:34px 0; border-bottom:1px solid var(--line)}
+  section.block:last-of-type{border-bottom:0}
+  .phase-head{display:flex; align-items:baseline; gap:14px; margin-bottom:14px}
+  .pnum{font-family:Georgia,serif; font-size:1.05rem; color:var(--rose); font-weight:600; width:2.4em; flex:none; font-variant-numeric:tabular-nums}
+  .phase-head .sub{font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-left:auto}
+
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin:22px 0 4px}
+  .stat{background:var(--surface); padding:16px 16px}
+  .stat .n{font-family:Georgia,serif; font-size:1.7rem; line-height:1; font-variant-numeric:tabular-nums}
+  .stat .l{font-size:.7rem; letter-spacing:.06em; color:var(--muted); margin-top:6px; text-transform:uppercase}
+  .stat.warn .n{color:var(--warn)} .stat.crit .n{color:var(--crit)} .stat.good .n{color:var(--good)}
+
+  .callout{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--rose); border-radius:10px; padding:16px 18px; margin:16px 0; box-shadow:var(--shadow)}
+  .callout .eyebrow{color:var(--rose)}
+  .goal{background:var(--blush); border:1px solid color-mix(in srgb,var(--rose) 22%,var(--line)); border-radius:12px; padding:20px 22px; margin:8px 0 4px}
+  .goal .eyebrow{color:var(--ink-accent)}
+  .goal p{font-family:Georgia,serif; font-size:1.15rem; line-height:1.4; margin:.35rem 0 0}
+
+  ol.steps{list-style:none; counter-reset:s; margin:14px 0 0; padding:0}
+  ol.steps>li{counter-increment:s; position:relative; padding:2px 0 16px 40px; margin:0}
+  ol.steps>li::before{content:counter(s); position:absolute; left:0; top:0; width:26px; height:26px; border-radius:50%; background:var(--raised); color:var(--text); font-size:.78rem; font-weight:650; display:flex; align-items:center; justify-content:center; font-variant-numeric:tabular-nums}
+  ol.steps ul{margin:8px 0 0; padding-left:1.1rem}
+  ol.steps ul li{margin:4px 0}
+
+  .branch{display:grid; gap:10px; margin:12px 0 0}
+  .branch .row{display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:start; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+  .tag{font-size:.66rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:4px 9px; border-radius:999px; white-space:nowrap; align-self:start}
+  .t-good{background:var(--good-bg); color:var(--good)}
+  .t-warn{background:var(--warn-bg); color:var(--warn)}
+  .t-crit{background:var(--crit-bg); color:var(--crit)}
+  .t-neut{background:var(--raised); color:var(--muted)}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0 2px; font-size:.9rem}
+  .tscroll{overflow-x:auto}
+  th,td{text-align:left; padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:650}
+  td b{font-weight:650}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:16px 18px; box-shadow:var(--shadow)}
+  .card h3{color:var(--ink-accent)}
+
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .miss{background:var(--surface); border:1px dashed var(--rose); border-radius:10px; padding:13px 16px; margin:10px 0; display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:start}
+  .miss .num{font-family:Georgia,serif; color:var(--rose); font-weight:600; font-variant-numeric:tabular-nums}
+  ul.plain{margin:.4rem 0; padding-left:1.15rem}
+  ul.plain li{margin:5px 0}
+  .foot{margin-top:26px; font-size:.82rem; color:var(--muted)}
+  hr.soft{border:0; border-top:1px solid var(--line); margin:26px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="head">
+    <div class="kicker-row">
+      <span class="eyebrow">Atelier · Operations SOP</span>
+      <span class="owner">Owner: <b>Chelsea</b> &nbsp;·&nbsp; Scope: <b>Danielle York only</b> (for now) &nbsp;·&nbsp; Draft for review</span>
+    </div>
+    <h1>Danielle York — Full Collection Verification &amp; Cleanup</h1>
+    <p class="lede muted">A one-time, folder-by-folder sweep that proves — with certainty — that every piece we photographed is live in her Atelier, correctly categorized, colored, titled, and branded. When it's done, no one is wondering where Danielle's things are.</p>
+
+    <div class="goal">
+      <span class="eyebrow">The standard — definition of done</span>
+      <p>Every original photo in Danielle's Google&nbsp;Drive folder maps to one live piece in her Atelier, and that piece has the right category (plus every additional tag it belongs under), the right color, the right title, and the right brand. Verified in <em>both</em> directions, signed off by Chelsea.</p>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="n">2,021</div><div class="l">Photos taken</div></div>
+    <div class="stat"><div class="n">943</div><div class="l">Items digitized</div></div>
+    <div class="stat good"><div class="n">889</div><div class="l">Live on her site</div></div>
+    <div class="stat warn"><div class="n">110</div><div class="l">Hidden (80+ real)</div></div>
+    <div class="stat warn"><div class="n">703</div><div class="l">Re-processed once</div></div>
+    <div class="stat crit"><div class="n">31</div><div class="l">No designer</div></div>
+  </div>
+  <p class="muted" style="font-size:.85rem">Why by filename, not Drive ID: only <b>18%</b> of her photos have a Google Drive file ID (she was digitized before we captured it) — but <b>100%</b> kept their original filename, and that's the key we reconcile on.</p>
+
+  <!-- PHASE 0 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">00</span><h2>Lock the rules before anyone touches a piece</h2><span class="sub">Chelsea + Karl · prerequisite</span></div>
+    <p>Half the mess is inconsistent tagging. Fix the rulebook first, or the sweep just creates a new mess.</p>
+    <ol class="steps">
+      <li><b>Define Danielle's category taxonomy with her.</b> The full list of categories she wants, in her words. This should already have happened — if it hasn't, it happens before the sweep starts. Chelsea owns this conversation.</li>
+      <li><b>Write the multi-tag rules.</b> This is the piece we keep missing. An earring is tagged <em>Earrings</em> but never also <em>Jewelry</em>, so searching "jewelry" finds nothing. Decide which granular tags roll up under a parent (Earrings / Bracelets / Necklaces / Rings → also <b>Jewelry</b>; Jackets / Blazers / Coats → also <b>Outerwear</b>), and which stay standalone (e.g. <em>49ers</em>). Every piece gets tagged under <em>every</em> category it belongs to.</li>
+      <li><b>Karl/Claude cleans up behind the scenes first.</b> Before the team starts, we restore the ~80 real pieces that were hidden by mistake, so they're already on Atelier when the sweep reaches them. The team never touches "hidden" — they just find pieces on Atelier and confirm them.</li>
+    </ol>
+    <div class="callout"><span class="eyebrow">Prerequisite, non-negotiable</span><p style="margin:.35rem 0 0">Do not start Phase 1 until the taxonomy and the multi-tag rules are written down. Everyone tags off the same rulebook, or you re-do it.</p></div>
+  </section>
+
+  <!-- PHASE 1 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">01</span><h2>The folder-by-folder sweep</h2><span class="sub">Stylists · in parallel by category</span></div>
+    <p>This is the core of the whole thing. Work one Drive folder (one category) at a time, with the <b>Collection page open beside it</b> — Style → Categorize → Collection, filtered to that category. Everything you need is already there: name, brand, category, <em>multiple</em> categories, color, internal notes.</p>
+    <ol class="steps">
+      <li><b>Count garments, not photos.</b> We shot most pieces as <em>garment&nbsp;+&nbsp;tag</em> — two photos per item. So a folder of 194 photos is ~97 pieces. Count the garment shots; the tag shots are the reference that goes <em>with</em> a piece, not separate pieces.</li>
+      <li><b>Filter the Collection to that category</b> and read the <b>“X of Y confirmed on Drive”</b> counter. Use <b>“Unconfirmed only”</b> to see what's still left.</li>
+      <li><b>Go garment-by-garment. Find each piece on Atelier and confirm it:</b>
+        <ul>
+          <li>Open the piece (pencil) and check it's right: <b>brand</b> (read the tag photo), <b>color</b>, <b>title/description</b>, <b>category</b>, and every <b>additional tag</b> it belongs under (per the Phase 0 rules — e.g. an earring is also <em>Jewelry</em>). Fix anything wrong right here.</li>
+          <li>If the tag is missing or illegible → mark it <b>Unknown brand</b> (it goes to the Unknowns list, Phase 3), don't guess.</li>
+          <li>Click <b>Confirm on Google Drive.</b> The card turns green and the counter ticks up.</li>
+        </ul>
+      </li>
+      <li><b>If you can't find a piece, check <em>all</em> of Atelier before calling it missing:</b></li>
+    </ol>
+    <div class="branch">
+      <div class="row"><span class="tag t-warn">Wrong category on Atelier</span><div>Search the whole collection — found under another category → recategorize it, verify, confirm. (This is most of the "outerwear looks half-empty" problem — the jackets are just filed elsewhere.)</div></div>
+      <div class="row"><span class="tag t-neut">Wrong Drive folder</span><div>It might just be misfiled in Drive (a belt in the Tops folder). You'll catch it when you sweep that other folder — don't call it missing yet.</div></div>
+      <div class="row"><span class="tag t-crit">Nowhere on Atelier at all</span><div>Not under any category → move <b>both</b> photos (garment + tag) into a <b>“Not Found on Atelier”</b> subfolder inside that Drive folder, keeping the category. Those get re-digitized in Phase 2.</div></div>
+      <div class="row"><span class="tag t-warn">Two live copies</span><div>You already confirmed this exact piece and here's a second one → it's a duplicate. Archive the weaker one (now logged with who/when/why).</div></div>
+    </div>
+    <p class="muted" style="margin-top:14px">A category is done when the counter reads <b>Y of Y confirmed</b> and every photo in its Drive folder is either confirmed on Atelier or sitting in that folder's “Not Found” subfolder. Nothing left unexplained.</p>
+  </section>
+
+  <!-- PHASE 2 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">02</span><h2>Close the gaps</h2><span class="sub">Chelsea + Karl/Claude</span></div>
+    <ol class="steps">
+      <li><b>Re-digitize the "Not Found" folders.</b> Point the digitizer at each "Not Found on Atelier" subfolder — it runs those photos through the same pipeline. They land in Needs Review → approve → they're now live. Then confirm each on Drive like any other piece.</li>
+      <li><b>Remove the duplicates</b> flagged during the sweep — keep the best image, archive the other.</li>
+    </ol>
+  </section>
+
+  <!-- PHASE 3 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">03</span><h2>Work the Unknown-brand list</h2><span class="sub">Stylists → Chelsea → Danielle (last)</span></div>
+    <p>Everything flagged "Unknown brand" sits in one organized list. Work it in tiers, and protect Danielle's time — she never gets a pile of 200.</p>
+    <div class="branch">
+      <div class="row"><span class="tag t-neut">Tier 1</span><div><b>Search it out.</b> Reverse-image / Google-image the piece; a clear product photo usually surfaces the brand. (Claude can suggest likely brands from the title to give you a starting point.)</div></div>
+      <div class="row"><span class="tag t-neut">Tier 2</span><div><b>Ask Danielle's household / staff</b> for the ones you can't source.</div></div>
+      <div class="row"><span class="tag t-neut">Tier 3</span><div><b>One consolidated list to Danielle</b> — only what's genuinely unresolvable, batched, never item-by-item. Then set the brand and confirm.</div></div>
+    </div>
+  </section>
+
+  <!-- PHASE 4 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">04</span><h2>The two-way sign-off — the 100% proof</h2><span class="sub">Chelsea</span></div>
+    <p>Completeness only holds if you check it <em>both</em> directions. This is the step that makes it certain instead of "probably."</p>
+    <div class="grid2">
+      <div class="card"><h3>Folder → Atelier</h3><p class="muted">Every garment photo in every Drive folder maps to a confirmed live piece (or was resolved in Phase 2). Nothing in the folder is unaccounted for.</p></div>
+      <div class="card"><h3>Atelier → Folder</h3><p class="muted">Every live piece was checked off against a real folder photo. Any live piece <em>never</em> confirmed is a phantom or a dup — investigate it, don't leave it.</p></div>
+    </div>
+    <div class="callout" style="margin-top:16px"><span class="eyebrow">Sign-off</span><p style="margin:.35rem 0 0">Chelsea confirms both directions reconcile, per category. Only then is Danielle "verified complete." That's the moment we can answer any question she has with certainty.</p></div>
+  </section>
+
+  <!-- PHASE 5 -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">05</span><h2>Lock it so it never drifts again</h2><span class="sub">Karl/Claude · platform</span></div>
+    <ul class="plain">
+      <li><b>Delete provenance</b> (done) — every future hide now records who, when, and why. No more mystery-disappearances.</li>
+      <li><b>The count guarantee</b> (to build) — future digitization proves <em>photos in = items created = live images</em> for every batch, automatically. This is the piece that stops us ever being here again.</li>
+    </ul>
+  </section>
+
+  <!-- STANDARDS -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">—</span><h2>What "correct" means</h2><span class="sub">So everyone verifies the same way</span></div>
+    <div class="tscroll"><table>
+      <thead><tr><th>Field</th><th>Source of truth</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td><b>Brand</b></td><td>The tag photo</td><td>Legible tag → set it. Illegible/absent → <b>Unknown brand</b> (never guess).</td></tr>
+        <tr><td><b>Category</b></td><td>Danielle's taxonomy</td><td>The primary garment category, from the Phase 0 list.</td></tr>
+        <tr><td><b>Additional tags</b></td><td>The multi-tag rules</td><td>Every parent/collection it also belongs under (earring → also Jewelry).</td></tr>
+        <tr><td><b>Color</b></td><td>The garment photo</td><td>Primary color confirmed by eye; add secondary colors for prints/multi-color.</td></tr>
+        <tr><td><b>Title</b></td><td>The piece itself</td><td>Descriptive and clean — how Danielle would recognize it, no slug/filename junk.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- CLAUDE / TOOLING -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">—</span><h2>The tooling — it's the Collection page you already use</h2><span class="sub">Style → Categorize → Collection · live now</span></div>
+    <p class="muted" style="margin-top:-2px">No new screen to learn. The Collection page already has everything; we added one button.</p>
+    <div class="grid2">
+      <div class="card"><h3>Confirm on Google Drive <span style="color:var(--good)">✓ live</span></h3><p class="muted">A button on every piece. Click it once you've verified the piece against the folder — the card turns green and records who + when, so the sweep survives across people and sessions.</p></div>
+      <div class="card"><h3>Progress counter + filter <span style="color:var(--good)">✓ live</span></h3><p class="muted">"X of Y confirmed on Drive" for the current view, and an <b>Unconfirmed only</b> toggle so you always see exactly what's left.</p></div>
+      <div class="card"><h3>Edit everything in place <span style="color:var(--good)">✓ live</span></h3><p class="muted">Name, brand, category, <b>multiple categories</b> ("Also in"), color(s), internal notes — all from the same card, in the same pass as confirming.</p></div>
+      <div class="card"><h3>Missing lives in Drive, not the app</h3><p class="muted">A "Not Found on Atelier" subfolder is the whole flag-missing system — no button to learn. We re-digitize those folders in Phase 2.</p></div>
+    </div>
+  </section>
+
+  <!-- WHAT YOU'RE MISSING -->
+  <section class="block">
+    <div class="phase-head"><span class="pnum">—</span><h2>Watch-outs — the things that quietly break this</h2><span class="sub">Read before you start</span></div>
+    <div class="miss"><span class="num">1</span><div><b>Count garments, not photos.</b> ~2 photos per piece (garment + tag). Counting photos will make every folder look twice as big and manufacture fake "gaps."</div></div>
+    <div class="miss"><span class="num">2</span><div><b>Search ALL of Atelier before "Not Found."</b> A piece missing from the Belts view may be live under the wrong category, or its photo may be misfiled in the wrong Drive folder. "Not Found" means confirmed nowhere on Atelier — otherwise we re-digitize things that already exist and make duplicates.</div></div>
+    <div class="miss"><span class="num">3</span><div><b>Verify both directions.</b> Folder→Atelier is you clicking Confirm on each piece. Atelier→Folder is the counter hitting <b>Y of Y</b> — every live piece confirmed. If a piece can never be confirmed against a real folder photo, it's a phantom; investigate it.</div></div>
+    <div class="miss"><span class="num">4</span><div><b>Taxonomy + multi-tag rules first.</b> If they're not written down before the sweep, everyone tags differently and it gets re-done.</div></div>
+    <div class="miss"><span class="num">5</span><div><b>The 703 re-processed pieces.</b> Most kept their original filename and reconcile cleanly — but any piece we downloaded, remade in ChatGPT, and re-uploaded may have a new filename. Those need a human eye; don't assume the auto-match caught them.</div></div>
+    <div class="miss"><span class="num">6</span><div><b>The honest limit.</b> This guarantees everything we <em>photographed</em> is complete and correct. A piece Danielle owns that was never photographed can't be in the folder or the system — that's an inventory question for her, not a digitization gap. Name that boundary so "100%" means the same thing to everyone.</div></div>
+  </section>
+
+  <p class="foot">Draft v1 · built for Chelsea to own. Send edits and I'll fold them in, then wire the Review-page tooling to match the final process.</p>
+
+</div>
+</body>
+</html>

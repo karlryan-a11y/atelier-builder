@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { LookCanvasState, CanvasNode } from '@/types/canvas'
+import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas'
 import { createDefaultLookCanvas } from '@/types/canvas'
 
 const MAX_HISTORY = 50
@@ -38,10 +38,19 @@ interface CanvasStoreState {
   state: LookCanvasState
   selectedNodeIds: string[]
   imageUrls: Record<string, string>
+  // Natural pixel dimensions per node (reported by the canvas once each image loads). Used to
+  // flip a piece IN PLACE — transient, not persisted, not in undo history.
+  nodeDims: Record<string, { w: number; h: number }>
   past: LookCanvasState[]
   future: LookCanvasState[]
   currentLookId: string | null
   isDirty: boolean
+  // When a text node is added, we ask the canvas to open its inline editor immediately so the
+  // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
+  pendingEditTextId: string | null
+  // Remembers the last font + size the stylist used on a text node, so the NEXT text they add
+  // reuses it (fast when labelling many items). Transient, session-only.
+  lastTextStyle: { font_family: string; font_size: number } | null
 }
 
 // Export function registered by LookCanvas, called by ChatPanel
@@ -76,6 +85,7 @@ interface CanvasStoreActions {
   setCanvasState: (state: LookCanvasState) => void
   addNode: (node: CanvasNode, imageUrl?: string) => void
   updateNode: (id: string, updates: Partial<CanvasNode>) => void
+  updateNodes: (patches: { id: string; updates: Partial<CanvasNode> }[]) => void
   removeNode: (id: string) => void
   removeNodes: (ids: string[]) => void
   setSelectedNodeIds: (ids: string[]) => void
@@ -83,16 +93,22 @@ interface CanvasStoreActions {
   duplicateNodes: (ids: string[]) => void
   copyNodes: (ids: string[]) => void
   pasteNodes: () => void
-  moveLayer: (ids: string[], direction: 'up' | 'down') => void
+  moveLayer: (ids: string[], direction: 'up' | 'down' | 'top' | 'bottom') => void
+  setNodeImageUrl: (id: string, url: string) => void
+  setNodeDims: (id: string, w: number, h: number) => void
+  flipNodes: (ids: string[]) => void
   alignNodes: (ids: string[], edge: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
   distributeNodes: (ids: string[], axis: 'horizontal' | 'vertical') => void
   undo: () => void
   redo: () => void
   reset: () => void
   loadLook: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
+  loadLookAsNew: (state: LookCanvasState, imageUrls: Record<string, string>) => void
   markClean: () => void
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
+  requestTextEdit: (id: string | null) => void
+  rememberTextStyle: (style: { font_family: string; font_size: number }) => void
 }
 
 type CanvasStore = CanvasStoreState & CanvasStoreActions
@@ -107,10 +123,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   state: loadDraft() ?? createDefaultLookCanvas(),
   selectedNodeIds: [],
   imageUrls: loadImageUrls(),
+  nodeDims: {},
   past: [],
   future: [],
   currentLookId: null,
   isDirty: false,
+  pendingEditTextId: null,
+  lastTextStyle: null,
+
+  requestTextEdit: (id) => set({ pendingEditTextId: id }),
+  rememberTextStyle: (style) => set({ lastTextStyle: style }),
 
   setCanvasState: (newState) => {
     const { state: current, past } = get()
@@ -159,6 +181,64 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       state: updated,
       isDirty: true,
     })
+    saveDraft(updated)
+  },
+
+  // Patch several nodes in ONE history step (group move / group flip), so undo reverts
+  // the whole gesture at once instead of node-by-node.
+  updateNodes: (patches) => {
+    const { state: current, past } = get()
+    const m = new Map(patches.map((p) => [p.id, p.updates]))
+    const updated: LookCanvasState = {
+      ...current,
+      nodes: current.nodes.map((n) => (m.has(n.id) ? ({ ...n, ...m.get(n.id) } as CanvasNode) : n)),
+    }
+    set({ past: pushHistory(past, current), future: [], state: updated, isDirty: true })
+    saveDraft(updated)
+  },
+
+  // Swap the image a canvas node renders (e.g. after Remove BG returns a transparent URL).
+  // imageUrlMap is derived from imageUrls, so this triggers the image to reload in place.
+  setNodeImageUrl: (id, url) => {
+    const { imageUrls } = get()
+    const newUrls = { ...imageUrls, [id]: url }
+    set({ imageUrls: newUrls })
+    saveImageUrls(newUrls)
+  },
+
+  setNodeDims: (id, w, h) => {
+    const { nodeDims } = get()
+    const cur = nodeDims[id]
+    if (cur && cur.w === w && cur.h === h) return
+    set({ nodeDims: { ...nodeDims, [id]: { w, h } } })
+  },
+
+  // Flip selected closet items horizontally IN PLACE — mirror without moving. A negative
+  // scaleX mirrors around the node's corner (shifting it by its width), so we compensate the
+  // x/y by the rendered width along the item's rotation, keeping the visual position fixed.
+  flipNodes: (ids) => {
+    const { state: current, past, nodeDims } = get()
+    const idSet = new Set(ids)
+    let touched = false
+    const nodes = current.nodes.map((n) => {
+      if (n.type !== 'closet_item' || !idSet.has(n.id)) return n
+      touched = true
+      const cn = n as ClosetItemNode
+      const dim = nodeDims[n.id]
+      let dx = 0, dy = 0
+      if (dim && dim.h > 0) {
+        const effScale = cn.target_height ? Math.min(Math.max(cn.target_height / dim.h, 0.03), 3.0) : cn.scale
+        const w = dim.w * effScale // rendered width
+        const rad = ((cn.rotation || 0) * Math.PI) / 180
+        const sign = cn.flipped ? -1 : 1
+        dx = sign * w * Math.cos(rad)
+        dy = sign * w * Math.sin(rad)
+      }
+      return { ...cn, flipped: !cn.flipped, x: cn.x + dx, y: cn.y + dy } as CanvasNode
+    })
+    if (!touched) return
+    const updated = { ...current, nodes }
+    set({ past: pushHistory(past, current), future: [], state: updated, isDirty: true })
     saveDraft(updated)
   },
 
@@ -285,7 +365,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const sorted = [...current.nodes].sort((a, b) => a.z_index - b.z_index)
     const idSet = new Set(ids)
 
-    if (direction === 'up') {
+    let ordered = sorted
+    if (direction === 'top' || direction === 'bottom') {
+      // To front / to back: move every selected node all the way, keeping their relative order.
+      const sel = sorted.filter((n) => idSet.has(n.id))
+      const rest = sorted.filter((n) => !idSet.has(n.id))
+      ordered = direction === 'top' ? [...rest, ...sel] : [...sel, ...rest]
+    } else if (direction === 'up') {
       for (let i = sorted.length - 2; i >= 0; i--) {
         if (idSet.has(sorted[i].id) && !idSet.has(sorted[i + 1].id)) {
           [sorted[i], sorted[i + 1]] = [sorted[i + 1], sorted[i]]
@@ -299,7 +385,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       }
     }
 
-    const reindexed = sorted.map((n, i) => ({ ...n, z_index: i }) as CanvasNode)
+    const reindexed = ordered.map((n, i) => ({ ...n, z_index: i }) as CanvasNode)
     const updated = { ...current, nodes: reindexed }
     set({
       past: pushHistory(past, current),
@@ -409,6 +495,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: id,
       isDirty: false,
+    })
+    saveDraft(lookState)
+    saveImageUrls(lookImageUrls)
+  },
+
+  // Duplicate: load an existing look's canvas onto the board but as a brand-new, unsaved
+  // look (no currentLookId → Save creates a fresh row; isDirty so it prompts before discard).
+  loadLookAsNew: (lookState, lookImageUrls) => {
+    set({
+      state: lookState,
+      selectedNodeIds: [],
+      imageUrls: lookImageUrls,
+      past: [],
+      future: [],
+      currentLookId: null,
+      isDirty: true,
     })
     saveDraft(lookState)
     saveImageUrls(lookImageUrls)

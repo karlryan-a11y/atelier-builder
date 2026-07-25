@@ -181,7 +181,7 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
             <MetadataField label="Brand" value={brand} editing={editing} onChange={setBrand} />
             <MetadataField label="Item Name" value={name} editing={editing} onChange={setName} />
             <MetadataField label="Color" value={color} editing={editing} onChange={setColor} />
-            <MetadataField label="Category" value={category} editing={editing} onChange={setCategory} options={CATEGORIES} />
+            <MetadataField label="Category" value={category} editing={editing} onChange={setCategory} options={CATEGORIES} allowNew />
             <MetadataField label="Material" value={material} editing={editing} onChange={setMaterial} />
           </div>
 
@@ -277,26 +277,39 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
 }
 
 function MetadataField({
-  label, value, editing, onChange, options,
+  label, value, editing, onChange, options, allowNew,
 }: {
   label: string
   value: string
   editing: boolean
   onChange: (v: string) => void
   options?: string[]
+  allowNew?: boolean
 }) {
+  // Show a custom value (one a stylist typed in, not in the preset list) as a selected option
+  // so it doesn't silently fall back to "—".
+  const opts = options ? (value && !options.includes(value) ? [value, ...options] : options) : undefined
   return (
     <div>
       <label className="block text-[10px] tracking-[0.15em] uppercase text-[#888] mb-1">{label}</label>
       {editing ? (
-        options ? (
+        opts ? (
           <select
             value={value}
-            onChange={e => onChange(e.target.value)}
+            onChange={e => {
+              const v = e.target.value
+              if (v === '__new__') {
+                const n = window.prompt(`New ${label.toLowerCase()} (e.g. Loungewear):`)
+                if (n && n.trim()) onChange(n.trim())
+                return // don't set the value to the sentinel
+              }
+              onChange(v)
+            }}
             className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] bg-white"
           >
             <option value="">—</option>
-            {options.map(o => <option key={o} value={o}>{o}</option>)}
+            {opts.map(o => <option key={o} value={o}>{o}</option>)}
+            {allowNew && <option value="__new__">＋ New category…</option>}
           </select>
         ) : (
           <input
