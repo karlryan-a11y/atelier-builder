@@ -1,0 +1,25 @@
+# Fly.io app for the always-on renderer box. Deploy: `fly launch` (first time) then `fly deploy`.
+# Set secrets with: fly secrets set SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=...
+app = "atelier-renderer"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  ATELIER_RENDER_URL = "https://atelier-builder.vercel.app/render.html"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep one machine warm — a cold Chromium start adds seconds to the first hero refresh.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  # Chromium wants headroom; 1GB is comfortable for baking a few boards at a time.
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

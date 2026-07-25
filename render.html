@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atelier Renderer</title>
+    <!-- Same fonts as the builder so composed brand labels bake identically. Amalfi Coast is
+         preloaded; the @font-face rules themselves come from index.css (imported by renderMain). -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/AmalfiCoast.woff2" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display+SC:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <style>
+      html, body { margin: 0; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <!-- No visible UI — the headless renderer box drives window.__atelierRender() offscreen. -->
+    <script type="module" src="/src/render/renderMain.ts"></script>
+  </body>
+</html>
