@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
@@ -13,32 +13,60 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  // Distinguishes the user clicking Sign Out from the adopted session being revoked under us
+  // (refresh-token rotation) — only the former may land on the login page without a re-adopt try.
+  const explicitSignOutRef = useRef(false)
 
   useEffect(() => {
     let active = true
+    // The async IIFE below owns the ENTIRE initial determination — including refreshing a stale
+    // local session and adopting the dashboard's. Until it finishes, ALL auth events are ignored,
+    // not just INITIAL_SESSION: when the stored refresh token is dead (the dashboard rotates the
+    // shared token family on every refresh), getSession()'s failed refresh emits a mid-boot
+    // SIGNED_OUT that used to slip past the INITIAL_SESSION guard, set loading=false, and flash
+    // the login page for the ~2s the adoption still needed.
+    let bootDone = false
     ;(async () => {
       let { data: { session } } = await supabase.auth.getSession()
       // No local session? Adopt the dashboard's login via the shared same-origin endpoint so an
       // admin/stylist who already signed in to the dashboard isn't forced to log in again here.
       if (!session) session = await adoptDashboardSession()
       if (!active) return
+      bootDone = true
       setSession(session)
       if (session?.user) fetchUserProfile(session.user)
       else setLoading(false)
     })()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // The async IIFE above owns the INITIAL determination — including adopting the
-      // dashboard's session. Ignore the initial event here, or its null session sets
-      // loading=false before the adopt finishes and flashes the login page.
-      if (event === 'INITIAL_SESSION') return
-      setSession(session)
+      if (!bootDone) return
       if (session?.user) {
+        explicitSignOutRef.current = false
+        setSession(session)
         fetchUserProfile(session.user)
-      } else {
+        return
+      }
+      if (event !== 'SIGNED_OUT') return
+      // An explicit sign-out is final. Anything else reaching here is the adopted session being
+      // revoked out from under an open tab (refresh-token rotation by the dashboard): re-adopt
+      // silently, keeping the current UI up — never drop a working stylist to the login page.
+      if (explicitSignOutRef.current) {
+        setSession(null)
         setUser(null)
         setLoading(false)
+        return
       }
+      ;(async () => {
+        const readopted = await adoptDashboardSession()
+        if (!active) return
+        setSession(readopted)
+        if (readopted?.user) {
+          fetchUserProfile(readopted.user)
+        } else {
+          setUser(null)
+          setLoading(false)
+        }
+      })()
     })
 
     return () => { active = false; subscription.unsubscribe() }
@@ -97,6 +125,7 @@ export function useAuth() {
   }
 
   async function signOut() {
+    explicitSignOutRef.current = true
     await supabase.auth.signOut()
     setUser(null)
     setSession(null)
