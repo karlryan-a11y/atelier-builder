@@ -654,6 +654,15 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
   const [submitting, setSubmitting] = useState(false)
   const [actionResult, setActionResult] = useState<'approved' | 'rejected' | null>(null)
 
+  // Pieces a CLIENT digitized herself carry the designer/name/category SHE typed at upload
+  // (lookbook api/intake/confirm.ts). Show them verbatim next to the item so the stylist reviews
+  // HER piece — and so a disagreement with the pipeline's own extraction is visible, not silent.
+  // The designer is the one field the photo can't give back once the tag is off.
+  const meta = (item.extracted_metadata ?? {}) as Record<string, unknown>
+  const clientSupplied = meta.client_upload
+    ? (meta.client_supplied as { name?: string; brand?: string; category?: string; color?: string } | undefined)
+    : undefined
+
   const handleRestyle = async () => {
     // Uses the SAME updated engine as the bulk "Re-run with Gemini" (intake-rerun-item):
     // Gemini-only, failure-routed, tuned prompt, self-contained (lands pending_review, no dead-cron
@@ -737,6 +746,35 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
       alert(err instanceof Error ? err.message : 'Failed to get info')
     } finally {
       setGettingInfo(false)
+    }
+  }
+
+  // "Download photo" — the third option on a client's upload: neither approve nor re-run, but take
+  // the image away, finish it by hand in ChatGPT, and bring it back via Collection → ＋ Add Item.
+  // The Rejected tab has had a bulk zip for this (intake-export-rejected) but Needs Review had no
+  // way out at all, so a single item that only needed a touch-up had to be rejected first.
+  const [downloading, setDownloading] = useState(false)
+  const handleDownload = async () => {
+    const key = currentAiKey ?? item.garment_photo?.r2_key
+    if (!key) { alert('No photo to download.'); return }
+    setDownloading(true)
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`)
+      if (!resp.ok) throw new Error('Could not fetch the photo')
+      const blob = await resp.blob()
+      const stem = (item.extracted_name || item.extracted_brand || 'item')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'item'
+      const ext = blob.type.includes('png') ? 'png' : 'jpg'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${stem}-${item.id.slice(0, 8)}.${ext}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Download failed')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -989,10 +1027,24 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
                 <input type="checkbox" checked={!!selected} onChange={onToggle} className="mt-1.5 h-4 w-4 rounded-sm border-[#ccc] accent-[#1A1A1A] cursor-pointer shrink-0" aria-label="Select item" />
               )}
               <div>
-                <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[10px] tracking-[0.2em] uppercase text-blush">{item.client_name}</p>
+                  {clientSupplied && (
+                    <span className="text-[9px] tracking-[0.15em] uppercase bg-blush text-[#1A1A1A] px-1.5 py-0.5 rounded-sm">
+                      Uploaded by client
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-lg font-serif text-[#1A1A1A] mt-0.5 leading-tight">
                   {editing ? name || 'Untitled Item' : item.extracted_name || 'Untitled Item'}
                 </h3>
+                {clientSupplied && (
+                  <p className="text-[10px] text-[#888] mt-1">
+                    She entered:{' '}
+                    {[clientSupplied.brand, clientSupplied.name, clientSupplied.category ? labelForCategory(clientSupplied.category) : '']
+                      .filter(Boolean).join(' · ')}
+                  </p>
+                )}
               </div>
             </div>
             {(item.status === 'pending_review' || item.status === 'qc_passed') && !editing && (
@@ -1180,6 +1232,15 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
               >
                 <RefreshCw className="h-4 w-4" />
                 Send back to fix
+              </button>
+              <button
+                onClick={handleDownload}
+                disabled={submitting || downloading}
+                title="Download this photo to finish it by hand in ChatGPT, then bring it back via Collection → ＋ Add Item"
+                className="flex items-center justify-center gap-1.5 px-4 py-3 border border-[#E8E4DF] text-[#888] text-[11px] tracking-[0.2em] uppercase rounded-sm hover:border-[#185FA5] hover:text-[#185FA5] transition-colors disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {downloading ? 'Preparing…' : 'Download'}
               </button>
               <button
                 onClick={() => handleRejectFinal(false)}
