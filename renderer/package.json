@@ -1,0 +1,26 @@
+{
+  "name": "atelier-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Always-on headless-browser box that re-bakes look & capsule hero composites when a stylist swaps an item photo.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json && node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "express": "^4.21.2",
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.7.2"
+  }
+}
