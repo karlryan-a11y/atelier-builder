@@ -5,6 +5,11 @@ interface SaveAsCapsuleDialogProps {
   /** Number of closet items currently on the board (shown to the stylist). */
   itemCount: number
   saving: boolean
+  /** True when this board was loaded from an existing capsule (Categorize → Capsules → Edit) —
+   *  saving will UPDATE that capsule instead of creating a new one. Changes header/button copy. */
+  isEditing?: boolean
+  initialName?: string
+  initialDescription?: string
   onSave: (data: { name: string; description: string }) => void
   onClose: () => void
 }
@@ -15,9 +20,9 @@ interface SaveAsCapsuleDialogProps {
  * several already-saved looks into a grid), this captures the board itself as the
  * capsule image + its closet items as the packing list. No look selection.
  */
-export function SaveAsCapsuleDialog({ itemCount, saving, onSave, onClose }: SaveAsCapsuleDialogProps) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName = '', initialDescription = '', onSave, onClose }: SaveAsCapsuleDialogProps) {
+  const [name, setName] = useState(initialName)
+  const [description, setDescription] = useState(initialDescription)
 
   const handleSave = useCallback(() => {
     if (!name.trim()) return
@@ -31,7 +36,7 @@ export function SaveAsCapsuleDialog({ itemCount, saving, onSave, onClose }: Save
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E8E4DF]">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-blush" />
-            <h2 className="text-sm font-medium tracking-[0.1em] uppercase text-[#1A1A1A]">Save as Capsule</h2>
+            <h2 className="text-sm font-medium tracking-[0.1em] uppercase text-[#1A1A1A]">{isEditing ? 'Edit Capsule' : 'Save as Capsule'}</h2>
           </div>
           <button onClick={onClose} className="text-[#888] hover:text-[#1A1A1A]">
             <X className="h-4 w-4" />
@@ -41,9 +46,15 @@ export function SaveAsCapsuleDialog({ itemCount, saving, onSave, onClose }: Save
         {/* Form */}
         <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
           <p className="text-[12px] leading-relaxed text-[#6b6b6b]">
-            Saves this board exactly as arranged as a capsule
-            {itemCount > 0 ? <> — {itemCount} {itemCount === 1 ? 'piece' : 'pieces'} become the packing list.</> : '.'}{' '}
-            It lands as a <span className="text-[#1A1A1A]">Draft</span>; publish it from Categorize → Capsules to show it on the client's lookbook.
+            {isEditing ? (
+              <>Updates this capsule to match the board exactly as arranged
+              {itemCount > 0 ? <> — {itemCount} {itemCount === 1 ? 'piece' : 'pieces'} become the new packing list.</> : '.'}{' '}
+              Its publish status on the client's lookbook is unchanged.</>
+            ) : (
+              <>Saves this board exactly as arranged as a capsule
+              {itemCount > 0 ? <> — {itemCount} {itemCount === 1 ? 'piece' : 'pieces'} become the packing list.</> : '.'}{' '}
+              It lands as a <span className="text-[#1A1A1A]">Draft</span>; publish it from Categorize → Capsules to show it on the client's lookbook.</>
+            )}
           </p>
 
           <div>
@@ -82,12 +93,12 @@ export function SaveAsCapsuleDialog({ itemCount, saving, onSave, onClose }: Save
             {saving ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Saving...
+                {isEditing ? 'Updating...' : 'Saving...'}
               </>
             ) : (
               <>
                 <Package className="h-3.5 w-3.5" />
-                Save as Capsule
+                {isEditing ? 'Update Capsule' : 'Save as Capsule'}
               </>
             )}
           </button>
