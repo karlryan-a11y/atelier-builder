@@ -7,6 +7,15 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
     assetsDir: '_builder',  // unique prefix — avoids conflicts with dashboard's /assets/
+    rollupOptions: {
+      input: {
+        // The stylist app.
+        main: path.resolve(__dirname, 'index.html'),
+        // The invisible render page the headless renderer box loads to bake look / capsule
+        // heroes (see renderer/). Served at /render.html on the same origin.
+        render: path.resolve(__dirname, 'render.html'),
+      },
+    },
   },
   resolve: {
     alias: {

@@ -6,6 +6,7 @@ import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@
 import { categoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
+import { requestHeroRefresh } from '@/lib/renderer'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
@@ -285,6 +286,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
       })
       const d = await resp.json().catch(() => ({}))
       if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      // Photo changed → re-bake every look / capsule hero this item is styled into.
+      void requestHeroRefresh(editing.id)
       setEditing(null)
       refetch()
     } catch {
@@ -307,6 +310,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
     let ok = 0, fail = 0, done = 0
+    const okIds: string[] = []
     const run = async (item: ClosetItem) => {
       try {
         const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
@@ -315,7 +319,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
           body: JSON.stringify({ item_id: item.id, image_url: resolveItemImage(item) }),
         })
         const d = await resp.json().catch(() => ({}))
-        if (resp.ok && d?.ok) ok++; else fail++
+        if (resp.ok && d?.ok) { ok++; okIds.push(item.id) } else fail++
       } catch { fail++ }
       finally { done++; setBgProgress({ done, total: items.length }) }
     }
@@ -324,6 +328,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
     await Promise.all(Array.from({ length: Math.min(CONC, items.length) }, async () => {
       while (idx < items.length) { const i = idx++; await run(items[i]) }
     }))
+    // Photos changed → re-bake every look / capsule hero that styles a processed item.
+    void requestHeroRefresh(okIds)
     setBgBusy(false); setBgProgress({ done: 0, total: 0 })
     setSelected(new Set())
     refetch()
@@ -347,6 +353,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
       })
       const d = await resp.json().catch(() => ({}))
       if (!resp.ok || !d?.ok) { alert(d?.error || 'Could not replace the photo.'); return }
+      // Photo changed → re-bake every look / capsule hero this item is styled into.
+      void requestHeroRefresh(editing.id)
       setEditing(null)
       refetch()
     } catch {
@@ -395,6 +403,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
       })
       const d = await up.json().catch(() => ({}))
       if (!up.ok || !d?.ok) { alert(d?.error || 'Could not rotate the photo.'); return }
+      // Photo changed → re-bake every look / capsule hero this item is styled into.
+      void requestHeroRefresh(editing.id)
       setEditing(null)
       refetch()
     } catch {
