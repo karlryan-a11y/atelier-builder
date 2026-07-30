@@ -44,6 +44,11 @@ interface CanvasStoreState {
   past: LookCanvasState[]
   future: LookCanvasState[]
   currentLookId: string | null
+  // Set when a saved capsule (gp_boards row with raw.canvas_state) is loaded onto the canvas
+  // for editing via Categorize → Capsules → Edit. Mutually exclusive with currentLookId — loading
+  // a look, duplicating, or starting a new look all clear this. Lets ChatPanel's "Save as Capsule"
+  // flow know to UPDATE this same gp_boards row instead of inserting a new capsule.
+  currentCapsuleId: string | null
   isDirty: boolean
   // When a text node is added, we ask the canvas to open its inline editor immediately so the
   // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
@@ -104,6 +109,8 @@ interface CanvasStoreActions {
   reset: () => void
   loadLook: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
   loadLookAsNew: (state: LookCanvasState, imageUrls: Record<string, string>) => void
+  // Load a saved capsule's canvas_state back onto the board for editing (see currentCapsuleId).
+  loadCapsule: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
   markClean: () => void
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
@@ -127,6 +134,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   past: [],
   future: [],
   currentLookId: null,
+  currentCapsuleId: null,
   isDirty: false,
   pendingEditTextId: null,
   lastTextStyle: null,
@@ -480,6 +488,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       past: [],
       future: [],
       currentLookId: null,
+      currentCapsuleId: null,
       isDirty: false,
     })
     saveDraft(fresh)
@@ -494,6 +503,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       past: [],
       future: [],
       currentLookId: id,
+      currentCapsuleId: null,
       isDirty: false,
     })
     saveDraft(lookState)
@@ -510,10 +520,28 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       past: [],
       future: [],
       currentLookId: null,
+      currentCapsuleId: null,
       isDirty: true,
     })
     saveDraft(lookState)
     saveImageUrls(lookImageUrls)
+  },
+
+  // Load a saved capsule (gp_boards row) back onto the board for editing. Mirrors loadLook,
+  // but tracks currentCapsuleId instead so the save flow updates gp_boards, not gp_looks.
+  loadCapsule: (id, capsuleState, capsuleImageUrls) => {
+    set({
+      state: capsuleState,
+      selectedNodeIds: [],
+      imageUrls: capsuleImageUrls,
+      past: [],
+      future: [],
+      currentLookId: null,
+      currentCapsuleId: id,
+      isDirty: false,
+    })
+    saveDraft(capsuleState)
+    saveImageUrls(capsuleImageUrls)
   },
 
   markClean: () => set({ isDirty: false }),

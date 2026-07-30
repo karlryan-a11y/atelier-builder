@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { LookCanvasState } from '@/types/canvas'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -40,6 +41,11 @@ export interface TaggableCapsule {
   published: boolean
   archived: boolean
   sort_order: number | null
+  // Present only for capsules saved via the single-canvas "Save as Capsule" path
+  // (useCapsules.saveCapsule writes it to raw.canvas_state). Capsules built via
+  // "Capsule from Looks" (CreateCapsuleDialog) don't have one — those can't be
+  // re-opened in the canvas, so the Edit action is hidden when this is null.
+  canvasState: LookCanvasState | null
 }
 
 const slugify = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -114,6 +120,7 @@ export function useLookCategories(clientId: string | null) {
       published: !!b.published,
       archived: !!b.is_deleted,
       sort_order: b.sort_order ?? null,
+      canvasState: (b.raw?.canvas_state as LookCanvasState | undefined) ?? null,
     })))
     setLoading(false)
   }, [clientId])

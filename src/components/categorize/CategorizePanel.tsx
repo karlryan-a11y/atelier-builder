@@ -5,6 +5,9 @@ import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/ho
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { useViewStore } from '@/stores/viewStore'
+import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
 import { ReviewTab } from './ReviewTab'
@@ -66,6 +69,25 @@ export function CategorizePanel() {
       setChatStatus(res.ok ? 'Shared to chat ✓' : `Share failed: ${data.error || res.status}`)
     } catch {
       setChatStatus('Share failed')
+    }
+  }
+
+  // Edit a capsule: load its saved canvas_state back onto the board and switch to the Canvas
+  // tab. Only capsules saved via the single-canvas "Save as Capsule" path have canvas_state
+  // (see TaggableCapsule.canvasState) — capsules built via "Capsule from Looks" don't, and the
+  // button is disabled for those rather than opening a broken/empty canvas.
+  const setStyleTab = useViewStore((s) => s.setStyleTab)
+  const [editingCapsuleId, setEditingCapsuleId] = useState<string | null>(null)
+  async function handleEditCapsule(capsule: TaggableCapsule) {
+    if (!capsule.canvasState) return
+    if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and load this capsule for editing?')) return
+    setEditingCapsuleId(capsule.id)
+    try {
+      const imageUrls = await resolveClosetImageUrls(capsule.canvasState)
+      useCanvasStore.getState().loadCapsule(capsule.id, capsule.canvasState, imageUrls)
+      setStyleTab('canvas')
+    } finally {
+      setEditingCapsuleId(null)
     }
   }
 
@@ -476,6 +498,21 @@ export function CategorizePanel() {
                           >
                             {item.published ? 'Remove from lookbook' : <><Send className="w-3 h-3" /> Add to lookbook</>}
                           </button>
+                          {mode === 'capsules' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEditCapsule(item as TaggableCapsule) }}
+                              disabled={!(item as TaggableCapsule).canvasState || editingCapsuleId === item.id}
+                              title={
+                                (item as TaggableCapsule).canvasState
+                                  ? 'Open this capsule on the canvas to edit it'
+                                  : "This capsule was built with \"Capsule from Looks\" and can't be reopened in the canvas — edit the underlying looks instead"
+                              }
+                              className="mt-1 w-full flex items-center justify-center gap-1 py-1.5 text-[10px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              {editingCapsuleId === item.id ? 'Opening…' : 'Edit'}
+                            </button>
+                          )}
                           <button
                             onClick={(e) => { e.stopPropagation(); shareToChat(item.id) }}
                             className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"

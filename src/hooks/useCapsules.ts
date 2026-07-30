@@ -51,6 +51,10 @@ export function useCapsules(clientId: string | null) {
   }, [fetchCapsules])
 
   const saveCapsule = useCallback(async (opts: {
+    /** Pass the existing capsule's id to UPDATE that gp_boards row instead of inserting a new
+     *  one — used when re-saving a capsule opened via Categorize → Capsules → Edit, so editing
+     *  Julia's capsule updates it in place rather than creating a duplicate. */
+    id?: string
     clientId: string
     name: string
     description?: string
@@ -58,8 +62,12 @@ export function useCapsules(clientId: string | null) {
     closetItemIds: string[]
     imageBase64?: string  // PNG base64 for the capsule hero
     canvasState?: any     // full canvas state — set for board-composed capsules so they can be re-opened/edited later
+    /** The capsule's previous `raw` blob (when editing) — merged in underneath the fields below
+     *  so an update doesn't wipe out unrelated raw keys if, say, the image upload fails this time. */
+    existingRaw?: Record<string, unknown>
   }) => {
-    const id = generateBoardId()
+    const isNew = !opts.id
+    const id = opts.id || generateBoardId()
 
     // Upload capsule composite image to R2
     let imageR2Key: string | null = null
@@ -83,16 +91,13 @@ export function useCapsules(clientId: string | null) {
       }
     }
 
-    const row = {
-      id,
+    const row: Record<string, unknown> = {
       client_id: opts.clientId,
       name: opts.name,
       description: opts.description ?? '',
       closet_item_ids: opts.closetItemIds,
-      is_deleted: false,
-      is_owned: true,
-      sort_order: 0,
       raw: {
+        ...(opts.existingRaw ?? {}),
         source: 'builder',
         look_ids: opts.lookIds,
         ...(opts.canvasState ? { canvas_state: opts.canvasState } : {}),
@@ -103,11 +108,16 @@ export function useCapsules(clientId: string | null) {
       },
     }
 
-    const { data, error } = await supabase
-      .from('gp_boards')
-      .insert(row)
-      .select()
-      .single()
+    if (isNew) {
+      row.id = id
+      row.is_deleted = false
+      row.is_owned = true
+      row.sort_order = 0
+    }
+
+    const { data, error } = isNew
+      ? await supabase.from('gp_boards').insert(row).select().single()
+      : await supabase.from('gp_boards').update(row).eq('id', id).select().single()
 
     if (error) {
       console.error('Save capsule error:', error)
