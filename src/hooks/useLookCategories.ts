@@ -32,6 +32,10 @@ export interface TaggableLook {
   published: boolean
   archived: boolean
   sort_order: number | null
+  // 'builder' looks carry a canvas_state and can be reopened for editing; 'goodpix' looks
+  // are a flat scraped image + closet_item_ids and can only be REBUILT onto the canvas.
+  source: string
+  closetItemIds: string[]
 }
 export interface TaggableCapsule {
   id: string
@@ -65,7 +69,7 @@ export function useLookCategories(clientId: string | null) {
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
-        .select('id, name, thumbnail_url, raw, published, archived, sort_order')
+        .select('id, name, thumbnail_url, raw, published, archived, sort_order, source, closet_item_ids')
         .eq('client_id', clientId)
         // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
         .is('transitioned_at', null)
@@ -111,6 +115,8 @@ export function useLookCategories(clientId: string | null) {
       published: !!l.published,
       archived: !!l.archived,
       sort_order: l.sort_order ?? null,
+      source: l.source ?? 'goodpix',
+      closetItemIds: (l.closet_item_ids as string[] | null) ?? [],
     })))
     setCapsules((capsRes.data ?? []).map((b: any) => ({
       id: b.id,
@@ -245,6 +251,16 @@ export function useLookCategories(clientId: string | null) {
     if (error) { console.error('restoreCapsule:', error.message); await fetchAll() }
   }, [fetchAll])
 
+  // Rename a look (any source — the client lookbook renders gp_looks.name directly, so the
+  // new name shows everywhere immediately). Optimistic, like the other mutators here.
+  const renameLook = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, name: trimmed } : l)))
+    const { error } = await supabase.from('gp_looks').update({ name: trimmed }).eq('id', id)
+    if (error) { console.error('renameLook:', error.message); await fetchAll() }
+  }, [fetchAll])
+
   return {
     loading, categories, looks, capsules, draftCount,
     createCategory, renameCategory,
@@ -253,6 +269,7 @@ export function useLookCategories(clientId: string | null) {
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules,
+    renameLook,
     refetch: fetchAll,
   }
 }

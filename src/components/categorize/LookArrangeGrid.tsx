@@ -39,11 +39,14 @@ interface Props {
   activeBrushId?: string | null
   selected?: Set<string>
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
+  /** Extra per-card action buttons rendered under "Remove from lookbook" (e.g. the looks
+   *  mode's Edit / Rebuild-in-canvas / Rename). Buttons should stopPropagation themselves. */
+  renderActions?: (item: ArrangeItem) => React.ReactNode
 }
 
 export function LookArrangeGrid({
   items, labelOf, onReorder, onRemove, onArchive, galleryName = 'Looks gallery',
-  activeBrushId = null, selected, onCardClick,
+  activeBrushId = null, selected, onCardClick, renderActions,
 }: Props) {
   // Local order for snappy arrow/drag feedback; resynced whenever the published
   // set changes identity (add/remove/refetch).
@@ -103,6 +106,7 @@ export function LookArrangeGrid({
                 isSelected={selected?.has(item.id) ?? false}
                 hasBrush={!!activeBrushId && item.categoryIds.includes(activeBrushId)}
                 onCardClick={onCardClick}
+                renderActions={renderActions}
               />
             ))}
           </div>
@@ -123,9 +127,10 @@ interface CardProps {
   isSelected: boolean
   hasBrush: boolean
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
+  renderActions?: (item: ArrangeItem) => React.ReactNode
 }
 
-function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick }: CardProps) {
+function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, renderActions }: CardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: look.id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -231,6 +236,7 @@ function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive,
         >
           Remove from lookbook
         </button>
+        {renderActions?.(look)}
       </div>
     </div>
   )

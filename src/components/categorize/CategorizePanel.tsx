@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
+import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
+import type { LookCanvasState } from '@/types/canvas'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
 import { ReviewTab } from './ReviewTab'
@@ -29,6 +31,7 @@ export function CategorizePanel() {
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules,
+    renameLook,
   } = useLookCategories(activeClient?.id ?? null)
 
   // Transitioned pieces + looks for this client. Instantiated at the panel so the pink tab badge
@@ -91,6 +94,50 @@ export function CategorizePanel() {
     }
   }
 
+  // ── Looks: open on canvas (Edit for builder looks, Rebuild for GoodPix looks) + rename ──
+  const [openingLookId, setOpeningLookId] = useState<string | null>(null)
+
+  // Builder look: fetch its canvas_state on demand (the list query stays light) and reopen it
+  // for editing — Save then updates the same gp_looks row, exactly like opening it from the
+  // canvas tab's look gallery.
+  async function handleEditLook(look: TaggableLook) {
+    if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and load this look for editing?')) return
+    setOpeningLookId(look.id)
+    try {
+      const { data } = await supabase.from('gp_looks').select('canvas_state').eq('id', look.id).single()
+      const canvasState = (data?.canvas_state ?? null) as LookCanvasState | null
+      if (!canvasState) { alert('This look has no saved canvas to edit.'); return }
+      const imageUrls = await resolveClosetImageUrls(canvasState)
+      useCanvasStore.getState().loadLook(look.id, canvasState, imageUrls)
+      setStyleTab('canvas')
+    } finally {
+      setOpeningLookId(null)
+    }
+  }
+
+  // GoodPix look: the scrape captured one flat image + the item list, never the collage layout,
+  // so the original can't be reopened as-is. Instead, lay its pieces out on the canvas as a NEW
+  // unsaved look — the stylist rearranges/swaps, saves under her own name, publishes, and
+  // archives the GoodPix original when she's happy. The original is never touched by this.
+  async function handleRebuildLook(look: TaggableLook) {
+    if (look.closetItemIds.length === 0) { alert('This look has no linked collection pieces to rebuild from.'); return }
+    if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and rebuild this look?')) return
+    setOpeningLookId(look.id)
+    try {
+      const canvasState = buildCanvasFromClosetItems(look.closetItemIds)
+      const imageUrls = await resolveClosetImageUrls(canvasState)
+      useCanvasStore.getState().loadLookAsNew(canvasState, imageUrls)
+      setStyleTab('canvas')
+    } finally {
+      setOpeningLookId(null)
+    }
+  }
+
+  function handleRenameLook(look: TaggableLook) {
+    const name = prompt('Rename look', look.name)
+    if (name !== null) renameLook(look.id, name)
+  }
+
   const activeBrush = brush ?? categories[0]?.id ?? null
   const labelOf = useMemo(() => {
     const m = new Map(categories.map((c) => [c.id, c.label]))
@@ -115,6 +162,29 @@ export function CategorizePanel() {
       return !i.published && !i.archived // queue
     }),
     [items, status],
+  )
+
+  // Per-card Edit/Rebuild + Rename actions for looks — shared between the queue grid and the
+  // "On lookbook" arrange grid so GoodPix looks are editable from wherever Paige finds them.
+  const lookCardActions = (look: TaggableLook) => (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (look.source === 'builder') { handleEditLook(look) } else { handleRebuildLook(look) } }}
+        disabled={openingLookId === look.id}
+        title={look.source === 'builder'
+          ? 'Open this look on the canvas to edit it'
+          : 'GoodPix look: lays its pieces out on the canvas as a NEW look to rearrange, swap, and save. The original stays on the lookbook until you archive it.'}
+        className="mt-1 w-full flex items-center justify-center gap-1 py-1.5 text-[10px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <Pencil className="w-3 h-3" />
+        {openingLookId === look.id ? 'Opening…' : look.source === 'builder' ? 'Edit' : 'Rebuild in canvas'}
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); handleRenameLook(look) }}
+        className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
+        title="Rename this look everywhere, including the client lookbook"
+      >Rename</button>
+    </>
   )
 
   const has = (item: { categoryIds: string[] }, catId: string) => item.categoryIds.includes(catId)
@@ -426,6 +496,7 @@ export function CategorizePanel() {
               galleryName={mode === 'looks' ? 'Looks gallery' : 'Capsules'}
               activeBrushId={activeBrush}
               selected={selected}
+              renderActions={mode === 'looks' ? (item) => lookCardActions(item as TaggableLook) : undefined}
               onCardClick={(item, shiftKey) => {
                 if (shiftKey) {
                   setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
@@ -498,6 +569,7 @@ export function CategorizePanel() {
                           >
                             {item.published ? 'Remove from lookbook' : <><Send className="w-3 h-3" /> Add to lookbook</>}
                           </button>
+                          {mode === 'looks' && lookCardActions(item as TaggableLook)}
                           {mode === 'capsules' && (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleEditCapsule(item as TaggableCapsule) }}
