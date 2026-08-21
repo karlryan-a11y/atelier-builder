@@ -12,14 +12,17 @@ import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
 import type { LookCanvasState } from '@/types/canvas'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
+import { ResidencesTab } from './ResidencesTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
+import { useResidenceReview } from '@/hooks/useResidenceReview'
+import { hasResidences } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
-type Mode = 'looks' | 'capsules' | 'collection' | 'audit' | 'review' | 'transitions'
+type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 export function CategorizePanel() {
@@ -38,6 +41,11 @@ export function CategorizePanel() {
   // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
   const transitions = useTransitions(activeClient?.id ?? null)
   const transitionCount = transitions.items.length + transitions.looks.length
+
+  // Residence review queue — only meaningful for clients with homes configured, so the
+  // tab itself is gated below on the taxonomy rather than shown empty to everyone.
+  const residenceReview = useResidenceReview(activeClient?.id ?? null)
+  const showResidences = hasResidences(categories)
 
   const [mode, setMode] = useState<Mode>('looks')
   const [brush, setBrush] = useState<string | null>(null)   // category ID
@@ -269,6 +277,23 @@ export function CategorizePanel() {
                 back — straight back to the lookbook.
               </p>
             </>
+          ) : mode === 'residences' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Residences</p>
+              <p className="text-[10px] text-[#888] leading-relaxed">
+                Looks that don't yet belong to one of her homes. Each one comes with a suggested
+                residence and the reason for it — accept it, pick a different home, or skip.
+              </p>
+              <p className="text-[10px] text-[#888] leading-relaxed mt-3">
+                Filing a look also files its pieces: the client's Collection reads residences from
+                the looks a piece appears in, so you never have to tag garments one by one.
+              </p>
+              {residenceReview.openCount > 0 && (
+                <p className="text-[10px] text-[#1A1A1A] leading-relaxed mt-3">
+                  {residenceReview.openCount} waiting · {residenceReview.byConfidence.high} confident
+                </p>
+              )}
+            </>
           ) : mode === 'review' ? (
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Review</p>
@@ -390,7 +415,7 @@ export function CategorizePanel() {
             </>
           )}
         </div>
-        {mode !== 'collection' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && (
+        {mode !== 'collection' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -412,7 +437,9 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'capsules', 'collection', 'audit', 'review', 'transitions'] as const).map((m) => (
+            {(['looks', 'residences', 'capsules', 'collection', 'audit', 'review', 'transitions'] as const)
+              .filter((m) => m !== 'residences' || showResidences)
+              .map((m) => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setSelected(new Set()) }}
@@ -421,6 +448,9 @@ export function CategorizePanel() {
                 {m}
                 {m === 'transitions' && transitionCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{transitionCount}</span>
+                )}
+                {m === 'residences' && residenceReview.openCount > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{residenceReview.openCount}</span>
                 )}
               </button>
             ))}
@@ -469,6 +499,17 @@ export function CategorizePanel() {
           <ErrorBoundary label="Transitions couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
               <TransitionsTab {...transitions} />
+            </div>
+          </ErrorBoundary>
+        ) : mode === 'residences' ? (
+          <ErrorBoundary label="Residences couldn't render">
+            <div className="flex-1 overflow-y-auto p-6">
+              <ResidencesTab
+                looks={looks}
+                categories={categories}
+                review={residenceReview}
+                assignLook={assignLook}
+              />
             </div>
           </ErrorBoundary>
         ) : (
