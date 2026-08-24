@@ -3,6 +3,7 @@ import { X, Save, Eraser, Upload, Archive, RotateCw, Plus, Star } from 'lucide-r
 import type { ClosetItem } from '@/lib/images'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
+import { isResidenceSlug } from '@/lib/residences'
 import { COLOR_ORDER, COLOR_SWATCH, MULTI_SWATCH, CUSTOM_SWATCH, colorsOf, normalizeColorName } from '@/lib/colorFamily'
 
 const LIGHT_COLORS = new Set(['White', 'Ivory', 'Blush', 'Light Blue', 'Yellow'])
@@ -102,7 +103,22 @@ export function EditItemDialog({ item, saving, customCategories = [], imageUrl, 
 
   function handleSave() {
     const trimmedName = name.trim()
-    const finalCategory = customMode ? slugifyCategory(customName) : category
+    let finalCategory = customMode ? slugifyCategory(customName) : category
+    let alsoInFinal = alsoIn
+    // A home is not a garment type. Typing one into Category replaces what the piece IS, so the
+    // coat stops being Outerwear everywhere — the mistake that cost 119 of Margaux Ellery's
+    // pieces their garment type. Move it to "Also in", where it is additive, and say so.
+    if (isResidenceSlug(finalCategory)) {
+      const label = labelForCategory(finalCategory)
+      alert(
+        `"${label}" is a home, not a garment type.\n\n` +
+        `Category replaces what this piece IS — it would drop out of Tops, Shoes and Outerwear.\n\n` +
+        `Adding it to ${label} under "Also in" instead, which keeps its garment type. ` +
+        `Set Category to what the piece actually is.`,
+      )
+      alsoInFinal = [...new Set([...alsoIn, finalCategory])]
+      finalCategory = ''
+    }
     onSave({
       // Only persist an override when it actually differs from the scraped name.
       name_override: trimmedName && trimmedName !== item.name ? trimmedName : null,
@@ -113,7 +129,7 @@ export function EditItemDialog({ item, saving, customCategories = [], imageUrl, 
       // Only the Collection tab manages "Also in"; when disabled, omit the key so other
       // consumers' saves never touch custom_categories.
       ...(enableMultiCategory
-        ? { custom_categories: alsoIn.filter((s) => s && s !== finalCategory) }
+        ? { custom_categories: alsoInFinal.filter((s) => s && s !== finalCategory) }
         : {}),
       // Only the Collection tab manages the color set; when disabled, omit the keys so other
       // consumers' saves never touch color_family / color_families.

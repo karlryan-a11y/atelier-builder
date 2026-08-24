@@ -4,6 +4,7 @@ import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
+import { isResidenceSlug } from '@/lib/residences'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
@@ -58,8 +59,25 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
   const toggleSelect = (id: string) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // Bulk-set the PRIMARY category on the selected items (chunked .in()). Same store the lookbook reads.
+  //
+  // "Set category" answers WHAT A PIECE IS, and a piece gets exactly one answer. Naming a
+  // RESIDENCE here overwrites the garment type, so the coat stops being Outerwear anywhere in
+  // the app. That is not a hypothetical: it happened to 119 of Margaux Ellery's pieces, and to 6
+  // more after those were repaired, because the two dropdowns sit side by side and nothing said
+  // which was which. A home is not a garment type, so we redirect it to "Also in" — where it is
+  // additive and destroys nothing — and say so rather than silently doing something else.
   async function bulkSetCategory(slug: string) {
     if (selected.size === 0) return
+    if (isResidenceSlug(slug)) {
+      const label = labelForCategory(slug)
+      alert(
+        `"${label}" is a home, not a garment type.\n\n` +
+        `"Set category" replaces what a piece IS — filing these under ${label} would take them ` +
+        `out of Tops, Shoes and Outerwear everywhere.\n\n` +
+        `Adding them to ${label} with "＋ Also add to…" instead, which keeps their garment type.`,
+      )
+      return bulkAddCategory(slug)
+    }
     setBulkBusy(true)
     const ids = [...selected]
     let ok = true
