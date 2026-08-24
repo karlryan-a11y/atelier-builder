@@ -3,7 +3,7 @@ import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, 
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
-import { categoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
+import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
@@ -98,11 +98,12 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
     if (ok) { setSelected(new Set()); refetch() } else alert('Some items could not be updated — try again.')
   }
 
-  const categoryByItem = useMemo(() => {
+  // Display only — the one-line label under a card. Filtering uses categoriesByItem below.
+  const primaryCategoryByItem = useMemo(() => {
     const m = new Map<string, string>()
     for (const i of items) {
       const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, categoryOf(i, tagNames))
+      m.set(i.id, primaryCategoryOf(i, tagNames))
     }
     return m
   }, [items, tagNameById])
@@ -579,7 +580,7 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
                     )
                   })()}
                   <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
-                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(categoryByItem.get(item.id) ?? 'other')}</p>
+                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(primaryCategoryByItem.get(item.id) ?? 'other')}</p>
                   {/* Level 1: badge when the CLIENT set one of these fields, so the stylist can tell
                       client edits from ours before touching them (migration 015). */}
                   {(item.client_edited_fields?.length ?? 0) > 0 && (() => {

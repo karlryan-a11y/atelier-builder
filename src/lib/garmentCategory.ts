@@ -19,8 +19,20 @@ export function labelForCategory(slug: string): string {
     ?? slug.replace(/(^|[\s-])(\w)/g, (_m, p: string, c: string) => p + c.toUpperCase())
 }
 
-/** Effective PRIMARY category for an item: stored override (fixed OR custom) wins; else resolve. */
-export function categoryOf(item: ClosetItem, tagNames: string[] = []): string {
+/**
+ * The item's PRIMARY category only: stored override (fixed OR custom) wins, else resolved from
+ * tags/name.
+ *
+ * Use this for DISPLAY (a card's one-line label, preselecting the edit dropdown). Do NOT use it
+ * to decide whether an item belongs to a category the user picked — an item can be in several
+ * (its garment type plus any "Also in" in custom_categories[]), and this returns only the first.
+ * For filtering and for counts, use `categoriesOf`.
+ *
+ * Named `primaryCategoryOf` deliberately: it was `categoryOf`, one letter from `categoriesOf`,
+ * and the canvas closet panel filtered on it for six weeks. Margaux's "New-York-City" read 50
+ * pieces in Collection and 4 on the canvas, because 46 carried it as an "Also in".
+ */
+export function primaryCategoryOf(item: ClosetItem, tagNames: string[] = []): string {
   const override = (item.category ?? '').trim().toLowerCase()
   if (override) return override
   return resolveCategory({ name: displayName(item), category: null }, tagNames)
@@ -33,7 +45,7 @@ export function categoryOf(item: ClosetItem, tagNames: string[] = []): string {
  */
 export function categoriesOf(item: ClosetItem, tagNames: string[] = []): string[] {
   const out: string[] = []
-  const primary = categoryOf(item, tagNames)
+  const primary = primaryCategoryOf(item, tagNames)
   if (primary) out.push(primary)
   for (const c of item.custom_categories ?? []) {
     const slug = slugifyCategory(String(c))
