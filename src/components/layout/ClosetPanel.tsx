@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
-import { categoryOf, labelForCategory, isFixedCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
+import { categoriesOf, labelForCategory, isFixedCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
@@ -236,25 +236,35 @@ export function ClosetPanel() {
     refetch()
   }
 
-  // Resolve every item to ONE garment category, using the same resolver AND tag source the lookbook
-  // uses: stylist override → content tag (from the item's content_tag_ids column) → name detection.
-  const categoryByItem = useMemo(() => {
-    const m = new Map<string, string>()
+  // EVERY category an item belongs to — its primary garment category AND any "Also in"
+  // groupings in custom_categories[] — resolved with the same helper and tag source the
+  // Collection tab and the client lookbook use.
+  //
+  // This used to keep only the PRIMARY category (categoryOf), which silently disagreed with
+  // the Collection tab: the category chips are built from custom_categories too, so a chip
+  // could exist here and match almost nothing. Margaux's "New-York-City" read 50 pieces in
+  // Collection and 4 on the canvas, because 46 of them carry it as an "Also in".
+  const categoriesByItem = useMemo(() => {
+    const m = new Map<string, string[]>()
     for (const i of items) {
       const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, categoryOf(i, tagNames))
+      m.set(i.id, categoriesOf(i, tagNames))
     }
     return m
   }, [items, tagNameById])
 
   const customCats = useMemo(() => customCategoriesFromItems(items), [items])
 
-  // How many of this client's items fall in each category — shown on the chip.
+  // How many of this client's items fall in each category — shown on the chip. An item in
+  // several categories counts toward each, so these can sum above the item total (same as the
+  // Collection tab and the lookbook's sidebar).
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const cat of categoryByItem.values()) counts.set(cat, (counts.get(cat) ?? 0) + 1)
+    for (const cats of categoriesByItem.values()) {
+      for (const cat of cats) counts.set(cat, (counts.get(cat) ?? 0) + 1)
+    }
     return counts
-  }, [categoryByItem])
+  }, [categoriesByItem])
 
   function toggleCategory(slug: string) {
     setActiveCategories((prev) => {
@@ -277,11 +287,11 @@ export function ClosetPanel() {
       )
     }
     if (activeCategories.size > 0) {
-      // Multi-select unions: show items in ANY selected garment category.
-      result = result.filter((i) => activeCategories.has(categoryByItem.get(i.id) ?? ''))
+      // Multi-select unions: show an item if ANY of its categories is selected.
+      result = result.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c)))
     }
     return result
-  }, [items, search, activeCategories, categoryByItem])
+  }, [items, search, activeCategories, categoriesByItem])
 
   function addItemToCanvas(itemId: string, imageUrl: string | null) {
     // Drop near the board center at a readable height (target_height) so it's easy to grab and
