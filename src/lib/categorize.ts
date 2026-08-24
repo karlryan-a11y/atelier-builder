@@ -129,7 +129,13 @@ const KEYWORD_PATTERNS: [RegExp, Category][] = [
   // "Denim Tote Bag" resolve to bags (not tops/jeans) and "Faux Fur Beanie" to a
   // hat (not outerwear). Dresses also runs early so "wrap dress" beats "wrap" scarf.
   [/\b(dress|gown|jumpsuit|romper|caftan|kaftan|shirtdress)\b/i, 'dresses'],
-  [/(boots|boot|bootie|booties|heel|heels|sneaker|sneakers|sandal|sandals|loafer|loafers|pump|pumps|flat|flats|mule|mules|slide|slides|espadrille|shoe|shoes|wedge|slingback|oxford|derby|kitten)/i, 'shoes'],
+  // Shoes. Every alternative is word-bounded and plural-tolerant, and this line is the reason why:
+  // it used to be a bare substring match, so "Bootcut Jeans" filed as shoes (168 of them across the
+  // roster), "rawedge" matched "wedge", and "AMULETTE" matched "mule". `[a-z]*boots?` still catches
+  // rainboot/tallboot compounds while excluding "bootcut" (there is no word break after "boot"), and
+  // `\d*` tolerates the trailing-digit names in the GoodPix data ("heels1", "sandals1").
+  // KEEP IN STEP WITH THE TWIN: atelier-builder and atelier-looks each carry their own copy.
+  [/\b([a-z]*boots?|booties?|[a-z]*heel(?:s|ed)?|sneakers?|sneakerinas?|sandals?|sanals?|loafers?|pumps?|flats?|mules?|slides?|espadrilles?|shoes?|wedges?|slingbacks?|oxfords?|derbys?|derbies|flip[- ]?flops?|kitten)\d*\b/i, 'shoes'],
   [/\b(bag|tote|clutch|purse|handbag|crossbody|cross-body|backpack|satchel|birkin|kelly|pochette|hobo|minaudiere|duffle|duffel|top handle)\b/i, 'bags'],
   [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|ring)\b/i, 'jewelry'],
   [/\b(belt)\b/i, 'belts'],

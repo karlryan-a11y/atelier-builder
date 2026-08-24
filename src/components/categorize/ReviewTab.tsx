@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useHiddenItems } from '@/hooks/useHiddenItems'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
-import { labelForCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
+import { labelForCategory, customCategoriesFromItems, primaryCategoryOf } from '@/lib/garmentCategory'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { ColorAuditPanel } from './ColorAuditPanel'
 
@@ -19,7 +19,7 @@ type Pill = 'hidden' | 'missing' | 'colors'
 export function ReviewTab({ clientId, clientName }: { clientId: string | null; clientName?: string }) {
   const [pill, setPill] = useState<Pill>('hidden')
   const hidden = useHiddenItems(clientId)
-  const { items: visible, refetch } = useClosetItems(clientId)
+  const { items: visible, tagNameById, refetch } = useClosetItems(clientId)
   const customCats = useMemo(() => customCategoriesFromItems(visible), [visible])
 
   const [restoring, setRestoring] = useState<string | null>(null)
@@ -30,9 +30,19 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
     () => visible.filter((i) => { const b = (i.brand ?? '').trim(); return !b || b === 'None' }),
     [visible],
   )
+  // "Missing category" means the piece will not RESOLVE to a garment category — not merely that
+  // nobody typed an override into gp_closet_items.category. An empty column is the normal state:
+  // most clients have zero overrides (Emily Reaser 1,058 of 1,058), because the category is worked
+  // out from the GoodPix content tags and the item name at render. Flagging the column made this
+  // list say "every piece needs attention" for most of the roster, which is why it went unread.
+  // Now it flags only the pieces that genuinely fall through to "Other" and so are unfindable by
+  // category on the client's lookbook.
   const noCategory = useMemo(
-    () => visible.filter((i) => !(i.category ?? '').trim()),
-    [visible],
+    () => visible.filter((i) => {
+      const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
+      return primaryCategoryOf(i, tagNames) === 'other'
+    }),
+    [visible, tagNameById],
   )
   const missing = useMemo(() => {
     const seen = new Set<string>(); const out: ClosetItem[] = []
