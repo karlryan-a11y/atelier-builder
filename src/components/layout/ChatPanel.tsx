@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
-import { useCanvasStore, exportCanvasImage } from '@/stores/canvasStore'
+import { useCanvasStore, exportCanvasImage, settleCanvasTransforms } from '@/stores/canvasStore'
 import { useClientStore } from '@/stores/clientStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useLooks } from '@/hooks/useLooks'
@@ -62,6 +62,10 @@ export function ChatPanel() {
 
     let thumbnailUrl: string | undefined
     let imageBase64: string | undefined
+    // Settle FIRST, then read. This copies what is actually on the board (angles, positions,
+    // text box widths) into the state, so the state we save and the picture we export cannot
+    // disagree. Reading `state` before this is what shipped flat labels for months.
+    settleCanvasTransforms()
     // Save the canvas exactly as it is. Styling is an explicit action (the ✨
     // button in the toolbar) — saving must NEVER re-arrange or rescale the look.
     const styledState = useCanvasStore.getState().state
@@ -152,6 +156,8 @@ export function ChatPanel() {
     if (!activeClient) return
     setSavingCapsule(true)
 
+    // Settle FIRST, then read — same reason as handleSave above.
+    settleCanvasTransforms()
     const canvasState = useCanvasStore.getState().state
 
     let imageBase64: string | undefined

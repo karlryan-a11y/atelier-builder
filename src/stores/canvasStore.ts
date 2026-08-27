@@ -77,6 +77,42 @@ export function unregisterCanvasExport() {
   _registeredExportFn = null
 }
 
+// Settle function registered by LookCanvas, called before anything reads the state or
+// photographs the board. See settleCanvasTransforms below.
+type SettleCanvasFn = () => void
+
+let _registeredSettleFn: SettleCanvasFn | null = null
+
+/** Called by LookCanvas on mount to register its settle sweep */
+export function registerCanvasSettle(fn: SettleCanvasFn) {
+  _registeredSettleFn = fn
+}
+
+/** Called by LookCanvas on unmount */
+export function unregisterCanvasSettle() {
+  _registeredSettleFn = null
+}
+
+/**
+ * Copy whatever is actually on the board into the saved state.
+ *
+ * The saved state and the exported picture come from two different places: the picture is a
+ * photograph of the Konva stage, the state is what we write to the database. A handler that
+ * forgets to persist part of a transform leaves the two out of step SILENTLY — the export looks
+ * right because it photographs the stage, and the file underneath is already wrong. It only
+ * surfaces when the look is reopened days later. (The text rotate handle did exactly this: it
+ * saved the box width and dropped the angle, so every rotated label came back flat.)
+ *
+ * So call this FIRST in any save path, before reading `state` and before exporting. Anything a
+ * handler missed gets picked up here, including handlers nobody has written yet.
+ *
+ * Synchronous: the store is updated by the time this returns, so `getState().state` immediately
+ * afterwards is settled (React will not have re-rendered yet, which does not matter).
+ */
+export function settleCanvasTransforms(): void {
+  _registeredSettleFn?.()
+}
+
 /**
  * Export the canvas to a data URL using Konva's native API.
  * Automatically crops to content bounds with padding.

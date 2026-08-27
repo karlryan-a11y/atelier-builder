@@ -1,7 +1,7 @@
 import { useRef, useMemo, useCallback, useEffect, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text as KonvaText, Line } from 'react-konva'
 import type Konva from 'konva'
-import { useCanvasStore, registerCanvasExport, unregisterCanvasExport } from '@/stores/canvasStore'
+import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform } from './CanvasAdapter'
@@ -167,22 +167,27 @@ interface TextNodeProps {
   onDragMove?: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onDblClick: () => void
-  onResize: (width: number) => void
+  onTransformCommit: (patch: { width: number; x: number; y: number; rotation: number }) => void
 }
 
-function TextNodeElement({ node, isSelected, solo, editing, onSelect, onDragStart, onDragMove, onDragEnd, onDblClick, onResize }: TextNodeProps) {
+function TextNodeElement({ node, isSelected, solo, editing, onSelect, onDragStart, onDragMove, onDragEnd, onDblClick, onTransformCommit }: TextNodeProps) {
   const textRef = useRef<Konva.Text>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
 
-  // Side handles resize the text BOX width (not font scale): convert any scaleX
-  // the Transformer applied into a concrete width so the text wraps to stacked
-  // lines. Live during drag (no store churn), then persist on release.
-  const applyWidth = (persist: boolean) => {
+  // The Transformer's side handles resize the text BOX width (not font scale) and its rotate
+  // handle turns the label. Konva carries BOTH as live attrs on the node; nothing is saved until
+  // we write them back. So: convert any scaleX the Transformer applied into a concrete width (so
+  // the text wraps to stacked lines), then commit width, position AND angle together.
+  //
+  // Committing only the width is exactly what silently flattened every rotated label: the angle
+  // stayed on the Konva node, the export photographs the node so the picture came out right, and
+  // the saved state said rotation 0. Nobody found out until the look was reopened. Keep all four.
+  const commitTransform = (persist: boolean) => {
     const n = textRef.current
     if (!n) return
-    const w = Math.max(20, n.width() * n.scaleX())
-    n.setAttrs({ width: w, scaleX: 1 })
-    if (persist) onResize(w)
+    const width = Math.max(20, n.width() * n.scaleX())
+    n.setAttrs({ width, scaleX: 1 })
+    if (persist) onTransformCommit({ width, x: n.x(), y: n.y(), rotation: n.rotation() })
   }
 
   return (
@@ -210,8 +215,8 @@ function TextNodeElement({ node, isSelected, solo, editing, onSelect, onDragStar
         onDragStart={() => onDragStart?.()}
         onDragMove={(e) => onDragMove?.(e.target.x(), e.target.y())}
         onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
-        onTransform={() => applyWidth(false)}
-        onTransformEnd={() => applyWidth(true)}
+        onTransform={() => commitTransform(false)}
+        onTransformEnd={() => commitTransform(true)}
       />
       {isSelected && solo && !editing && (
         <Transformer
@@ -292,12 +297,78 @@ export function LookCanvas() {
   }, [])
   const SCALE = Math.max(0.05, Math.min((avail.w - 24) / CW, (avail.h - 24) / CH))
 
+  // Read every node's LIVE transform off the stage and write back anything the state does not
+  // already say. This is the backstop for the whole class of "it looked right when I saved it"
+  // bugs — see settleCanvasTransforms in canvasStore for why the two can drift apart at all.
+  //
+  // Deliberately NOT reconciled: closet_item scale. When a node carries `target_height` the
+  // render layer DERIVES its scale from the image's natural height, so the live scaleX
+  // legitimately differs from `node.scale`. Reading it back would look like drift, and writing
+  // it would clobber target_height. That path already persists correctly via fromKonvaTransform.
+  const settleTransforms = useCallback(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    const s = useCanvasStore.getState()
+    const patches: { id: string; updates: Partial<CanvasNode> }[] = []
+    const EPS = 0.01
+
+    for (const node of s.state.nodes) {
+      const kn = stage.findOne('#' + node.id)
+      if (!kn) continue
+      const updates: Record<string, unknown> = {}
+
+      if (Math.abs(kn.x() - node.x) > EPS) updates.x = kn.x()
+      if (Math.abs(kn.y() - node.y) > EPS) updates.y = kn.y()
+
+      // ShapeNode is the one type with no angle of its own (the adapter pins it to 0).
+      if (node.type !== 'shape' && Math.abs(kn.rotation() - node.rotation) > EPS) {
+        updates.rotation = kn.rotation()
+      }
+
+      // A Transformer leaves its scale sitting on the node. Text carries scale as box width and
+      // font size, never as a raw scale, so fold any residual back into those two.
+      if (node.type === 'text') {
+        const t = kn as Konva.Text
+        const sx = Math.abs(t.scaleX()) || 1
+        const sy = Math.abs(t.scaleY()) || 1
+        if (Math.abs(sx - 1) > EPS) {
+          updates.width = Math.max(20, t.width() * sx)
+          t.scaleX(1)
+        } else if (node.width !== undefined && Math.abs(t.width() - node.width) > EPS) {
+          updates.width = Math.max(20, t.width())
+        }
+        if (Math.abs(sy - 1) > EPS) {
+          updates.font_size = Math.max(6, Math.round(node.font_size * sy))
+          t.scaleY(1)
+        }
+      }
+
+      if (Object.keys(updates).length) patches.push({ id: node.id, updates: updates as Partial<CanvasNode> })
+    }
+
+    if (patches.length) {
+      // Loud on purpose: reaching here means some handler is still dropping a transform. The save
+      // is correct either way, but the leak is worth finding.
+      console.warn(`[canvas] settled ${patches.length} node(s) whose on-screen transform was never saved`, patches)
+      s.updateNodes(patches)
+    }
+  }, [])
+
+  useEffect(() => {
+    registerCanvasSettle(settleTransforms)
+    return () => unregisterCanvasSettle()
+  }, [settleTransforms])
+
   // Register the Konva native export function so ChatPanel can call it.
   // Crops to content bounds WITHIN the frame — tight around items, never exceeds frame.
   useEffect(() => {
     registerCanvasExport((opts) => {
       const stage = stageRef.current
       if (!stage) return null
+
+      // Belt and braces: the save paths call settleCanvasTransforms() themselves, but the picture
+      // must never be able to show something the saved state does not. Idempotent.
+      settleTransforms()
       if (store.state.nodes.length === 0) return null
 
       const pixelRatio = opts?.pixelRatio ?? 2
@@ -340,7 +411,7 @@ export function LookCanvas() {
     })
 
     return () => unregisterCanvasExport()
-  }, [store.state.nodes])
+  }, [store.state.nodes, settleTransforms])
 
   // Web fonts (Amalfi Coast + the others) must be loaded before Konva measures/draws text,
   // or it renders with a fallback until the next redraw (the "flash then swaps to our font"
@@ -780,7 +851,7 @@ export function LookCanvas() {
                     onDragMove={(x, y) => handleGroupDragMove(node.id, x, y)}
                     onDragEnd={(x, y) => handleGroupDragEnd(node.id, x, y)}
                     onDblClick={() => handleTextDblClick(tNode)}
-                    onResize={(width) => updateNode(node.id, { width })}
+                    onTransformCommit={(patch) => updateNode(node.id, patch)}
                   />
                 )
               }
