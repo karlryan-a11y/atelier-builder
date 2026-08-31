@@ -306,6 +306,7 @@ export function EditItemDialog({ item, saving, customCategories = [], imageUrl, 
           {enableMultiColor && (
             <div>
               <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Colors</label>
+              <ClientNote field="color" />
               {colorSet.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {colorSet.map((c, i) => (
