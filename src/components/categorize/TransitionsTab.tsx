@@ -1,22 +1,37 @@
 import { useRef, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
-import type { useTransitions } from '@/hooks/useTransitions'
+import { RotateCcw, Wand2, Archive } from 'lucide-react'
+import type { useTransitions, TransitionedLook } from '@/hooks/useTransitions'
 
 // Renders the transitioned pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook as a result. Restore returns a piece and re-publishes any
 // look no other transitioned piece still holds back. See migration 014.
 
 type TransitionsHook = ReturnType<typeof useTransitions>
+type Props = TransitionsHook & {
+  /** Open a pulled look on the canvas with its transitioned pieces already stripped. */
+  onRestyle: (look: TransitionedLook) => void
+  restylingId: string | null
+}
 
 const REASON_LABEL: Record<string, string> = {
   donated: 'Donated', sold: 'Sold', discarded: 'Discarded', unspecified: 'Transitioned out',
 }
 
-export function TransitionsTab({ items, looks, loading, error, restoreItem }: TransitionsHook) {
+export function TransitionsTab({ items, looks, loading, error, restoreItem, retireLook, onRestyle, restylingId }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
   // Ref guard: blocks a second restore firing before React re-renders the disabled button
   // (state alone can lag a rapid double-tap / a stalled-then-retried click).
   const inFlight = useRef(false)
+
+  async function onRetire(look: TransitionedLook) {
+    if (inFlight.current) return
+    if (!confirm(`Retire "${look.name}" for good?\n\nIt leaves the client's lookbook and this queue. The look is archived, not deleted — Restore brings it back.`)) return
+    inFlight.current = true
+    setBusy(look.id)
+    try { await retireLook(look.id) }
+    catch (e) { alert('Could not retire: ' + (e instanceof Error ? e.message : 'unknown error')) }
+    finally { setBusy(null); inFlight.current = false }
+  }
 
   async function onRestore(itemId: string) {
     if (inFlight.current) return
@@ -83,7 +98,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem }: Tr
           <span className="text-[11px] text-[#aaa]">{looks.length}</span>
         </div>
         <p className="text-[12px] text-[#aaa] mb-4 max-w-xl">
-          Pulled from the lookbook because a piece they use was transitioned out. Restyle with pieces the client still owns; a restyled look returns to the lookbook on its own. Restoring the piece above brings its looks back automatically.
+          Pulled from the lookbook because a piece they use was transitioned out. <strong>Restyle</strong> opens the look on the canvas with the missing pieces already removed — saving it returns the look to the lookbook, in its old place. <strong>Retire</strong> is for the rare look that shouldn’t come back (archived, not deleted). Restoring the piece above brings its looks back automatically.
         </p>
         {looks.length === 0 ? (
           <p className="text-[#aaa] text-[13px]">None.</p>
@@ -103,6 +118,24 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem }: Tr
                   <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-1">
                     {look.causeItemIds.length > 1 ? `${look.causeItemIds.length} pieces transitioned` : 'Piece transitioned'}
                   </p>
+                  <div className="mt-2.5 flex items-center gap-4">
+                    <button
+                      onClick={() => onRestyle(look)}
+                      disabled={restylingId === look.id || busy === look.id}
+                      className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.12em] uppercase text-[#8a7a6a] hover:text-[#1A1A1A] transition-colors disabled:opacity-50"
+                      title="Open on the canvas without the transitioned pieces. Saving returns it to the lookbook."
+                    >
+                      <Wand2 className="h-3 w-3" /> {restylingId === look.id ? 'Opening…' : 'Restyle'}
+                    </button>
+                    <button
+                      onClick={() => onRetire(look)}
+                      disabled={busy === look.id || restylingId === look.id}
+                      className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.12em] uppercase text-[#bbb] hover:text-[#1A1A1A] transition-colors disabled:opacity-50"
+                      title="Archive this look for good. It leaves the queue and the lookbook; Restore brings it back."
+                    >
+                      <Archive className="h-3 w-3" /> {busy === look.id ? 'Retiring…' : 'Retire'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

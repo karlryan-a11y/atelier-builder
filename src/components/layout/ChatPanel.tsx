@@ -33,7 +33,7 @@ export function ChatPanel() {
   const [saving, setSaving] = useState(false)
   const { user } = useAuth()
   const { activeClient } = useClientStore()
-  const { state, currentLookId, currentCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, addNode } = useCanvasStore()
+  const { state, currentLookId, replacesLookId, currentCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, addNode } = useCanvasStore()
   const { looks, loading, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
@@ -100,8 +100,11 @@ export function ChatPanel() {
     const { data: sessionData } = await supabase.auth.getSession()
     const authUserId = sessionData?.session?.user?.id ?? null
 
-    await saveLook({
+    const saved = await saveLook({
       id: currentLookId ?? undefined,
+      // Set only when this board is a rebuild of a transitioned GoodPix look: the new row takes
+      // that look's place in the lookbook and the original retires (ADR-0076 + migration 014).
+      replacesLookId: replacesLookId ?? undefined,
       clientId: activeClient.id,
       name: data.name,
       canvasState: styledState,
@@ -112,10 +115,14 @@ export function ChatPanel() {
       createdBy: authUserId ?? undefined,
     })
 
+    // Adopt the row we just created, so pressing Save again edits it instead of forking a third
+    // look and retiring an original that is already retired.
+    if (replacesLookId && saved?.data?.id) noteSavedAs(saved.data.id)
+
     markClean()
     setSaving(false)
     setShowSaveDialog(false)
-  }, [activeClient, currentLookId, state, saveLook, markClean, user])
+  }, [activeClient, currentLookId, replacesLookId, state, saveLook, markClean, noteSavedAs, user])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return

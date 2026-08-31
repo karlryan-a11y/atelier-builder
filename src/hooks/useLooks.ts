@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransitions'
 import type { LookCanvasState } from '@/types/canvas'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -57,6 +58,12 @@ export function useLooks(clientId: string | null) {
 
   const saveLook = useCallback(async (opts: {
     id?: string
+    /**
+     * Set when this save is a rebuilt replacement for a TRANSITIONED GoodPix look. The new row
+     * takes the original's place (published state, order, filing) and the original is archived
+     * out of the Transitions queue. See lib/lookTransitions.ts + ADR-0076.
+     */
+    replacesLookId?: string
     clientId: string
     name: string
     canvasState: LookCanvasState
@@ -134,6 +141,23 @@ export function useLooks(clientId: string | null) {
     if (error) {
       console.error('Save look error:', error.message, error.code, error.details, error.hint)
       return { error, data: null }
+    }
+
+    // ── Bring the look back if this save fixed a transition (migration 014) ──────────────
+    // Both writes go straight to gp_looks: the `looks` view we just saved through does not
+    // expose transitioned_at. Never fatal — the look IS saved, and failing here must not read
+    // to the stylist as a lost restyle. See lib/lookTransitions.ts.
+    try {
+      if (opts.replacesLookId) {
+        // Rebuilt GoodPix look: the new row takes the original's place, the original retires.
+        await replaceTransitionedLook(opts.replacesLookId, id, opts.clientId)
+      } else if (!isNew) {
+        // Restyled builder look: drop any cause it no longer contains; returns on its own
+        // once the last one is gone.
+        await clearTransitionBlock(id, opts.clientId, closetItemIds)
+      }
+    } catch (e) {
+      console.error('Transition republish failed (look saved):', e)
     }
 
     await fetchLooks()

@@ -21,6 +21,8 @@ export interface TransitionedLook {
   name: string
   image: string | null
   causeItemIds: string[]   // which transitioned pieces pulled this look
+  closetItemIds: string[]  // everything it is built from (the restyle starts from these minus the causes)
+  source: string | null    // builder = restyle in place; goodpix = rebuild as a replacement (ADR-0076)
   transitionedAt: string | null
 }
 
@@ -59,7 +61,9 @@ export function useTransitions(clientId: string | null) {
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
         supabase.from('gp_looks')
-          .select('id, name, thumbnail_url, raw, transitioned_at, transitioned_item_ids')
+          // canvas_state is deliberately NOT selected: it is large, and only the one look a
+          // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
+          .select('id, name, thumbnail_url, raw, source, closet_item_ids, transitioned_at, transitioned_item_ids')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -86,6 +90,8 @@ export function useTransitions(clientId: string | null) {
           name: l.name ?? 'Untitled Look',
           image: rawImg ? proxyImageUrl(rawImg) : null,
           causeItemIds: Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : [],
+          closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+          source: l.source ?? null,
           transitionedAt: l.transitioned_at ?? null,
         }
       }))
@@ -150,5 +156,24 @@ export function useTransitions(clientId: string | null) {
     refetch()
   }, [clientId, refetch])
 
-  return { items, looks, loading, error, refetch, transitionOut, restoreItem }
+  /**
+   * Retire a pulled look for good, instead of restyling it. Maegan, 2026-08-31: "It's rare that
+   * we'll want a full look deleted" — rare, not never, and until now there was no way to say so,
+   * which is why a look nobody intended to keep still sat in the queue five weeks later.
+   *
+   * Archive, not delete: it leaves the lookbook and the Transitions queue but the row survives
+   * and Restore brings it back. Clearing the transition columns is what lifts it out of the
+   * queue; leaving them set would archive it and still show it as outstanding work.
+   */
+  const retireLook = useCallback(async (lookId: string) => {
+    if (!clientId) return
+    const { error } = await supabase
+      .from('gp_looks')
+      .update({ archived: true, published: false, transitioned_at: null, transitioned_item_ids: null })
+      .eq('id', lookId).eq('client_id', clientId)
+    if (error) throw error
+    refetch()
+  }, [clientId, refetch])
+
+  return { items, looks, loading, error, refetch, transitionOut, restoreItem, retireLook }
 }

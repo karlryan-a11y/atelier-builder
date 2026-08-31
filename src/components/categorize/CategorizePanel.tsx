@@ -16,6 +16,7 @@ import { ResidencesTab } from './ResidencesTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
+import type { TransitionedLook } from '@/hooks/useTransitions'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { hasResidences } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
@@ -117,6 +118,57 @@ export function CategorizePanel() {
       if (!canvasState) { alert('This look has no saved canvas to edit.'); return }
       const imageUrls = await resolveClosetImageUrls(canvasState)
       useCanvasStore.getState().loadLook(look.id, canvasState, imageUrls)
+      setStyleTab('canvas')
+    } finally {
+      setOpeningLookId(null)
+    }
+  }
+
+  /**
+   * Restyle a look that was PULLED from the lookbook because a piece it used was transitioned
+   * out. Until now these were a dead thumbnail: gp_looks rows that useLooks and useLookCategories
+   * both filter out, so there was no way to open one, and 17 of them had been sitting dark for
+   * up to five weeks.
+   *
+   * Either way the transitioned pieces are stripped from the board before she sees it, so what
+   * she opens is the look with the hole in it, ready to fill — and saving is enough to bring it
+   * back. Leaving them on the canvas would let her save a look still containing a piece the
+   * client no longer owns, which stays (correctly, but confusingly) dark.
+   */
+  async function handleRestyleTransitionedLook(look: TransitionedLook) {
+    if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and open this look to restyle?')) return
+    const gone = new Set(look.causeItemIds)
+    setOpeningLookId(look.id)
+    try {
+      if (look.source === 'builder') {
+        // Restyle IN PLACE: same row, so saving clears its transition block and the look
+        // returns to the lookbook in its old slot.
+        const { data } = await supabase.from('gp_looks').select('canvas_state').eq('id', look.id).single()
+        const canvasState = (data?.canvas_state ?? null) as LookCanvasState | null
+        if (!canvasState) { alert('This look has no saved canvas to restyle.'); return }
+        const stripped: LookCanvasState = {
+          ...canvasState,
+          nodes: canvasState.nodes.filter(
+            (n: any) => n.type !== 'closet_item' || !gone.has(n.closet_item_id),
+          ),
+        }
+        const imageUrls = await resolveClosetImageUrls(stripped)
+        useCanvasStore.getState().loadLook(look.id, stripped, imageUrls)
+      } else {
+        // GoodPix look: never edited in place (ADR-0076 — a save would overwrite `raw` and lose
+        // the original composed image). Rebuild from the pieces she still owns as a NEW look
+        // that REPLACES this one: on save it inherits the published state, order and filing, and
+        // the original retires. Without this branch a rebuild left the original dark forever and
+        // put a duplicate beside it.
+        const remaining = look.closetItemIds.filter((id) => !gone.has(id))
+        if (remaining.length === 0) {
+          alert('Every piece in this look was transitioned out — retire it instead of restyling.')
+          return
+        }
+        const canvasState = buildCanvasFromClosetItems(remaining)
+        const imageUrls = await resolveClosetImageUrls(canvasState)
+        useCanvasStore.getState().loadLookAsReplacement(look.id, canvasState, imageUrls)
+      }
       setStyleTab('canvas')
     } finally {
       setOpeningLookId(null)
@@ -498,7 +550,7 @@ export function CategorizePanel() {
         ) : mode === 'transitions' ? (
           <ErrorBoundary label="Transitions couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
-              <TransitionsTab {...transitions} />
+              <TransitionsTab {...transitions} onRestyle={handleRestyleTransitionedLook} restylingId={openingLookId} />
             </div>
           </ErrorBoundary>
         ) : mode === 'residences' ? (
