@@ -98,10 +98,18 @@ async function publish(body: any) {
   const color = String(body.color || '').trim() || null
   const category = String(body.category || '').trim().toLowerCase() || null
   const styleNote = String(body.style_note || '').trim() || null
+  // "Also in" — additional categories beyond the primary garment one. Stored as slugs, deduped, and
+  // never carrying the primary itself (garmentCategory.categoriesOf puts the primary first already).
+  const customCategories = [...new Set(
+    (Array.isArray(body.custom_categories) ? body.custom_categories : [])
+      .map((c: unknown) => String(c || '').trim().toLowerCase())
+      .filter((c: string) => c && c !== category),
+  )]
   const patch = {
     name, brand, color, category, style_note: styleNote,
+    custom_categories: customCategories,
     is_deleted: false, // now LIVE
-    raw: { item_name: name, brand, color, category, style_note: styleNote, manual_add: true },
+    raw: { item_name: name, brand, color, category, style_note: styleNote, custom_categories: customCategories, manual_add: true },
   }
   const resp = await rest(`gp_closet_items?id=eq.${id}&is_deleted=eq.true`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
   if (!resp.ok) throw new Error(`publish failed: ${await resp.text()}`)

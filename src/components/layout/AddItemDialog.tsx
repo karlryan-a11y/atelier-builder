@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
+import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
+import { isResidenceSlug } from '@/lib/residences'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s]) => s !== 'other')
@@ -57,9 +58,26 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], onC
   const [styleNote, setStyleNote] = useState('')
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
+  // "Also in" — additional categories beyond the primary garment one (stored in custom_categories[]).
+  // Same model and the same editor as EditItemDialog's Collection-tab mode; a piece added here can be
+  // a Top AND live in a custom grouping (49ers, a residence) from the moment it goes live.
+  const [alsoIn, setAlsoIn] = useState<string[]>([])
 
   const currentInList = FIXED.some(([s]) => s === category) || customCategories.some(c => c.slug === category)
   const ready = !!draftId && !!processedUrl && !processing
+
+  const primarySlug = customMode ? slugifyCategory(customName) : category
+  // Every fixed category + this client's customs, minus the current primary and ones already added.
+  const alsoInOptions: { slug: string; label: string }[] = [
+    ...FIXED.map(([slug, label]) => ({ slug, label })),
+    ...customCategories,
+  ].filter((o, i, arr) => arr.findIndex(x => x.slug === o.slug) === i)
+    .filter(o => o.slug !== primarySlug && !alsoIn.includes(o.slug))
+
+  function addAlsoIn(slug: string) {
+    const s = slugifyCategory(slug)
+    if (s && s !== primarySlug && !alsoIn.includes(s)) setAlsoIn(p => [...p, s])
+  }
 
   async function discardDraft(id: string | null) {
     if (id) { try { await api({ action: 'discard', item_id: id }) } catch { /* best-effort */ } }
@@ -101,9 +119,30 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], onC
   async function addToCollection() {
     if (!draftId) { alert('Pick a photo first.'); return }
     if (!name.trim()) { alert('Give the item a name.'); return }
+    let finalCategory = primarySlug
+    let alsoInFinal = alsoIn
+    // A home is not a garment type. Category replaces what the piece IS, so a coat filed under a
+    // residence stops being Outerwear everywhere (ADR-0082 / the Margaux Ellery loss). Move it to
+    // "Also in", where it is additive, and say so — same rule as the edit dialog.
+    if (isResidenceSlug(finalCategory)) {
+      const label = labelForCategory(finalCategory)
+      alert(
+        `"${label}" is a home, not a garment type.\n\n` +
+        `Category replaces what this piece IS — it would drop out of Tops, Shoes and Outerwear.\n\n` +
+        `Adding it to ${label} under "Also in" instead, which keeps its garment type. ` +
+        `Set Category to what the piece actually is.`,
+      )
+      alsoInFinal = [...new Set([...alsoIn, finalCategory])]
+      finalCategory = ''
+      setAlsoIn(alsoInFinal); setCategory(''); setCustomMode(false); setCustomName('')
+    }
     setSaving(true)
     try {
-      const d = await api({ action: 'publish', item_id: draftId, name: name.trim(), brand, color, category, style_note: styleNote })
+      const d = await api({
+        action: 'publish', item_id: draftId, name: name.trim(), brand, color,
+        category: finalCategory, style_note: styleNote,
+        custom_categories: alsoInFinal.filter(s => s && s !== finalCategory),
+      })
       if (!d?.ok) { alert(d?.error || 'Could not add the item.'); return }
       const published = draftId
       setDraftId(null) // so close() won't discard it
@@ -177,6 +216,44 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], onC
                 <option value="__new__">＋ New category…</option>
               </select>
             )}
+          </div>
+
+          {/* "Also in" — a piece can live in more than one place from the moment it is added, so the
+              stylist no longer has to add it and then immediately re-open it to Edit. */}
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Also in</label>
+            {alsoIn.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {alsoIn.map(slug => (
+                  <span key={slug} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-tile text-[11px] text-text">
+                    {labelForCategory(slug)}
+                    <button onClick={() => setAlsoIn(p => p.filter(s => s !== slug))}
+                      className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text" title="Remove">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="relative">
+              <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted/50 pointer-events-none" />
+              <select value=""
+                onChange={e => {
+                  const v = e.target.value
+                  if (!v) return
+                  if (v === '__new__') { const n = window.prompt('New category name (e.g. 49ers):'); if (n && n.trim()) addAlsoIn(n) }
+                  else addAlsoIn(v)
+                  e.currentTarget.value = ''
+                }}
+                className="w-full bg-tile rounded-sm pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
+                <option value="">Add another category…</option>
+                {alsoInOptions.map(o => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+                <option value="__new__">＋ New category…</option>
+              </select>
+            </div>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+              Put this piece in more than one place — e.g. Tops AND a custom category like 49ers. It shows under each.
+            </p>
           </div>
 
           <Field label="Color" value={color} onChange={setColor} placeholder="e.g. Navy" />
