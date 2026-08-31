@@ -37,8 +37,10 @@ import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
 
-/** Widths worth building. 760 covers every tile we render today at 2x on retina. */
-const WIDTHS = [760]
+/** 760 covers a look tile at 2x on retina; 400 covers a collection tile at 2x.
+ *  Each target asks for the one it is actually drawn at, rather than both. */
+const LOOK_WIDTH = 760
+const ITEM_WIDTH = 400
 const QUALITY = 82
 
 const args = process.argv.slice(2)
@@ -85,6 +87,38 @@ const BUCKET = r2Env.R2_BUCKET_NAME
  */
 export const derivedKey = (key, width) => `derived/w${width}q${QUALITY}/${key}.jpg`
 
+/**
+ * The variant key for ANY image url, ours or GoodPix's.
+ *
+ * KEEP IN STEP WITH atelier-looks/src/lib/supabase.ts `derivedKeyFor`. The two
+ * are a matched pair - this writes the object, that asks for it - and nothing
+ * checks they agree. If they drift, every image 404s and the reader's onerror
+ * quietly loads the full-size original instead: the page still works and weighs
+ * ten times what it should, which is exactly how this stayed invisible before.
+ *
+ * The earlier version of this script only handled our own R2 and said the rest
+ * were "GoodPix-hosted and already modest". Measured, they are 800x800 to
+ * 1080x1080 - 2 to 4 MB of decoded memory each - and they are the majority:
+ * 132 of the 178 images on Margaux Ellery's Looks page, and every one of the
+ * 1,349 on Ashley Petras's Collection. That assumption is what took a client's
+ * lookbook white on her phone.
+ */
+export function derivedKeyForUrl(url, width) {
+  if (!url) return null
+  if (url.includes('/functions/v1/image-proxy')) {
+    const key = keyFromProxyUrl(url)
+    if (!key || key.startsWith('derived/')) return null
+    return derivedKey(key, width)
+  }
+  if (url.includes('goodpix-co.s3.amazonaws.com')) {
+    try {
+      const file = new URL(url).pathname.replace(/^\/+/, '')
+      return file ? derivedKey(`goodpix/${file}`, width) : null
+    } catch { return null }
+  }
+  return null
+}
+
 /** Pull the R2 key back out of an image-proxy URL. Returns null for foreign URLs. */
 function keyFromProxyUrl(url) {
   if (!url || !url.includes('/functions/v1/image-proxy')) return null
@@ -117,49 +151,85 @@ const looks = (await page('gp_looks', 'id, client_id, name, raw, archived, trans
   CLIENT ? { client_id: CLIENT, published: true } : { published: true }))
   .filter((l) => !l.archived && !l.transitioned_at)
 
+const items = await page('gp_closet_items', 'id, client_id, raw, is_deleted, transitioned_at',
+  CLIENT ? { client_id: CLIENT, is_deleted: false } : { is_deleted: false })
+
 const targets = []
 for (const l of looks) {
-  const key = keyFromProxyUrl(l.raw?.main_image_url)
-  if (key) targets.push({ id: l.id, name: l.name, key, url: l.raw.main_image_url })
+  const url = l.raw?.main_image_url
+  const dk = derivedKeyForUrl(url, LOOK_WIDTH)
+  if (dk) targets.push({ id: l.id, name: l.name, dk, url, width: LOOK_WIDTH })
+}
+for (const it of items) {
+  if (it.transitioned_at) continue
+  const url = it.raw?.processed_image ?? it.raw?.image ?? it.raw?.images?.[0] ?? null
+  const dk = derivedKeyForUrl(url, ITEM_WIDTH)
+  if (dk) targets.push({ id: it.id, name: 'piece', dk, url, width: ITEM_WIDTH })
 }
 
+const ours = targets.filter((t) => t.url.includes('image-proxy')).length
 console.log(`published looks considered : ${looks.length}`)
-console.log(`on our R2 (image-proxy)     : ${targets.length}`)
-console.log(`widths                      : ${WIDTHS.join(', ')}  quality ${QUALITY}`)
+console.log(`collection items considered: ${items.length}`)
+console.log(`images to build            : ${targets.length}  (${ours} ours, ${targets.length - ours} GoodPix)`)
+console.log(`widths                     : looks ${LOOK_WIDTH}, items ${ITEM_WIDTH}  quality ${QUALITY}`)
 if (DRY) console.log('\nDRY RUN — nothing will be written.\n')
 
 let built = 0, skipped = 0, failed = 0, srcBytes = 0, outBytes = 0
 
-for (const [i, t] of targets.entries()) {
-  for (const width of WIDTHS) {
-    const dk = derivedKey(t.key, width)
-    if (!FORCE && await exists(dk)) { skipped++; continue }
-    if (DRY) { built++; continue }
-    try {
-      const res = await fetch(t.url)
-      if (!res.ok) { failed++; console.warn(`  ! ${t.name}: source HTTP ${res.status}`); continue }
-      const src = Buffer.from(await res.arrayBuffer())
-      const img = sharp(src)
-      const meta = await img.metadata()
-      // Never upscale: a source already smaller than the target needs no variant.
-      if ((meta.width ?? 0) <= width) { skipped++; continue }
-      const out = await img
-        .resize({ width, withoutEnlargement: true })
-        .flatten({ background: '#ffffff' }) // look PNGs are transparent; JPEG needs a matte
-        .jpeg({ quality: QUALITY, progressive: true, mozjpeg: true })
-        .toBuffer()
-      await s3.send(new PutObjectCommand({
-        Bucket: BUCKET, Key: dk, Body: out, ContentType: 'image/jpeg',
-        CacheControl: 'public, max-age=31536000, immutable',
-      }))
-      srcBytes += src.length; outBytes += out.length; built++
-      if (built % 25 === 0) console.log(`  … ${built} built (${i + 1}/${targets.length})`)
-    } catch (e) {
-      failed++
-      console.warn(`  ! ${t.name}: ${e.message}`)
+/*
+  CONCURRENCY. This ran one image at a time, which is fine for the 288 looks it
+  was written for and useless for the 103,462 images it now has to cover: at the
+  measured 29 a minute that is 59 hours. Sixteen at a time makes it a few hours,
+  and every step is independent - fetch, resize, put - so there is nothing to
+  coordinate beyond the counters.
+*/
+const CONCURRENCY = Number(val('--concurrency') ?? 16)
+
+async function buildOne(t, i) {
+  const width = t.width
+  const dk = t.dk
+  if (!FORCE && await exists(dk)) { skipped++; return }
+  if (DRY) { built++; return }
+  try {
+    const res = await fetch(t.url)
+    if (!res.ok) { failed++; if (failed < 20) console.warn(`  ! ${t.name}: source HTTP ${res.status}`); return }
+    const src = Buffer.from(await res.arrayBuffer())
+    const img = sharp(src)
+    const meta = await img.metadata()
+    // Never upscale: a source already smaller than the target needs no variant.
+    if ((meta.width ?? 0) <= width) { skipped++; return }
+    const out = await img
+      .resize({ width, withoutEnlargement: true })
+      .flatten({ background: '#ffffff' }) // look PNGs are transparent; JPEG needs a matte
+      .jpeg({ quality: QUALITY, progressive: true, mozjpeg: true })
+      .toBuffer()
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET, Key: dk, Body: out, ContentType: 'image/jpeg',
+      CacheControl: 'public, max-age=31536000, immutable',
+    }))
+    srcBytes += src.length; outBytes += out.length; built++
+    if (built % 250 === 0) {
+      const done = built + skipped + failed
+      const rate = done / ((Date.now() - startedAt) / 60000)
+      const left = (targets.length - done) / Math.max(rate, 1)
+      console.log(`  … ${done}/${targets.length}  ${rate.toFixed(0)}/min  ~${left.toFixed(0)} min left`)
     }
+  } catch (e) {
+    failed++
+    if (failed < 20) console.warn(`  ! ${t.name}: ${e.message}`)
   }
 }
+
+const startedAt = Date.now()
+let cursor = 0
+await Promise.all(
+  Array.from({ length: CONCURRENCY }, async () => {
+    while (cursor < targets.length) {
+      const i = cursor++
+      await buildOne(targets[i], i)
+    }
+  }),
+)
 
 console.log(`\nbuilt   : ${built}`)
 console.log(`skipped : ${skipped} (already present or already small)`)
