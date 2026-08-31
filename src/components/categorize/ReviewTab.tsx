@@ -159,7 +159,7 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
 
       {editing && (
         <EditItemDialog
-          item={editing} saving={saving} customCategories={customCats}
+          item={editing} saving={saving} customCategories={customCats} enableMultiCategory
           imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()}
           onSave={save} onClose={() => setEditing(null)}
         />

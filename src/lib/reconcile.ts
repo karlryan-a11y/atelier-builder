@@ -16,6 +16,9 @@ export interface ReconRow {
   name_override: string | null
   brand: string | null
   category: string | null
+  /** The "Also in" groupings (ADR-0082). Fetched so the Audit editor can show and edit them —
+   *  without it the shared dialog would open with an empty list and save the emptiness back. */
+  custom_categories: string[] | null
   color: string | null
   style_note: string | null
   description: string | null

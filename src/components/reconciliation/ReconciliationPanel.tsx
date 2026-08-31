@@ -42,7 +42,7 @@ const FLAG_ICON: Record<ReconFlag | 'clean', typeof CheckCircle2> = {
 function toClosetItem(r: ReconRow): ClosetItem {
   return {
     id: r.id, client_id: r.client_id, name: r.name, name_override: r.name_override,
-    style_note: r.style_note, category: r.category, custom_categories: null,
+    style_note: r.style_note, category: r.category, custom_categories: r.custom_categories,
     brand: r.brand ?? '', color: r.color, content_tag_ids: [], is_deleted: false,
     raw: { ...r.raw, ...(r.liveUrl ? { processed_image: r.liveUrl } : {}) },
     primary_image_hash: r.primary_image_hash, processed_image_hash: r.processed_image_hash,
@@ -145,29 +145,74 @@ export function ReconciliationPanel() {
     return m
   }, [rows])
 
-  // Custom categories already in use by this client (so the bulk picker offers them).
+  // Custom categories already in use by this client (so the bulk picker offers them). Read from
+  // BOTH the primary `category` AND the "Also in" list — a category that exists only as an "Also in"
+  // is still one of this client's categories, and reading primaries alone hid it from every picker.
   const customCats = useMemo(() => {
     const m = new Map<string, string>()
-    for (const r of rows) { const c = r.category; if (c && !(c in CATEGORY_LABELS)) m.set(c, labelForCategory(c)) }
+    const add = (c: string | null | undefined) => {
+      const slug = (c ?? '').trim().toLowerCase()
+      if (slug && !(slug in CATEGORY_LABELS)) m.set(slug, labelForCategory(slug))
+    }
+    for (const r of rows) { add(r.category); for (const cc of r.custom_categories ?? []) add(String(cc)) }
     return [...m.entries()].map(([slug, label]) => ({ slug, label })).sort((a, b) => a.label.localeCompare(b.label))
   }, [rows])
 
-  // Categories actually in use (for the merge tool), with item counts.
+  // Categories actually in use (for the merge tool), with item counts. Counts a piece once for its
+  // primary category and once for each "Also in" it carries — the merge moves both, so the number in
+  // the confirm dialog has to mean the same thing. Counting primaries alone undercounted every
+  // custom category, which is exactly the case someone reaches for the merge tool to clean up.
   const presentCats = useMemo(() => {
     const m = new Map<string, number>()
-    for (const r of rows) { const c = (r.category ?? '').trim(); if (c) m.set(c, (m.get(c) ?? 0) + 1) }
+    for (const r of rows) {
+      const seen = new Set<string>()
+      const bump = (c: string | null | undefined) => {
+        const slug = (c ?? '').trim().toLowerCase()
+        if (slug && !seen.has(slug)) { seen.add(slug); m.set(slug, (m.get(slug) ?? 0) + 1) }
+      }
+      bump(r.category)
+      for (const cc of r.custom_categories ?? []) bump(String(cc))
+    }
     return [...m.entries()].map(([slug, n]) => ({ slug, label: labelForCategory(slug), n })).sort((a, b) => a.label.localeCompare(b.label))
   }, [rows])
 
-  // Merge one whole category into another (e.g. "Shoes 2" → "Shoes"). Single filtered update.
+  // Merge one whole category into another (e.g. "Shoes 2" → "Shoes").
+  //
+  // A piece can hold a category in TWO places — as its primary `category` and as an "Also in"
+  // (custom_categories[], ADR-0082) — and this used to rewrite only the first. The merged-away
+  // category then survived in every picker and sidebar, because customCategoriesFromItems reads
+  // both, so a merge that said "moved all 12 items" left the category standing with its "Also in"
+  // members still under it. Both are rewritten now.
   async function mergeCategories() {
     if (!clientId || !mergeFrom || !mergeTo || mergeFrom === mergeTo) return
     const n = presentCats.find((c) => c.slug === mergeFrom)?.n ?? 0
     if (!window.confirm(`Move all ${n} "${labelForCategory(mergeFrom)}" items into "${labelForCategory(mergeTo)}"?`)) return
     setMerging(true)
     const { error: e } = await supabase.from('gp_closet_items').update({ category: mergeTo }).eq('client_id', clientId).eq('category', mergeFrom)
+    if (e) { setMerging(false); alert('Merge failed — ' + e.message); return }
+    // Postgres can't swap one array element in a filtered update, so rewrite the carriers by hand.
+    // Read them back from the table rather than from `rows`, so a piece whose primary was just
+    // moved is handled with its current array, and mergeTo is deduped in.
+    const { data: carriers, error: ce } = await supabase
+      .from('gp_closet_items')
+      .select('id, category, custom_categories')
+      .eq('client_id', clientId)
+      .contains('custom_categories', [mergeFrom])
+    if (ce) { setMerging(false); alert('Merge moved the primary categories but not the "Also in" ones — ' + ce.message); return }
+    let ok = true
+    for (const c of (carriers ?? []) as Array<{ id: string; category: string | null; custom_categories: string[] | null }>) {
+      const primary = (c.category ?? '').trim().toLowerCase()
+      const next = [...new Set(
+        (c.custom_categories ?? [])
+          .map((x) => String(x).trim().toLowerCase())
+          .map((x) => (x === mergeFrom ? mergeTo : x))
+          .filter((x) => x && x !== primary),
+      )]
+      const { error: ue } = await supabase.from('gp_closet_items').update({ custom_categories: next }).eq('id', c.id)
+      if (ue) ok = false
+    }
     setMerging(false)
-    if (e) { alert('Merge failed — ' + e.message); return }
+    if (!ok) { alert('Some "Also in" entries could not be moved — run the merge again.'); return }
     setMergeFrom(''); setMergeTo(''); refetch()
   }
 
@@ -341,7 +386,7 @@ export function ReconciliationPanel() {
   }
 
   // ----- Edit dialog actions (reuse the shared dialog used in Collection) -----
-  async function saveEdit(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null }) {
+  async function saveEdit(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null }) {
     if (!editing) return
     setSaving(true)
     const { error: e } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)
@@ -1139,6 +1184,7 @@ export function ReconciliationPanel() {
           item={toClosetItem(editing)}
           saving={saving}
           customCategories={customCats}
+          enableMultiCategory
           imageUrl={(() => { const s = resolveItemImage(toClosetItem(editing)); return s ? proxyImageUrl(s) : null })()}
           onSave={saveEdit}
           onClose={() => setEditing(null)}
