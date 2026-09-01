@@ -82,7 +82,7 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
             href="/client-looks"
             className="relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase text-white/80 hover:text-white transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group"
           >
-            Looks
+            Clients
             <span className="absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#F8E5E7] rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] w-0 group-hover:w-[calc(100%-2rem)]" style={{ left: '1rem' }} />
           </a>
           <a
