@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Tag, X, Send, Pencil, Check } from 'lucide-react'
+import { Plus, Tag, X, Send, Pencil, Check, Link2 } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
@@ -18,6 +18,7 @@ import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import type { TransitionedLook } from '@/hooks/useTransitions'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
+import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { hasResidences } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
@@ -56,6 +57,8 @@ export function CategorizePanel() {
   const [editing, setEditing] = useState<string | null>(null) // category ID being renamed
   const [editVal, setEditVal] = useState('')
   const [chatStatus, setChatStatus] = useState<string | null>(null)
+  // Copy-link state for every look/capsule of this client, loaded in one request.
+  const share = useShareLinks(activeClient?.id ?? null)
   // Collection mode uses garment categories (item-level), not the look-category brush.
   const [garmentCounts, setGarmentCounts] = useState<Map<string, number>>(new Map())
   const [activeGarmentCats, setActiveGarmentCats] = useState<Set<string>>(new Set())
@@ -247,6 +250,58 @@ export function CategorizePanel() {
     </>
   )
 
+  /**
+   * Copy link — a private, public-by-token URL for one look or capsule, to paste
+   * into a text or an email. Deliberately available on DRAFTS as well as
+   * published items: sending a draft packing capsule for review is the reason
+   * this exists. Shown for both looks and capsules, in the queue grid and the
+   * published arrange grid, so there is no view where the button is missing.
+   */
+  const shareCardActions = (itemId: string, shareToChat?: (id: string) => void) => {
+    const kind = mode === 'capsules' ? 'capsule' : 'look'
+    const key = `${kind}:${itemId}`
+    const st = share.stateFor(kind, itemId)
+    const working = share.busy === key
+    return (
+      <>
+        {/* Two ways to send the same thing, so they sit on one row rather than
+            growing the card a fifth full-width button: chat for a client who
+            lives in the app, a copyable link for a text or an email. */}
+        <div className="mt-1 flex items-stretch gap-1">
+          {shareToChat && (
+            <button
+              onClick={(e) => { e.stopPropagation(); shareToChat(itemId) }}
+              title="Send this straight into the client's Atelier chat"
+              className="flex-1 py-1.5 text-[9px] tracking-[0.12em] uppercase rounded border border-[#E8E4DF] text-[#888] hover:text-[#1A1A1A] hover:bg-[#F8F7F5] transition-colors"
+            >Share to chat</button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); void share.copyLink(kind, itemId) }}
+            disabled={working}
+            title="Copy a private link to paste into a text or an email. It opens a card the client can see without logging in — drafts included."
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[9px] tracking-[0.12em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <Link2 className="w-3 h-3" />
+            {working ? 'Working…' : 'Copy link'}
+          </button>
+        </div>
+        {st && (
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="text-[9px] text-[#888] truncate" title={st.url}>
+              {st.openCount > 0 ? (openedAgo(st.lastOpenedAt) ?? 'opened') : 'link live · not opened'}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); void share.revokeLink(kind, itemId) }}
+              disabled={working}
+              title="Kill this link. Anyone holding it stops being able to open it."
+              className="flex-none text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#C30319] transition-colors"
+            >Revoke</button>
+          </div>
+        )}
+      </>
+    )
+  }
+
   const has = (item: { categoryIds: string[] }, catId: string) => item.categoryIds.includes(catId)
 
   function toggleOnItem(item: { id: string; categoryIds: string[] }, catId: string) {
@@ -316,6 +371,7 @@ export function CategorizePanel() {
         <div className="px-5 py-4 border-b border-[#E8E4DF]">
           <p className="text-[10px] tracking-[0.3em] uppercase text-[#888]">Categorize</p>
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
+          {share.status && <p className="mt-1 text-[10px] text-[#888] leading-snug break-all">{share.status}</p>}
         </div>
         <div className="px-5 py-3 border-b border-[#E8E4DF] flex-1 overflow-hidden flex flex-col">
           {mode === 'audit' ? (
@@ -589,7 +645,12 @@ export function CategorizePanel() {
               galleryName={mode === 'looks' ? 'Looks gallery' : 'Capsules'}
               activeBrushId={activeBrush}
               selected={selected}
-              renderActions={mode === 'looks' ? (item) => lookCardActions(item as TaggableLook) : undefined}
+              renderActions={(item) => (
+                <>
+                  {mode === 'looks' && lookCardActions(item as TaggableLook)}
+                  {shareCardActions(item.id, shareToChat)}
+                </>
+              )}
               onCardClick={(item, shiftKey) => {
                 if (shiftKey) {
                   setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
@@ -678,11 +739,7 @@ export function CategorizePanel() {
                               {editingCapsuleId === item.id ? 'Opening…' : 'Edit'}
                             </button>
                           )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); shareToChat(item.id) }}
-                            className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
-                            title="Send this to the client's chat"
-                          >Share to chat</button>
+                          {shareCardActions(item.id, shareToChat)}
                         </>
                       )}
                     </div>
