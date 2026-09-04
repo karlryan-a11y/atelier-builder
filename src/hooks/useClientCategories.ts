@@ -111,5 +111,28 @@ export function useClientCategories(clientId: string | null) {
     return { ok: true as const }
   }, [clientId, parentBySlug, fetchAll])
 
-  return { rows, parentBySlug, loading, error, setParent, refetch: fetchAll }
+  /**
+   * Make a category that exists only to be a group — one nobody has filed a piece under.
+   * Julia's spreadsheet needs this: she wants Skirts under a heading, and "Bottoms" is
+   * not a category anyone has ever tagged.
+   */
+  const createGroup = useCallback(async (label: string) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    const name = label.trim()
+    const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (!slug) return { ok: false as const, message: 'Give the group a name.' }
+    const { data, error: e } = await supabase
+      .from('client_categories')
+      .upsert({ client_id: clientId, slug, label: name, group_label: null, kind: 'garment' }, { onConflict: 'client_id,slug' })
+      .select('slug')
+    if (e) return { ok: false as const, message: e.message }
+    if (!data?.length) {
+      return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
+    }
+    await fetchAll()
+    return { ok: true as const, slug }
+  }, [clientId, fetchAll])
+
+  return { rows, parentBySlug, loading, error, setParent, createGroup, refetch: fetchAll }
 }
