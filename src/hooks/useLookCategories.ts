@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
+import { planResidenceToggle, type ResidenceTogglePlan } from '@/lib/residenceToggle'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -239,11 +240,31 @@ export function useLookCategories(clientId: string | null) {
    * the supported way to retire a home, and it is what makes a residence deletable again
    * (see planCategoryDeletion).
    */
-  const setCategoryResidence = useCallback(async (id: string, isResidence: boolean) => {
+  const setCategoryResidence = useCallback(async (
+    id: string,
+    isResidence: boolean,
+    confirmWith: (message: string) => boolean,
+    clientName?: string,
+  ): Promise<ResidenceTogglePlan | null> => {
+    const cat = categories.find((c) => c.id === id)
+    if (!cat) return null
+    // ASK FIRST. This is one click, on a row of one-click controls, on an iPad, and what it
+    // changes is on the client's phone rather than on the screen the stylist is looking at.
+    // planResidenceToggle decides the sentence, so the warning and the write cannot disagree.
+    const plan = planResidenceToggle({
+      label: cat.label,
+      turningOn: isResidence,
+      currentHomeCount: categories.filter((c) => c.is_residence === true && !c.is_hidden).length,
+      lookCount: looks.filter((l) => l.categoryIds.includes(id)).length,
+      clientName,
+    })
+    if (!confirmWith(plan.message)) return null
+
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_residence: isResidence } : c)))
     const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id)
     if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
-  }, [fetchAll])
+    return plan
+  }, [categories, looks, fetchAll])
 
   /**
    * Write the stylist note on a category. Deliberately SEPARATE from renameCategory rather

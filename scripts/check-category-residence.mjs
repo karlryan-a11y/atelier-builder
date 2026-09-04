@@ -71,9 +71,11 @@ if (/RESIDENCE_SLUGS|PSEUDO_CATEGORY/.test(lib)) {
 
 // ── 3. the toggle exists, is reachable without hover, and says what it does ──
 inspected++
-if (!/setCategoryResidence\(cat\.id, !cat\.is_residence\)/.test(panel)) {
+// Wired through handleToggleHome, which asks before it writes. check-residence-toggle.mjs
+// owns the confirm itself; this only proves the control is still there and still reaches it.
+if (!/onClick=\{\(\) => handleToggleHome\(cat\)\}/.test(panel)) {
   errors.push(
-    `${PANEL} has no Home toggle wired to setCategoryResidence.\n` +
+    `${PANEL} has no Home toggle wired to handleToggleHome.\n` +
     `    Without it a stylist cannot make a category a home, which is the point of the column.`,
   )
 }
@@ -81,7 +83,7 @@ inspected++
 {
   // The toggle's own className must never start hidden. Grab the button that calls
   // setCategoryResidence and check the classes it renders with.
-  const m = panel.match(/onClick=\{\(\) => setCategoryResidence\([^}]*\}\s*\n\s*className=\{`([^`]*)`/)
+  const m = panel.match(/onClick=\{\(\) => handleToggleHome\(cat\)\}\s*\n\s*className=\{`([^`]*)`/)
   if (!m) {
     errors.push(`${PANEL}: could not find the Home toggle's className to inspect. The guard cannot see what it is guarding.`)
   } else if (/opacity-0[^.\d]/.test(m[1]) || /opacity-0$/.test(m[1])) {
