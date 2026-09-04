@@ -463,6 +463,12 @@ export function CategorizePanel() {
     if (noteFor !== null) setCategoryDescription(noteFor, noteVal)
     setNoteFor(null); setNoteVal('')
   }
+  // Ticking Home changes what the client sees when she opens her lookbook, from a control that
+  // sits between two other one-click controls on a tablet. Ask before writing.
+  function handleToggleHome(cat: LookCategory) {
+    void setCategoryResidence(cat.id, !cat.is_residence, (message) => window.confirm(message), activeClient?.name)
+  }
+
   async function handleDeleteCategory(cat: LookCategory) {
     // window.confirm both asks and, for a refused residence, is the only thing shown.
     const plan = await deleteCategory(cat.id, (message) => window.confirm(message), activeClient?.name)
@@ -543,7 +549,7 @@ export function CategorizePanel() {
                 pieces filed on it directly.
               </p>
               <p className="text-[10px] text-[#888] leading-relaxed mt-3">
-                Nothing is filled in for you, and anything left on Top level stays where it is.
+                Nothing is filled in for you, and anything left as a main category stays where it is.
               </p>
             </>
           ) : mode === 'collection' ? (
@@ -660,7 +666,7 @@ export function CategorizePanel() {
                       the two go together, and shown filled when on so the state is legible
                       without hovering, which does not exist on the tablet these are used on. */}
                   <button
-                    onClick={() => setCategoryResidence(cat.id, !cat.is_residence)}
+                    onClick={() => handleToggleHome(cat)}
                     className={`flex-none p-1 rounded transition-opacity ${cat.is_residence ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
                     aria-label={cat.is_residence ? `${cat.label} is one of her homes. Stop it being a home.` : `Make ${cat.label} one of her homes`}
                     aria-pressed={cat.is_residence}

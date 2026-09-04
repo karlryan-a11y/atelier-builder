@@ -17,7 +17,7 @@ import { buildTree, wouldCycle } from '@/lib/categoryNesting'
  * this screen is pre-selected, suggested, or inferred. The data would support a good
  * guess — 58 of 58 of Danielle's outerwear pieces already carry a child category, so
  * the tree could be proposed — and we do not, deliberately. Every dropdown starts on
- * "Top level" and only a person moves it.
+ * "Main category" and only a person moves it.
  *
  * Counts are shown because they are facts about her closet, not opinions about where a
  * category belongs: a stylist placing "Sleeveless" should be able to see it holds 64
@@ -86,7 +86,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
           heading she can tap, and it returns everything underneath it as well as its own pieces.
         </p>
         <p className="text-[13px] text-[#666] leading-relaxed max-w-[62ch]">
-          Anything left on Top level stays exactly where it is today. Nothing is filled in for you.
+          Anything left as a main category stays exactly where it is today. Nothing is filled in for you.
         </p>
       </div>
 
@@ -128,7 +128,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
                       onChange={(e) => choose(cat.slug, cat.label, e.target.value || null)}
                       className="flex-1 min-w-0 border border-[#E8E4DF] px-2 py-1.5 text-[12px] bg-white disabled:opacity-50"
                     >
-                      <option value="">Top level</option>
+                      <option value="">Main category</option>
                       {present
                         .filter((other) => other.slug !== cat.slug)
                         // A category cannot go under one of its own descendants. Left out of the
