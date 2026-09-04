@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
+import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -155,6 +156,46 @@ export function useLookCategories(clientId: string | null) {
     return data as LookCategory
   }, [clientId, categories])
 
+  /**
+   * Delete a category, per planCategoryDeletion: refuse on a residence, hard-delete when
+   * empty, hide when things are filed under it. Returns the plan so the caller can show the
+   * stylist the same sentence the decision was made on.
+   *
+   * `confirm` is passed in rather than called here so the decision stays testable —
+   * scripts/check-category-deletion.mjs exercises every branch without a browser.
+   */
+  const deleteCategory = useCallback(async (
+    id: string,
+    confirmWith: (message: string) => boolean,
+  ): Promise<CategoryDeletionPlan | null> => {
+    const cat = categories.find((c) => c.id === id)
+    if (!cat) return null
+    const lookCount = looks.filter((l) => l.categoryIds.includes(id)).length
+    const capsuleCount = capsules.filter((c) => c.categoryIds.includes(id)).length
+    const plan = planCategoryDeletion({ slug: cat.slug, label: cat.label, lookCount, capsuleCount })
+
+    if (plan.action === 'refuse') { confirmWith(plan.message); return plan }
+    if (!confirmWith(plan.message)) return null
+
+    if (plan.action === 'delete') {
+      setCategories((prev) => prev.filter((c) => c.id !== id))
+      const { error } = await supabase.from('look_categories').delete().eq('id', id)
+      if (error) { console.error('deleteCategory:', error.message); await fetchAll() }
+    } else {
+      setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_hidden: true } : c)))
+      const { error } = await supabase.from('look_categories').update({ is_hidden: true }).eq('id', id)
+      if (error) { console.error('hideCategory:', error.message); await fetchAll() }
+    }
+    return plan
+  }, [categories, looks, capsules, fetchAll])
+
+  /** Put a hidden category back on the client's site. */
+  const restoreCategory = useCallback(async (id: string) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_hidden: false } : c)))
+    const { error } = await supabase.from('look_categories').update({ is_hidden: false }).eq('id', id)
+    if (error) { console.error('restoreCategory:', error.message); await fetchAll() }
+  }, [fetchAll])
+
   const renameCategory = useCallback(async (id: string, label: string) => {
     const l = label.trim()
     if (!l) return
@@ -278,7 +319,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, categories, looks, capsules, draftCount,
-    createCategory, renameCategory,
+    createCategory, renameCategory, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,

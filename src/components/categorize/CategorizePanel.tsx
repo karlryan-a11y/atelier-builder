@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Tag, X, Send, Pencil, Check, Link2 } from 'lucide-react'
+import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
-import { useLookCategories, type TaggableLook, type TaggableCapsule } from '@/hooks/useLookCategories'
+import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
 import { supabase } from '@/lib/supabase'
@@ -30,7 +30,7 @@ type Status = 'draft' | 'published' | 'archived' | 'all'
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, categories, looks, capsules, createCategory, renameCategory,
+    loading, categories, looks, capsules, createCategory, renameCategory, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -378,6 +378,11 @@ export function CategorizePanel() {
     if (editing && editVal.trim()) renameCategory(editing, editVal)
     setEditing(null); setEditVal('')
   }
+  async function handleDeleteCategory(cat: LookCategory) {
+    // window.confirm both asks and, for a refused residence, is the only thing shown.
+    const plan = await deleteCategory(cat.id, (message) => window.confirm(message))
+    if (plan?.action !== 'refuse' && activeBrush === cat.id) setBrush(null)
+  }
 
   if (!activeClient) {
     return (
@@ -508,10 +513,10 @@ export function CategorizePanel() {
             Pick one, then click {mode} to tag them. Shift-click to multi-select. Pencil renames everywhere.
           </p>
           <div className="flex flex-col gap-1 overflow-y-auto pr-1">
-            {categories.length === 0 && (
+            {categories.filter((c) => !c.is_hidden).length === 0 && (
               <span className="text-[11px] text-[#bbb]">No categories yet — create one below.</span>
             )}
-            {categories.map((cat) => {
+            {categories.filter((c) => !c.is_hidden).map((cat) => {
               const isActive = activeBrush === cat.id
               if (editing === cat.id) {
                 return (
@@ -539,17 +544,50 @@ export function CategorizePanel() {
                   <button onClick={() => setBrush(cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
                     {cat.label}
                   </button>
+                  {/* Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
+                      control does not exist on a tablet, which is where these are used. */}
                   <button
                     onClick={() => startRename(cat.id, cat.label)}
-                    className={`flex-none mr-1.5 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
                     aria-label={`Rename ${cat.label}`}
                     title="Rename (updates every look in this category)"
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
+                  <button
+                    onClick={() => handleDeleteCategory(cat)}
+                    className={`flex-none mr-1.5 p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    aria-label={`Delete ${cat.label}`}
+                    title="Delete (removes it from the client's site)"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
                 </div>
               )
             })}
+            {/* Hidden: a deleted category that still had looks filed under it lands here rather
+                than being destroyed, so a mis-click is recoverable. It is already gone from the
+                client's site — the lookbook filters is_hidden. */}
+            {categories.some((c) => c.is_hidden) && (
+              <div className="mt-3 pt-3 border-t border-[#E8E4DF]">
+                <p className="text-[9px] tracking-[0.3em] uppercase text-[#bbb] mb-1.5">
+                  Hidden ({categories.filter((c) => c.is_hidden).length}) — off her site
+                </p>
+                {categories.filter((c) => c.is_hidden).map((cat) => (
+                  <div key={cat.id} className="group flex items-center justify-between rounded text-[12px] text-[#bbb] hover:bg-[#F8F7F5]">
+                    <span className="flex-1 px-3 py-1.5 capitalize truncate line-through">{cat.label}</span>
+                    <button
+                      onClick={() => restoreCategory(cat.id)}
+                      className="flex-none mr-1.5 p-1 rounded opacity-60 group-hover:opacity-100 hover:bg-[#E8E4DF] transition-opacity"
+                      aria-label={`Restore ${cat.label}`}
+                      title="Put this category back on the client's site"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
             </>
           )}

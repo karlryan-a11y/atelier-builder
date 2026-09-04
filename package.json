@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "guard": "node scripts/predeploy-schema-guard.mjs && node scripts/check-card-action-parity.mjs",
+    "guard": "node scripts/predeploy-schema-guard.mjs && node scripts/check-card-action-parity.mjs && node scripts/check-category-deletion.mjs",
     "deploy": "npm run guard && vercel deploy --prod --yes",
     "ship": "npm run guard && git push && vercel deploy --prod --yes"
   },
