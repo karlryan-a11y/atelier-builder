@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
@@ -30,7 +30,7 @@ type Status = 'draft' | 'published' | 'archived' | 'all'
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, categories, looks, capsules, createCategory, renameCategory, deleteCategory, restoreCategory,
+    loading, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -56,6 +56,10 @@ export function CategorizePanel() {
   const [newCat, setNewCat] = useState('')
   const [editing, setEditing] = useState<string | null>(null) // category ID being renamed
   const [editVal, setEditVal] = useState('')
+  // Separate from the rename state on purpose (ADR-0110): the note editor must not be able
+  // to break rename, which shipped yesterday and has never been used in a real session.
+  const [noteFor, setNoteFor] = useState<string | null>(null) // category ID whose note is open
+  const [noteVal, setNoteVal] = useState('')
   const [chatStatus, setChatStatus] = useState<string | null>(null)
   // Copy-link state for every look/capsule of this client, loaded in one request.
   const share = useShareLinks(activeClient?.id ?? null)
@@ -378,6 +382,13 @@ export function CategorizePanel() {
     if (editing && editVal.trim()) renameCategory(editing, editVal)
     setEditing(null); setEditVal('')
   }
+  function startNote(id: string, current: string | null) {
+    setNoteFor(id); setNoteVal(current ?? '')
+  }
+  function commitNote() {
+    if (noteFor !== null) setCategoryDescription(noteFor, noteVal)
+    setNoteFor(null); setNoteVal('')
+  }
   async function handleDeleteCategory(cat: LookCategory) {
     // window.confirm both asks and, for a refused residence, is the only thing shown.
     const plan = await deleteCategory(cat.id, (message) => window.confirm(message), activeClient?.name)
@@ -537,15 +548,24 @@ export function CategorizePanel() {
               return (
                 <div
                   key={cat.id}
-                  className={`group flex items-center justify-between rounded text-[12px] transition-colors ${
+                  className={`rounded text-[12px] transition-colors ${
                     isActive ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'
                   }`}
                 >
+                  <div className="group flex items-center justify-between">
                   <button onClick={() => setBrush(cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
                     {cat.label}
                   </button>
-                  {/* Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
+                  {/* Note + Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
                       control does not exist on a tablet, which is where these are used. */}
+                  <button
+                    onClick={() => startNote(cat.id, cat.description)}
+                    className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    aria-label={`${cat.description ? 'Edit' : 'Add'} styling note for ${cat.label}`}
+                    title="Styling note (only you see it, never the client)"
+                  >
+                    <StickyNote className="w-3 h-3" />
+                  </button>
                   <button
                     onClick={() => startRename(cat.id, cat.label)}
                     className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
@@ -562,6 +582,40 @@ export function CategorizePanel() {
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
+                  </div>
+                  {/* The styling note. Shown as plain text whenever one exists, so the rule is
+                      readable without tapping anything (ADR-0110). Editing is a textarea because
+                      these run to a sentence or two, not a title. */}
+                  {noteFor === cat.id ? (
+                    <div className="px-2 pb-2">
+                      <textarea
+                        value={noteVal}
+                        onChange={(e) => setNoteVal(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') { setNoteFor(null); setNoteVal('') } }}
+                        autoFocus
+                        rows={3}
+                        placeholder="Always a sports jacket. Never jeans."
+                        className="w-full bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded px-2 py-1.5 text-[11px] leading-snug focus:outline-none resize-none placeholder:text-[#bbb]"
+                      />
+                      <div className="flex items-center justify-between mt-1">
+                        <span className={`text-[9px] ${isActive ? 'text-white/50' : 'text-[#aaa]'}`}>Only you see this</span>
+                        <button
+                          onClick={commitNote}
+                          className="flex-none px-2 py-1 rounded bg-[#1A1A1A] text-white text-[9px] tracking-[0.2em] uppercase hover:opacity-80"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : cat.description ? (
+                    <button
+                      onClick={() => startNote(cat.id, cat.description)}
+                      className={`block w-full text-left px-3 pb-2 -mt-1 text-[10px] leading-snug ${isActive ? 'text-white/70' : 'text-[#888]'}`}
+                      title="Edit this styling note"
+                    >
+                      {cat.description}
+                    </button>
+                  ) : null}
                 </div>
               )
             })}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Save, Plus } from 'lucide-react'
+import { X, Save, Plus, StickyNote } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategoryVocab } from '@/hooks/useLookCategories'
 
@@ -24,6 +24,15 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
   // Categories to show as pills: this client's persisted taxonomy (look_categories) +
   // any just-created this session + anything already selected on the look.
   const shownCats = [...new Set([...categories.map((c) => c.label), ...sessionNew, ...tags])]
+
+  // The styling notes for the categories currently ON this look. This is the surface Amaia
+  // asked for: the rule ("always a sports jacket, never jeans") has to be readable at the
+  // moment the look is being filed, not somewhere she has to go and look it up. Keyed by
+  // label because the pills are labels; matched case-insensitively for the same reason
+  // createCategory dedupes that way. (ADR-0110)
+  const selectedNotes = categories
+    .filter((c) => c.description && tags.some((t) => t.toLowerCase() === c.label.toLowerCase()))
+    .map((c) => ({ id: c.id, label: c.label, description: c.description as string }))
 
   const toggleTag = (tag: string) => {
     setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])
@@ -82,6 +91,18 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
                 <span className="text-[10px] text-text-muted/50">Loading categories…</span>
               )}
             </div>
+            {selectedNotes.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {selectedNotes.map((n) => (
+                  <div key={n.id} className="flex gap-1.5 bg-tile rounded-sm px-2.5 py-2">
+                    <StickyNote className="w-3 h-3 flex-none mt-0.5 text-text-muted/60" />
+                    <p className="text-[11px] leading-snug text-text-muted">
+                      <span className="capitalize text-text">{n.label}:</span> {n.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-1.5 mt-2">
               <input
                 type="text"

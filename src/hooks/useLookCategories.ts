@@ -5,7 +5,7 @@ import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryD
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
- *   - look_categories(id, client_id, slug, label, sort_order, is_hidden)  — per-client taxonomy
+ *   - look_categories(id, client_id, slug, label, sort_order, is_hidden, description)  — per-client taxonomy
  *   - look_category_assignments(look_id, category_id)                      — looks ↔ categories (M:N)
  *   - board_category_assignments(board_id, category_id)                    — capsules ↔ categories (M:N)
  *
@@ -24,6 +24,13 @@ export interface LookCategory {
   label: string
   sort_order: number
   is_hidden: boolean
+  /**
+   * Stylist-only note on how to style this category, e.g. "always a sports jacket, never
+   * jeans" on Summit Club. Amaia asked for it: the rule lives in one stylist's head today,
+   * so a second stylist covering her client cannot know it. NOT rendered on the client
+   * lookbook — atelier-looks names its columns and never selects this one. (ADR-0110)
+   */
+  description: string | null
 }
 export interface TaggableLook {
   id: string
@@ -66,7 +73,7 @@ export function useLookCategories(clientId: string | null) {
     setLoading(true)
     const [catsRes, looksRes, capsRes] = await Promise.all([
       supabase.from('look_categories')
-        .select('id, slug, label, sort_order, is_hidden')
+        .select('id, slug, label, sort_order, is_hidden, description')
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
@@ -150,7 +157,7 @@ export function useLookCategories(clientId: string | null) {
     const sort_order = categories.length
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order })
-      .select('id, slug, label, sort_order, is_hidden').single()
+      .select('id, slug, label, sort_order, is_hidden, description').single()
     if (error || !data) { console.error('createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
@@ -213,6 +220,24 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: l } : c)))
     const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id)
     if (error) { console.error('renameCategory:', error.message); await fetchAll() }
+  }, [fetchAll])
+
+  /**
+   * Write the stylist note on a category. Deliberately SEPARATE from renameCategory rather
+   * than folded into one editor: rename shipped 2026-09-04 (ADR-0108) and has still never
+   * been clicked in a real stylist session, so rebuilding it to hold a second field would
+   * put its first real use behind this change. Two small controls, strictly less code
+   * touched, and rename cannot regress because it is not edited.
+   *
+   * Empty input clears the note (null, not ''), so "no note" is one value everywhere and
+   * `description ?? ''` is never a lie about what is stored.
+   */
+  const setCategoryDescription = useCallback(async (id: string, description: string) => {
+    const d = description.trim()
+    const value = d.length ? d : null
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, description: value } : c)))
+    const { error } = await supabase.from('look_categories').update({ description: value }).eq('id', id)
+    if (error) { console.error('setCategoryDescription:', error.message); await fetchAll() }
   }, [fetchAll])
 
   // ── assignment (junction insert/delete) ──
@@ -330,7 +355,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, categories, looks, capsules, draftCount,
-    createCategory, renameCategory, deleteCategory, restoreCategory,
+    createCategory, renameCategory, setCategoryDescription, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -371,7 +396,7 @@ export function useLookCategoryVocab(clientId: string | null) {
   const refetch = useCallback(async () => {
     if (!clientId) { setCategories([]); return }
     const { data } = await supabase.from('look_categories')
-      .select('id, slug, label, sort_order, is_hidden')
+      .select('id, slug, label, sort_order, is_hidden, description')
       .eq('client_id', clientId).order('sort_order').order('label')
     setCategories((data ?? []) as LookCategory[])
   }, [clientId])
@@ -385,7 +410,7 @@ export function useLookCategoryVocab(clientId: string | null) {
     if (existing) return existing
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order: categories.length })
-      .select('id, slug, label, sort_order, is_hidden').single()
+      .select('id, slug, label, sort_order, is_hidden, description').single()
     if (error || !data) { console.error('vocab createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
