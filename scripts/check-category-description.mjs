@@ -19,8 +19,8 @@
  * measured nothing is a failure, and a green tick over an empty set is how a broken guard
  * survived three weeks here.
  */
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { join, extname } from 'node:path'
 
 const errors = []
 const notes = []
@@ -95,6 +95,81 @@ notes.push(
     ? `${clientFilesChecked} client-lookbook file(s) inspected, none selecting description`
     : 'client lookbook not on this machine, boundary not inspected here',
 )
+
+// ── 4. LIVE GRANTS: every column the client lookbook selects must be readable by anon ──
+//
+// This is the check that would have caught the 2026-09-04 incident. Migration 020 revoked
+// anon's table-wide SELECT and re-granted a hand-typed column list. A concurrent session had
+// added `is_residence` in between, the lookbook reads it, and the client home tiles returned
+// 42501 for six minutes. A list of columns typed by hand goes stale the moment anyone adds
+// one; asking the live database is the only version that cannot.
+const LOOKS_DIR = join(process.env.HOME ?? '', 'Downloads/atelier-looks/src')
+function loadEnv() {
+  const out = {}
+  if (existsSync('.env.local')) {
+    for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
+      if (m) out[m[1]] = m[2]
+    }
+  }
+  return {
+    url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || out.VITE_SUPABASE_URL,
+    key: process.env.SUPABASE_ANON_KEY || out.VITE_SUPABASE_ANON_KEY,
+  }
+}
+const { url, key } = loadEnv()
+if (!url || !key) {
+  notes.push('live grant check SKIPPED (no anon creds) — grants NOT verified')
+} else {
+  // Collect every column the lookbook selects from look_categories, across all its files.
+  const wanted = new Set()
+  const stack = [LOOKS_DIR]
+  const files = []
+  while (stack.length) {
+    const dir = stack.pop()
+    if (!existsSync(dir)) continue
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name)
+      if (e.isDirectory()) { if (e.name !== 'node_modules') stack.push(full) }
+      else if (['.ts', '.astro', '.tsx', '.js'].includes(extname(e.name))) files.push(full)
+    }
+  }
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8')
+    for (const m of src.matchAll(/from\(\s*'look_categories'\s*\)[\s\S]{0,900}?\.select\(\s*'([^']*)'/g)) {
+      for (const c of m[1].split(',')) { const t = c.trim(); if (t && t !== '*') wanted.add(t) }
+    }
+  }
+  if (files.length === 0) {
+    notes.push('live grant check SKIPPED (atelier-looks not on this machine) — grants NOT verified')
+  } else if (wanted.size === 0) {
+    errors.push('parsed the lookbook but found ZERO look_categories columns. The grant check measured nothing.')
+  } else {
+    const ask = async (cols) => {
+      const r = await fetch(`${url}/rest/v1/look_categories?select=${cols}&limit=1`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+      })
+      return r.status
+    }
+    const status = await ask([...wanted].join(','))
+    if (status !== 200) {
+      errors.push(
+        `anon CANNOT read the columns the client lookbook selects (HTTP ${status}). ` +
+        `Columns the lookbook needs: ${[...wanted].sort().join(', ')}. ` +
+        `A client page will 42501. Grant the missing column to anon.`,
+      )
+    }
+    const leak = await ask('id,description')
+    if (leak === 200) {
+      errors.push('anon CAN read look_categories.description. The stylist note is public.')
+    }
+    notes.push(
+      `live grants: ${wanted.size} lookbook column(s) checked against the real database ` +
+      `(${[...wanted].sort().join(', ')}) — readable by anon: ${status === 200 ? 'yes' : 'NO'}; ` +
+      `description readable by anon: ${leak === 200 ? 'YES' : 'no'}`,
+    )
+  }
+}
 
 // ── report ──
 for (const n of notes) console.log(`  ${n}`)
