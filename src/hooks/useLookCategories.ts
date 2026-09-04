@@ -39,6 +39,13 @@ export interface LookCategory {
    * lookbook — atelier-looks names its columns and never selects this one. (ADR-0110)
    */
   description: string | null
+  /**
+   * The category this one sits inside, as a slug (ADR-0113). NULL = a group of its own.
+   * Cynthia, on Janet Foutty: put SS Office Casual and FW Office Casual inside one
+   * Office Casual, and still be able to pick a season within it. Nesting does that
+   * without merging anything, so no look is re-tagged and nothing is destroyed.
+   */
+  parent_slug: string | null
 }
 export interface TaggableLook {
   id: string
@@ -90,7 +97,7 @@ export function useLookCategories(clientId: string | null) {
     setLoading(true)
     const [catsRes, looksRes, capsRes] = await Promise.all([
       supabase.from('look_categories')
-        .select('id, slug, label, sort_order, is_hidden, is_residence, description')
+        .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
@@ -176,7 +183,7 @@ export function useLookCategories(clientId: string | null) {
     const sort_order = categories.length
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order })
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug').single()
     if (error || !data) { console.error('createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
@@ -231,6 +238,31 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_hidden: false } : c)))
     const { error } = await supabase.from('look_categories').update({ is_hidden: false }).eq('id', id)
     if (error) { console.error('restoreCategory:', error.message); await fetchAll() }
+  }, [fetchAll])
+
+  /**
+   * Put a category inside another one, or pass null to take it back out. (ADR-0113)
+   *
+   * Addressed by slug rather than id because that is what the shared tree helpers speak
+   * and what the lookbook reads, and slug is unique per client.
+   *
+   * ASKS FOR THE ROW BACK: a write RLS declines is HTTP 200 with an empty body and no
+   * error (ADR-0108, measured on live), so zero rows returned is a failure, not a save.
+   */
+  const setCategoryParent = useCallback(async (id: string, parentSlug: string | null) => {
+    const next = parentSlug ? parentSlug.trim().toLowerCase() : null
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, parent_slug: next } : c)))
+    const { data, error } = await supabase
+      .from('look_categories')
+      .update({ parent_slug: next })
+      .eq('id', id)
+      .select('id, parent_slug')
+    if (error) { await fetchAll(); return { ok: false as const, message: error.message } }
+    if (!data?.length) {
+      await fetchAll()
+      return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
+    }
+    return { ok: true as const }
   }, [fetchAll])
 
   const renameCategory = useCallback(async (id: string, label: string) => {
@@ -410,7 +442,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, categories, looks, capsules, draftCount,
-    createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
+    createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -451,7 +483,7 @@ export function useLookCategoryVocab(clientId: string | null) {
   const refetch = useCallback(async () => {
     if (!clientId) { setCategories([]); return }
     const { data } = await supabase.from('look_categories')
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description')
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
       .eq('client_id', clientId).order('sort_order').order('label')
     setCategories((data ?? []) as LookCategory[])
   }, [clientId])
@@ -465,7 +497,7 @@ export function useLookCategoryVocab(clientId: string | null) {
     if (existing) return existing
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order: categories.length })
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug').single()
     if (error || !data) { console.error('vocab createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
