@@ -39,10 +39,14 @@ type Status = 'draft' | 'published' | 'archived' | 'all'
  * surface enumerates the surfaces"). A fourth list cannot forget the meter if there is nowhere
  * else to write one.
  *
- * The pair reads styled/owned, matching the header line above the grid, and the rule under it
- * carries the SAME two colours the header text uses: warm grey for pieces in a published look,
- * amber for pieces whose only looks are drafts. Amber is never good news. It is finished styling
- * the client cannot see.
+ * Three readings of one fact, in the order the eye wants them: the PERCENTAGE in a straight
+ * right-hand column so the weakest category is found by running down it, the rule for the shape
+ * of it, and the exact pair underneath for the stylist who needs to know it is 19 of 24 and not
+ * 19 of 240.
+ *
+ * The rule carries the SAME two colours the header text uses: warm grey for pieces in a
+ * published look, amber for pieces whose only looks are drafts. Amber is never good news. It is
+ * finished styling the client cannot see.
  *
  * NOT blush. Blush is #F8E5E7, lighter than the #EFEBE6 track it sits on, so a fully styled
  * category rendered as a pale line indistinguishable from an empty one. Checked in WebKit.
@@ -56,26 +60,34 @@ function CategoryRow({ label, count, coverage, on, onClick }: {
 }) {
   const styled = coverage?.styled ?? 0
   const draftOnly = coverage?.draftOnly ?? 0
+  const show = !!coverage && count > 0
   const pct = count > 0 ? Math.min(100, (styled / count) * 100) : 0
   const draftPct = count > 0 ? Math.min(100 - pct, (draftOnly / count) * 100) : 0
   return (
     <button
       onClick={onClick}
-      title={coverage && count > 0
+      title={show
         ? `${styled} of ${count} in a look she can see${draftOnly > 0 ? `, ${draftOnly} more only in unpublished looks` : ''}`
         : undefined}
       className={`w-full px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
     >
-      <span className="flex items-center justify-between gap-2">
+      <span className="flex items-baseline justify-between gap-2">
         <span className="truncate">{label}</span>
-        <span className={`shrink-0 tabular-nums ${on ? 'text-white/60' : 'text-[#bbb]'}`}>
-          {coverage && count > 0 ? `${styled}/${count}` : count}
+        {/* The percentage is the answer to the question this feature was built for, so it gets
+            the column the eye runs down. Tabular figures keep that column straight. */}
+        <span className={`shrink-0 tabular-nums ${on ? 'text-white/70' : 'text-[#999]'}`}>
+          {show ? `${coverage.percent}%` : count}
         </span>
       </span>
-      {coverage && count > 0 && (
-        <span aria-hidden className={`mt-1.5 flex h-0.5 w-full overflow-hidden rounded-full ${on ? 'bg-white/25' : 'bg-[#EFEBE6]'}`}>
-          <span className={on ? 'bg-white' : 'bg-[#8a7a6a]'} style={{ width: `${pct}%` }} />
-          {draftOnly > 0 && <span className={on ? 'bg-white/50' : 'bg-[#9a6b3f]'} style={{ width: `${draftPct}%` }} />}
+      {show && (
+        <span className="mt-1.5 flex items-center gap-2">
+          <span aria-hidden className={`flex h-0.5 flex-1 overflow-hidden rounded-full ${on ? 'bg-white/25' : 'bg-[#EFEBE6]'}`}>
+            <span className={on ? 'bg-white' : 'bg-[#8a7a6a]'} style={{ width: `${pct}%` }} />
+            {draftOnly > 0 && <span className={on ? 'bg-white/50' : 'bg-[#9a6b3f]'} style={{ width: `${draftPct}%` }} />}
+          </span>
+          <span className={`shrink-0 text-[9px] tabular-nums leading-none ${on ? 'text-white/50' : 'text-[#bbb]'}`}>
+            {styled}/{count}
+          </span>
         </span>
       )}
     </button>

@@ -181,6 +181,28 @@ checked++
 if (!/bg-\[#8a7a6a\]/.test(rowFn) || !/bg-\[#9a6b3f\]/.test(rowFn)) {
   failures.push(`${PANEL}: the meter no longer uses the header's two colours (#8a7a6a styled, #9a6b3f drafts)`)
 }
+// Karl asked for the percentage as well as the counts, on the total and on every category. The
+// percentage is the column the eye runs down to find the weakest category, so it goes on the
+// first line where every row's sits at the same x; the exact pair goes underneath. Both must be
+// there: a percentage alone cannot tell 19 of 24 from 19 of 240, and the pair alone is what this
+// row showed before and is not scannable.
+checked++
+if (!/\{coverage\.percent\}%/.test(rowFn)) {
+  failures.push(`${PANEL}: the row no longer shows a percentage`)
+}
+checked++
+if (!/\{styled\}\/\{count\}/.test(rowFn)) {
+  failures.push(`${PANEL}: the row no longer shows the styled/owned pair under the meter`)
+}
+checked++
+if (rowFn.indexOf('{coverage.percent}%') > rowFn.indexOf('h-0.5')) {
+  failures.push(`${PANEL}: the percentage is rendered after the meter, so it is no longer the straight right-hand column`)
+}
+// Tabular figures, or the percentage column wobbles row to row and stops being scannable.
+checked++
+if ((rowFn.match(/tabular-nums/g) ?? []).length < 2) {
+  failures.push(`${PANEL}: the percentage and the pair must both be tabular-nums to stay in a straight column`)
+}
 
 // ── 4. Per-category coverage ─────────────────────────────────────────────────
 function cat(name, items, usage, want) {
