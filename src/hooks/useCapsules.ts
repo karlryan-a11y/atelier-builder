@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { replaceGoodPixCapsule } from '@/lib/capsuleReplace'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -65,6 +66,11 @@ export function useCapsules(clientId: string | null) {
     /** The capsule's previous `raw` blob (when editing) — merged in underneath the fields below
      *  so an update doesn't wipe out unrelated raw keys if, say, the image upload fails this time. */
     existingRaw?: Record<string, unknown>
+    /** Set when this save is a REBUILD of a GoodPix capsule. The row is inserted fresh (never
+     *  written over the scraped original, whose raw.image_url is live on the client's site) and
+     *  then takes the original's filing, published state and slot, and the original retires.
+     *  Mutually exclusive with `id`. */
+    replacesCapsuleId?: string
   }) => {
     const isNew = !opts.id
     const id = opts.id || generateBoardId()
@@ -122,6 +128,17 @@ export function useCapsules(clientId: string | null) {
     if (error) {
       console.error('Save capsule error:', error)
       return { error, data: null }
+    }
+
+    // Hand the replaced capsule's place over. Deliberately AFTER the insert succeeded and
+    // deliberately non-fatal: a capsule that saved but failed to retire its original is a
+    // duplicate the stylist can fix, whereas throwing here would lose the rebuild she just did.
+    if (isNew && opts.replacesCapsuleId) {
+      try {
+        await replaceGoodPixCapsule(opts.replacesCapsuleId, id, opts.clientId)
+      } catch (e) {
+        console.error('Capsule replace failed (rebuild saved):', e)
+      }
     }
 
     await fetchCapsules()

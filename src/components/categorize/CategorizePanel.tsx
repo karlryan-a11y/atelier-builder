@@ -184,6 +184,37 @@ export function CategorizePanel() {
     }
   }
 
+  /**
+   * GoodPix capsule: the scrape captured one flat composite image plus the piece list, never
+   * the per-piece layout, so the original cannot be reopened — the same shape of problem, and
+   * the same answer, as handleRebuildLook below. Lay its pieces out on the canvas as a NEW
+   * unsaved capsule; the stylist rearranges, labels and saves, and on save it takes the
+   * original's place (filing, published state, slot) and the original retires to ARCHIVED.
+   *
+   * The original is NEVER written over: its raw.image_url is the picture live on the client's
+   * site this second. That is why this is a rebuild-and-replace and not an edit (ADR-0076 for
+   * looks; lib/capsuleReplace.ts for the capsule half).
+   *
+   * 21 of Maegan Watson's 26 capsules are GoodPix imports, 20 of which carry their piece list
+   * (5 to 50 pieces each). Before this they showed a dead Edit button and nothing else.
+   */
+  async function handleRebuildCapsule(capsule: TaggableCapsule) {
+    if (capsule.closetItemIds.length === 0) {
+      alert('This capsule has no linked collection pieces to rebuild from.')
+      return
+    }
+    if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and rebuild this capsule?')) return
+    setEditingCapsuleId(capsule.id)
+    try {
+      const canvasState = buildCanvasFromClosetItems(capsule.closetItemIds)
+      const imageUrls = await resolveClosetImageUrls(canvasState)
+      useCanvasStore.getState().loadCapsuleAsRebuild(capsule.id, canvasState, imageUrls)
+      setStyleTab('canvas')
+    } finally {
+      setEditingCapsuleId(null)
+    }
+  }
+
   // ── Looks: open on canvas (Edit for builder looks, Rebuild for GoodPix looks) + rename ──
   const [openingLookId, setOpeningLookId] = useState<string | null>(null)
 
@@ -338,18 +369,28 @@ export function CategorizePanel() {
   // A third grid gets these for free.
   const capsuleCardActions = (capsule: TaggableCapsule) => (
     <>
+      {/* Edit vs Rebuild, the same split lookCardActions makes. A capsule with a saved canvas
+          reopens in place. A GoodPix capsule cannot — it is a flat image — so it is rebuilt
+          from its pieces onto a new board that replaces it. Only a capsule with NEITHER a
+          canvas nor a piece list ("Capsule from Looks", or the one scrape that linked no
+          pieces) is left with a disabled button, and it now says which of the two it is. */}
       <button
-        onClick={(e) => { e.stopPropagation(); handleEditCapsule(capsule) }}
-        disabled={!capsule.canvasState || editingCapsuleId === capsule.id}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (capsule.canvasState) { handleEditCapsule(capsule) } else { handleRebuildCapsule(capsule) }
+        }}
+        disabled={(!capsule.canvasState && capsule.closetItemIds.length === 0) || editingCapsuleId === capsule.id}
         title={
           capsule.canvasState
             ? 'Open this capsule on the canvas to edit it'
-            : "This capsule was built with \"Capsule from Looks\" and can't be reopened in the canvas — edit the underlying looks instead"
+            : capsule.closetItemIds.length > 0
+              ? `This capsule came from GoodPix, so it is a flat picture with no layout to reopen. Rebuild lays its ${capsule.closetItemIds.length} pieces on the canvas for you to arrange. Saving replaces it on her site; the original is kept in Archived.`
+              : "This capsule was built with \"Capsule from Looks\" and has no pieces of its own to rebuild from — edit the underlying looks instead"
         }
         className="mt-1 w-full flex items-center justify-center gap-1 py-1.5 text-[10px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
       >
-        <Pencil className="w-3 h-3" />
-        {editingCapsuleId === capsule.id ? 'Opening…' : 'Edit'}
+        {capsule.canvasState ? <Pencil className="w-3 h-3" /> : <RotateCcw className="w-3 h-3" />}
+        {editingCapsuleId === capsule.id ? 'Opening…' : capsule.canvasState ? 'Edit' : 'Rebuild'}
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); handleRenameCapsule(capsule) }}

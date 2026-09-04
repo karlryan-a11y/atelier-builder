@@ -33,7 +33,7 @@ export function ChatPanel() {
   const [saving, setSaving] = useState(false)
   const { user } = useAuth()
   const { activeClient } = useClientStore()
-  const { state, currentLookId, replacesLookId, currentCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, addNode } = useCanvasStore()
+  const { state, currentLookId, replacesLookId, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore()
   const { looks, loading, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
@@ -50,6 +50,9 @@ export function ChatPanel() {
 
   const currentLook = looks.find((l) => l.id === currentLookId) ?? null
   const currentCapsule = capsules.find((c) => c.id === currentCapsuleId) ?? null
+  // The GoodPix capsule this board is a rebuild OF (not a capsule being edited) — used for the
+  // header, the button label and the name the Save dialog opens with.
+  const replacedCapsule = capsules.find((c) => c.id === replacesCapsuleId) ?? null
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -181,8 +184,12 @@ export function ChatPanel() {
         .map((n: any) => n.closet_item_id as string)
     )]
 
-    await saveCapsule({
+    // A REBUILD passes no id (so a fresh row is inserted, never overwriting the GoodPix
+    // original's raw.image_url, which is live on her site) plus replacesCapsuleId, so the save
+    // hands the original's filing, published state and slot over and retires it.
+    const saved = await saveCapsule({
       id: currentCapsuleId ?? undefined,
+      replacesCapsuleId: replacesCapsuleId ?? undefined,
       clientId: activeClient.id,
       name: data.name,
       description: data.description,
@@ -193,9 +200,13 @@ export function ChatPanel() {
       existingRaw: currentCapsule?.raw,
     })
 
+    // The board now IS the saved replacement, so a second Save updates it rather than inserting
+    // a third capsule and re-retiring an already-retired original.
+    if (replacesCapsuleId && saved?.data?.id) noteSavedCapsuleAs(saved.data.id)
+
     setSavingCapsule(false)
     setShowSaveAsCapsuleDialog(false)
-  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule])
+  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs])
 
   const handleSelectLook = useCallback(async (look: LookRow) => {
     if (isDirty && !confirm('You have unsaved changes. Discard and load this look?')) return
@@ -409,7 +420,7 @@ export function ChatPanel() {
               onClick={() => setShowSaveAsCapsuleDialog(true)}
               className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-[#1A1A1A] text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text"
             >
-              {currentCapsuleId ? 'Update Capsule' : 'Save as Capsule'}
+              {currentCapsuleId ? 'Update Capsule' : replacesCapsuleId ? 'Replace Capsule' : 'Save as Capsule'}
             </button>
           </div>
         )}
@@ -424,6 +435,21 @@ export function ChatPanel() {
               <span>🧩</span>
               Capsule from Looks ({looks.length} available)
             </button>
+          </div>
+        )}
+
+        {/* Rebuild info — set when a GoodPix capsule was opened via Categorize → Capsules →
+            Rebuild. Says plainly that this replaces the live one, because it does, and that the
+            original is kept. Without this the board looks like an ordinary new capsule and the
+            stylist has no way to know a Save will take one off the client's site. */}
+        {replacesCapsuleId && (
+          <div className="px-3 py-2 border-b border-border bg-tile/50">
+            <p className="text-[10px] tracking-[0.2em] uppercase text-text-muted/60">Rebuilding Capsule</p>
+            <p className="text-[11px] font-medium text-text truncate">{replacedCapsule?.name ?? 'Untitled Capsule'}</p>
+            <p className="text-[9px] text-text-muted mt-0.5 leading-relaxed">
+              These are its pieces on a fresh board. "Replace Capsule" puts this on her site in
+              its place and keeps the original in Archived.
+            </p>
           </div>
         )}
 
@@ -622,8 +648,8 @@ export function ChatPanel() {
           itemCount={state.nodes.filter((n: any) => n.type === 'closet_item').length}
           saving={savingCapsule}
           isEditing={!!currentCapsuleId}
-          initialName={currentCapsule?.name ?? ''}
-          initialDescription={currentCapsule?.description ?? ''}
+          initialName={currentCapsule?.name ?? replacedCapsule?.name ?? ''}
+          initialDescription={currentCapsule?.description ?? replacedCapsule?.description ?? ''}
           onSave={handleSaveAsCapsule}
           onClose={() => setShowSaveAsCapsuleDialog(false)}
         />

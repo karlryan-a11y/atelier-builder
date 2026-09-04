@@ -56,6 +56,17 @@ interface CanvasStoreState {
   // a look, duplicating, or starting a new look all clear this. Lets ChatPanel's "Save as Capsule"
   // flow know to UPDATE this same gp_boards row instead of inserting a new capsule.
   currentCapsuleId: string | null
+  /**
+   * Set when the board holds a REBUILD of a GoodPix capsule. Exactly the same shape as
+   * replacesLookId and for exactly the same reason: the original is one flat scraped image and
+   * must not be written over (its `raw.image_url` IS what the client is looking at), so Save
+   * inserts a fresh gp_boards row and this id tells it which original to retire and hand the
+   * lookbook slot over from. See lib/capsuleReplace.ts.
+   *
+   * Mutually exclusive with currentCapsuleId: currentCapsuleId means "update this row",
+   * replacesCapsuleId means "insert a row that takes this one's place".
+   */
+  replacesCapsuleId: string | null
   isDirty: boolean
   // When a text node is added, we ask the canvas to open its inline editor immediately so the
   // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
@@ -158,6 +169,11 @@ interface CanvasStoreActions {
   noteSavedAs: (id: string) => void
   // Load a saved capsule's canvas_state back onto the board for editing (see currentCapsuleId).
   loadCapsule: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
+  // Rebuild of a GoodPix capsule: a new, unsaved board that remembers which capsule it replaces.
+  loadCapsuleAsRebuild: (replacesCapsuleId: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
+  // The board now corresponds to the saved replacement, so a second Save updates that row
+  // rather than inserting a third capsule and re-retiring an already-retired original.
+  noteSavedCapsuleAs: (id: string) => void
   markClean: () => void
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
@@ -183,6 +199,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   currentLookId: null,
   replacesLookId: null,
   currentCapsuleId: null,
+  replacesCapsuleId: null,
   isDirty: false,
   pendingEditTextId: null,
   lastTextStyle: null,
@@ -538,6 +555,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId: null,
       currentCapsuleId: null,
+      replacesCapsuleId: null,
       isDirty: false,
     })
     saveDraft(fresh)
@@ -554,6 +572,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: id,
       replacesLookId: null,
       currentCapsuleId: null,
+      replacesCapsuleId: null,
       isDirty: false,
     })
     saveDraft(lookState)
@@ -572,6 +591,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId: null,
       currentCapsuleId: null,
+      replacesCapsuleId: null,
       isDirty: true,
     })
     saveDraft(lookState)
@@ -592,6 +612,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId,
       currentCapsuleId: null,
+      replacesCapsuleId: null,
       isDirty: true,
     })
     saveDraft(lookState)
@@ -613,11 +634,37 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: null,
       currentCapsuleId: id,
+      replacesCapsuleId: null,
       isDirty: false,
     })
     saveDraft(capsuleState)
     saveImageUrls(capsuleImageUrls)
   },
+
+  // Rebuilding a GoodPix capsule. Same board state as loadLookAsReplacement, one level up:
+  // currentCapsuleId stays NULL so Save inserts a fresh gp_boards row (never overwriting the
+  // scraped original's raw.image_url, which is the picture live on her site), and
+  // replacesCapsuleId carries the original so that save can retire it and hand over its slot.
+  // isDirty is true from the moment it loads — nothing has been saved yet, and a stylist who
+  // navigates away should be asked.
+  loadCapsuleAsRebuild: (replacesCapsuleId, capsuleState, capsuleImageUrls) => {
+    set({
+      state: capsuleState,
+      selectedNodeIds: [],
+      imageUrls: capsuleImageUrls,
+      past: [],
+      future: [],
+      currentLookId: null,
+      replacesLookId: null,
+      currentCapsuleId: null,
+      replacesCapsuleId,
+      isDirty: true,
+    })
+    saveDraft(capsuleState)
+    saveImageUrls(capsuleImageUrls)
+  },
+
+  noteSavedCapsuleAs: (id) => set({ currentCapsuleId: id, replacesCapsuleId: null }),
 
   markClean: () => set({ isDirty: false }),
 

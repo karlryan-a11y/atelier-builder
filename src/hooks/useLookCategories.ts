@@ -66,6 +66,15 @@ export interface TaggableCapsule {
   // "Capsule from Looks" (CreateCapsuleDialog) don't have one — those can't be
   // re-opened in the canvas, so the Edit action is hidden when this is null.
   canvasState: LookCanvasState | null
+  // Same split as TaggableLook: 'builder' capsules carry a canvas_state and reopen for
+  // editing; 'goodpix' capsules are a flat scraped image + closet_item_ids and can only be
+  // REBUILT onto the canvas. 21 of Maegan Watson's 26 capsules are the latter.
+  source: string
+  // The pieces the capsule contains. REQUIRED, not decorative: Rebuild lays these out on a
+  // fresh canvas, so a card that offers Rebuild without fetching this opens an empty board
+  // and saves the emptiness over a live capsule (ADR-0099 — a surface that shows a field
+  // fetches it).
+  closetItemIds: string[]
 }
 
 const slugify = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -93,7 +102,7 @@ export function useLookCategories(clientId: string | null) {
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false }),
       supabase.from('gp_boards')
-        .select('id, name, raw, published, is_deleted, sort_order')
+        .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids')
         .eq('client_id', clientId)
         // Match the client lookbook's ordering so "On lookbook" == what she sees.
         .order('sort_order', { ascending: true, nullsFirst: false })
@@ -143,6 +152,8 @@ export function useLookCategories(clientId: string | null) {
       archived: !!b.is_deleted,
       sort_order: b.sort_order ?? null,
       canvasState: (b.raw?.canvas_state as LookCanvasState | undefined) ?? null,
+      source: (b.raw?.source as string | undefined) ?? 'goodpix',
+      closetItemIds: (b.closet_item_ids as string[] | null) ?? [],
     })))
     setLoading(false)
   }, [clientId])
