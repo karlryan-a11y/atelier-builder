@@ -52,13 +52,20 @@ const base =
   `&color_family=is.null&is_deleted=is.false&color=not.is.null&color=neq.&order=id` +
   (CLIENT ? `&client_id=eq.${CLIENT}` : '')
 
+// KEYSET pagination, not Range offsets. `color_family=is.null` over 89k rows with a deep OFFSET
+// makes Postgres walk everything it already skipped, and the read started timing out at ~15k in.
+// Paging on the last id seen is O(1) per page and is also RESUMABLE: the script only ever reads
+// rows that still have no colour, so re-running it after an interruption picks up where it stopped.
 const rows = []
-for (let from = 0; ; from += PAGE) {
-  const r = await fetch(base, { headers: { ...H, Range: `${from}-${from + PAGE - 1}` } })
+let after = ''
+for (;;) {
+  const url = base + `&limit=${PAGE}` + (after ? `&id=gt.${after}` : '')
+  const r = await fetch(url, { headers: H })
   if (!r.ok) { console.error('read failed:', r.status, await r.text()); process.exit(1) }
   const page = await r.json()
   rows.push(...page)
   if (page.length < PAGE) break
+  after = page[page.length - 1].id
 }
 
 // ── Translate, and group by the resulting set so identical sets write together ──
@@ -102,28 +109,38 @@ if (!APPLY) { console.log('\nDRY RUN — nothing written. Re-run with --apply.')
 
 // ── Write. Blanks only, chunked, and every failure is surfaced ───────────────
 let written = 0, failed = 0
+
+/**
+ * One PATCH, splitting on a statement timeout rather than retrying the same size.
+ *
+ * Updating one of these rows rewrites the whole tuple, and gp_closet_items carries `raw` plus a
+ * 1536-dimension embedding, so a wide id list is genuinely slow at the database rather than flaky.
+ * A same-size retry just times out again — the first full run lost 4,917 writes that way. Halving
+ * until it fits always terminates, and a single row that still will not go is reported by id.
+ */
+async function writeChunk(colors, ids) {
+  const body = JSON.stringify({ color_family: colors[0], color_families: colors.slice(1) })
+  // `color_family=is.null` in the WHERE is the whole safety story: a row that acquired a colour
+  // since the read simply does not match, and is left as the human left it.
+  const url = `${URL_}/rest/v1/gp_closet_items?id=in.(${ids.join(',')})&color_family=is.null`
+  const r = await fetch(url, { method: 'PATCH', headers: { ...H, Prefer: 'return=minimal,count=exact' }, body })
+  if (r.ok) {
+    // Content-Range carries how many rows the PATCH actually matched — a write RLS declines is
+    // HTTP 200 with an empty body (ADR-0108), so a count is asked for rather than assumed.
+    const n = Number((r.headers.get('content-range') || '').split('/')[1])
+    written += Number.isFinite(n) ? n : 0
+    return
+  }
+  const txt = (await r.text()).slice(0, 160)
+  if (ids.length === 1) { console.error(`  write failed (${colors.join('+')}) id=${ids[0]}: ${r.status} ${txt}`); failed++; return }
+  const mid = Math.ceil(ids.length / 2)
+  await writeChunk(colors, ids.slice(0, mid))
+  await writeChunk(colors, ids.slice(mid))
+}
+
 for (const [key, ids] of bySet) {
   const colors = key.split('|')
-  const body = JSON.stringify({ color_family: colors[0], color_families: colors.slice(1) })
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const chunk = ids.slice(i, i + CHUNK)
-    // `color_family=is.null` in the WHERE is the whole safety story: a row that acquired a colour
-    // since the read above simply does not match, and is left as the human left it.
-    const url = `${URL_}/rest/v1/gp_closet_items?id=in.(${chunk.join(',')})&color_family=is.null`
-    let r
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      r = await fetch(url, { method: 'PATCH', headers: { ...H, Prefer: 'return=representation' }, body })
-      if (r.ok) break
-      const txt = await r.text()
-      if (attempt === 3) { console.error(`  write failed (${key}):`, r.status, txt.slice(0, 200)); break }
-      await new Promise((res) => setTimeout(res, 400 * attempt))
-    }
-    if (!r.ok) { failed += chunk.length; continue }
-    // Ask for the rows back — a write RLS declines is HTTP 200 with an empty body (ADR-0108).
-    const back = await r.json()
-    written += back.length
-    if (back.length !== chunk.length) console.warn(`  ${key}: asked for ${chunk.length}, wrote ${back.length} (the rest already had a colour)`)
-  }
+  for (let i = 0; i < ids.length; i += CHUNK) await writeChunk(colors, ids.slice(i, i + CHUNK))
 }
 console.log(`\nwrote ${written} pieces; ${failed} failed`)
 process.exit(failed ? 1 : 0)

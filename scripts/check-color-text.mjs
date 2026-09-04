@@ -95,7 +95,7 @@ checked++
 const writes = [...src.matchAll(/method:\s*'PATCH'/g)]
 if (writes.length !== 1) failures.push(`${SCRIPT}: expected exactly 1 PATCH, found ${writes.length} — every write must carry the guard below.`)
 checked++
-if (!/id=in\.\(\$\{chunk\.join\(','\)\}\)&color_family=is\.null/.test(src)) {
+if (!/id=in\.\(\$\{ids\.join\(','\)\}\)&color_family=is\.null/.test(src)) {
   failures.push(
     `${SCRIPT}: the write no longer carries \`color_family=is.null\` in its WHERE clause.\n` +
     `      That clause is the ONLY thing stopping this from overwriting a colour a stylist or a\n` +
