@@ -261,6 +261,21 @@ export function useLookCategories(clientId: string | null) {
     if (error) { console.error('renameLook:', error.message); await fetchAll() }
   }, [fetchAll])
 
+  // Rename a capsule. The twin of renameLook — gp_boards.name is what the client's Capsules
+  // page renders, so the new name is live the moment this returns.
+  //
+  // Until now the ONLY way to change a capsule's title was Canvas -> Update Capsule, which
+  // rewrites the whole row (image, canvas_state, closet_item_ids) to change one string, and
+  // is unavailable entirely for capsules built with "Capsule from Looks" (no canvas_state) —
+  // those could never be renamed at all.
+  const renameCapsule = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, name: trimmed } : c)))
+    const { error } = await supabase.from('gp_boards').update({ name: trimmed }).eq('id', id)
+    if (error) { console.error('renameCapsule:', error.message); await fetchAll() }
+  }, [fetchAll])
+
   return {
     loading, categories, looks, capsules, draftCount,
     createCategory, renameCategory,
@@ -269,7 +284,7 @@ export function useLookCategories(clientId: string | null) {
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules,
-    renameLook,
+    renameLook, renameCapsule,
     refetch: fetchAll,
   }
 }

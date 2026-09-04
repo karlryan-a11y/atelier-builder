@@ -36,7 +36,7 @@ export function CategorizePanel() {
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules,
-    renameLook,
+    renameLook, renameCapsule,
   } = useLookCategories(activeClient?.id ?? null)
 
   // Transitioned pieces + looks for this client. Instantiated at the panel so the pink tab badge
@@ -200,6 +200,10 @@ export function CategorizePanel() {
     const name = prompt('Rename look', look.name)
     if (name !== null) renameLook(look.id, name)
   }
+  function handleRenameCapsule(capsule: TaggableCapsule) {
+    const name = prompt('Rename capsule', capsule.name)
+    if (name !== null) renameCapsule(capsule.id, name)
+  }
 
   const activeBrush = brush ?? categories[0]?.id ?? null
   const labelOf = useMemo(() => {
@@ -246,6 +250,33 @@ export function CategorizePanel() {
         onClick={(e) => { e.stopPropagation(); handleRenameLook(look) }}
         className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
         title="Rename this look everywhere, including the client lookbook"
+      >Rename</button>
+    </>
+  )
+
+  // The capsule twin of lookCardActions. ONE definition used by BOTH grids (the queue and the
+  // published "arrange" grid) — the capsule Edit button used to be written inline in the queue
+  // grid only, which is why a published capsule had no Edit and no capsule anywhere had Rename.
+  // A third grid gets these for free.
+  const capsuleCardActions = (capsule: TaggableCapsule) => (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); handleEditCapsule(capsule) }}
+        disabled={!capsule.canvasState || editingCapsuleId === capsule.id}
+        title={
+          capsule.canvasState
+            ? 'Open this capsule on the canvas to edit it'
+            : "This capsule was built with \"Capsule from Looks\" and can't be reopened in the canvas — edit the underlying looks instead"
+        }
+        className="mt-1 w-full flex items-center justify-center gap-1 py-1.5 text-[10px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+      >
+        <Pencil className="w-3 h-3" />
+        {editingCapsuleId === capsule.id ? 'Opening…' : 'Edit'}
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); handleRenameCapsule(capsule) }}
+        className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
+        title="Rename this capsule everywhere, including the client lookbook"
       >Rename</button>
     </>
   )
@@ -648,6 +679,7 @@ export function CategorizePanel() {
               renderActions={(item) => (
                 <>
                   {mode === 'looks' && lookCardActions(item as TaggableLook)}
+                  {mode === 'capsules' && capsuleCardActions(item as TaggableCapsule)}
                   {shareCardActions(item.id, shareToChat)}
                 </>
               )}
@@ -724,21 +756,7 @@ export function CategorizePanel() {
                             {item.published ? 'Remove from lookbook' : <><Send className="w-3 h-3" /> Add to lookbook</>}
                           </button>
                           {mode === 'looks' && lookCardActions(item as TaggableLook)}
-                          {mode === 'capsules' && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEditCapsule(item as TaggableCapsule) }}
-                              disabled={!(item as TaggableCapsule).canvasState || editingCapsuleId === item.id}
-                              title={
-                                (item as TaggableCapsule).canvasState
-                                  ? 'Open this capsule on the canvas to edit it'
-                                  : "This capsule was built with \"Capsule from Looks\" and can't be reopened in the canvas — edit the underlying looks instead"
-                              }
-                              className="mt-1 w-full flex items-center justify-center gap-1 py-1.5 text-[10px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              {editingCapsuleId === item.id ? 'Opening…' : 'Edit'}
-                            </button>
-                          )}
+                          {mode === 'capsules' && capsuleCardActions(item as TaggableCapsule)}
                           {shareCardActions(item.id, shareToChat)}
                         </>
                       )}
