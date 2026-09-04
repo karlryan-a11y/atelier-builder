@@ -3,7 +3,13 @@ import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 
 // A light record of a look for the "styled in" popup — just what we need to show it.
-export interface LookLite { id: string; name: string; image: string | null }
+//
+// `published` is load-bearing, not decoration: styledCoverage() counts a piece as styled ONLY if
+// one of its looks is published, so dropping this column from the SELECT below would silently
+// promote every draft look to "styled" and inflate the number on every client. That is ADR-0103
+// exactly (a column left out of a SELECT answers every question with undefined), so
+// scripts/check-styled-coverage.mjs asserts the column is still selected.
+export interface LookLite { id: string; name: string; image: string | null; published: boolean }
 
 // Builds a reverse index: closet_item_id → the looks that item appears in. Reads EVERY one of the
 // client's looks (both 'goodpix' imports and 'builder' looks — the app's other looks hook filters
@@ -27,7 +33,7 @@ export function useItemLookUsage(clientId: string | null) {
           // gp_looks base (not the `looks` view) so transitioned looks can be excluded — the view
           // doesn't expose transitioned_at. "Styled in N looks" must not count a pulled look. (014)
           .from('gp_looks')
-          .select('id, name, archived, thumbnail_url, raw, closet_item_ids')
+          .select('id, name, archived, published, thumbnail_url, raw, closet_item_ids')
           .eq('client_id', clientId)
           .is('transitioned_at', null)
           // Unique stable order is required for paginated .range() — without it the page boundary
@@ -50,6 +56,7 @@ export function useItemLookUsage(clientId: string | null) {
           id: l.id as string,
           name: (l.name as string) || 'Untitled look',
           image: rawImg ? proxyImageUrl(rawImg) : null,
+          published: l.published === true,
         }
         const ids = Array.isArray(l.closet_item_ids) ? (l.closet_item_ids as string[]) : []
         for (const itemId of ids) {

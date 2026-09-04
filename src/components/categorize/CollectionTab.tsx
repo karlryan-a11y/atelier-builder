@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
+import { styledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
@@ -172,6 +173,10 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
   }, [items, q, filterCategories, categoriesByItem])
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
+  // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
+  // "how much of her shoe collection is styled". Costs no read: every piece and every look is
+  // already on this screen (ADR-0105).
+  const coverage = useMemo(() => styledCoverage(baseVisible.map((i) => i.id), lookUsage), [baseVisible, lookUsage])
   const visible = useMemo(
     () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
     [baseVisible, unconfirmedOnly],
@@ -466,6 +471,16 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
         <span className="text-[11px] tracking-[0.06em] text-[#3f7d55]" title="Pieces confirmed against the Google Drive folder">
           {verifiedCount}/{baseVisible.length} confirmed on Drive
         </span>
+        {/* Styled coverage. Published only: a look still in draft is not on her lookbook, so a
+            piece in one has not been styled as far as she is concerned. Maegan, 2026-09-04. */}
+        <span
+          className={`text-[11px] tracking-[0.06em] whitespace-nowrap ${coverage.draftOnly > 0 ? 'text-[#9a6b3f]' : 'text-[#8a7a6a]'}`}
+          title={coverage.total === 0
+            ? 'Nothing in this collection yet'
+            : `${coverage.styled} of ${coverage.total} pieces appear in at least one PUBLISHED look. ${coverage.draftOnly} appear only in looks that were never published, so ${clientFirst} cannot see them. ${coverage.unstyled} have never been in a look.`}
+        >
+          {coverage.label}
+        </span>
         <button
           onClick={() => setUnconfirmedOnly((v) => !v)}
           className={`text-[10px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border transition-colors ${unconfirmedOnly ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'text-[#888] border-[#E8E4DF] hover:text-[#1A1A1A]'}`}
@@ -613,13 +628,22 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
                   {(() => {
                     const looks = lookUsage.get(item.id) ?? []
                     if (looks.length === 0) return <p className="text-[10px] text-[#c4c0ba] mt-1.5">Not yet styled</p>
+                    // The card must agree with the header. A piece whose only looks are drafts is
+                    // counted UNSTYLED above, so it may not read "Styled in 3 looks" here.
+                    const pub = looks.filter((l) => l.published).length
+                    const draft = looks.length - pub
                     return (
                       <button
                         onClick={() => setLooksModal({ name: displayName(item) || 'Item', looks })}
-                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#8a7a6a] hover:text-[#1A1A1A] transition-colors"
-                        title="See the looks this item is styled in"
+                        className={`mt-1.5 inline-flex items-center gap-1 text-[11px] transition-colors hover:text-[#1A1A1A] ${pub === 0 ? 'text-[#9a6b3f]' : 'text-[#8a7a6a]'}`}
+                        title={pub === 0
+                          ? `Only in ${draft} unpublished look${draft === 1 ? '' : 's'}, so ${clientFirst} cannot see this piece styled yet`
+                          : 'See the looks this item is styled in'}
                       >
-                        <Layers className="h-3 w-3" /> Styled in {looks.length} look{looks.length === 1 ? '' : 's'}
+                        <Layers className="h-3 w-3" />
+                        {pub === 0
+                          ? <>In {draft} draft look{draft === 1 ? '' : 's'}</>
+                          : <>Styled in {pub} look{pub === 1 ? '' : 's'}{draft > 0 ? ` · ${draft} draft` : ''}</>}
                       </button>
                     )
                   })()}
@@ -673,7 +697,15 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
           <div className="bg-white rounded-sm max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#E8E4DF]">
               <div>
-                <p className="text-[10px] tracking-[0.25em] uppercase text-[#aaa]">Styled in {looksModal.looks.length} look{looksModal.looks.length === 1 ? '' : 's'}</p>
+                {(() => {
+                  const pub = looksModal.looks.filter((l) => l.published).length
+                  const draft = looksModal.looks.length - pub
+                  return (
+                    <p className="text-[10px] tracking-[0.25em] uppercase text-[#aaa]">
+                      Styled in {pub} look{pub === 1 ? '' : 's'}{draft > 0 ? ` · ${draft} draft` : ''}
+                    </p>
+                  )
+                })()}
                 <p className="text-[15px] text-[#1A1A1A] mt-0.5">{looksModal.name}</p>
               </div>
               <button onClick={() => setLooksModal(null)} className="text-[#999] hover:text-[#1A1A1A]" aria-label="Close"><X className="h-5 w-5" /></button>
@@ -687,7 +719,10 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
                         ? <img src={lk.image} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
                         : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
                     </div>
-                    <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2">{lk.name}</p>
+                    <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2">
+                      {lk.name}
+                      {!lk.published && <span className="ml-1.5 text-[10px] tracking-[0.14em] uppercase text-[#9a6b3f]">Draft</span>}
+                    </p>
                   </div>
                 ))}
               </div>
