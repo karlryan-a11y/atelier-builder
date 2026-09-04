@@ -23,7 +23,7 @@
  * a failure, not a pass.
  */
 import { readFileSync } from 'node:fs'
-import { selectionOnPress, shouldClearSelection } from '../src/lib/canvasSelection.ts'
+import { selectionOnPress, shouldClearSelection, ringOffsets } from '../src/lib/canvasSelection.ts'
 
 const failures = []
 let checked = 0
@@ -73,7 +73,7 @@ for (const lineNo of clearSites) {
     )
   }
 }
-if (!/pressedEmpty\.current = e\.target === e\.target\.getStage\(\)/.test(src)) {
+if (!/pressedEmpty\.current = true/.test(src) || !/pressedEmpty\.current = false/.test(src)) {
   checked++
   failures.push(`${FILE}: nothing records whether the press began on empty board`)
 }
@@ -117,6 +117,40 @@ press('touch press has no button', ['a'], 'b', { button: undefined }, 'replace')
 press('right button', ['a'], 'b', { button: 2 }, 'ignore')
 press('middle button', ['a'], 'b', { button: 1 }, 'ignore')
 
+/* ---------- 3. The tolerance ring ---------- */
+
+// A press on a visible garment used to resolve to nothing 16.6% of the time, because the hit
+// area is an alpha mask rasterised at on-screen scale and thin detail comes out with no
+// coverage. The ring is what closes that; it must stay small, ordered nearest-first, and must
+// not re-probe the centre, which is what already missed.
+const ring = ringOffsets(4)
+checked++
+if (ring.length === 0) failures.push('ringOffsets(4) is empty - a press that misses would still give up')
+checked++
+if (ring.some((p) => p.dx === 0 && p.dy === 0)) failures.push('ringOffsets includes the centre, which has already missed')
+checked++
+if (ring.some((p) => Math.hypot(p.dx, p.dy) > 4 + 1e-9)) {
+  failures.push('ringOffsets(4) probes further than 4px - that is "find her something", not "she was aiming at it"')
+}
+checked++
+const radii = ring.map((p) => +Math.hypot(p.dx, p.dy).toFixed(6))
+if (radii.some((r, i) => i > 0 && r < radii[i - 1])) failures.push('ringOffsets is not ordered nearest-first')
+checked++
+if (ringOffsets(0).length !== 0) failures.push('ringOffsets(0) should probe nothing')
+
+checked++
+if (!/pickNodeNearPointer/.test(src) || !/ringOffsets\(TOLERANCE_PX\)/.test(src)) {
+  failures.push(`${FILE}: the tolerance ring is not wired into the press - a press that misses still gives up`)
+}
+checked++
+if (!/if \(!pressBeganOnEmptyBoard\(e\)\) return/.test(src)) {
+  failures.push(`${FILE}: the mouse press does not go through pressBeganOnEmptyBoard`)
+}
+checked++
+if (!/onTouchStart=\{\(e\) => \{ pressBeganOnEmptyBoard\(e\) \}\}/.test(src)) {
+  failures.push(`${FILE}: the touch press does not go through pressBeganOnEmptyBoard, so an iPad gets no tolerance`)
+}
+
 /* ---------- report ---------- */
 
 if (failures.length) {
@@ -127,5 +161,5 @@ if (failures.length) {
 }
 console.log(
   `check-canvas-selection: PASS - ${checked} checks over ${declared} selectable node type(s), ` +
-  `${clearSites.length} selection-clearing site(s) and 15 replayed gestures.`
+  `${clearSites.length} selection-clearing site(s), 15 replayed gestures and a ${ring.length}-point tolerance ring.`
 )

@@ -6,8 +6,9 @@ import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform } from './CanvasAdapter'
 import { CanvasToolbar } from './CanvasToolbar'
-import { Grid3X3 } from 'lucide-react'
-import { selectionOnPress, shouldClearSelection } from '@/lib/canvasSelection'
+import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
+import { selectionOnPress, shouldClearSelection, ringOffsets } from '@/lib/canvasSelection'
+import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM } from '@/lib/canvasView'
 import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
@@ -298,7 +299,26 @@ export function LookCanvas() {
     measure()
     return () => ro.disconnect()
   }, [])
-  const SCALE = Math.max(0.05, Math.min((avail.w - 24) / CW, (avail.h - 24) / CH))
+  // FIT is the whole board on screen. Zoom multiplies it, and the board then scrolls inside
+  // its container. Everything downstream reads the LIVE stage scale, so nothing has to know
+  // this is two numbers rather than one.
+  const FIT = Math.max(0.05, Math.min((avail.w - 24) / CW, (avail.h - 24) / CH))
+  const [zoom, setZoom] = useState<number>(MIN_ZOOM)
+  const SCALE = FIT * zoom
+
+  // Trackpad pinch arrives as ctrl+wheel. React attaches wheel at the root as passive, so
+  // preventDefault there is ignored and the browser zooms the whole page instead of the board.
+  useEffect(() => {
+    const el = fitRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      setZoom((z) => nextZoom(z, e.deltaY < 0 ? 1 : -1))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Read every node's LIVE transform off the stage and write back anything the state does not
   // already say. This is the backstop for the whole class of "it looked right when I saved it"
@@ -491,6 +511,21 @@ export function LookCanvas() {
         useCanvasStore.getState().redo()
         return
       }
+      if (mod && (key === '=' || key === '+')) {
+        e.preventDefault()
+        setZoom((z) => nextZoom(z, 1))
+        return
+      }
+      if (mod && key === '-') {
+        e.preventDefault()
+        setZoom((z) => nextZoom(z, -1))
+        return
+      }
+      if (mod && key === '0') {
+        e.preventDefault()
+        setZoom(MIN_ZOOM)
+        return
+      }
       if (mod && key === 'a') {
         e.preventDefault()
         useCanvasStore.getState().setSelectedNodeIds(s.nodes.map((n) => n.id))
@@ -542,10 +577,66 @@ export function LookCanvas() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // Fires on the PRESS. Konva only fires `click` when the shape under the pointer at press is
+  // the same shape at release, and with a pixel-perfect hit mask on a dense capsule a two-pixel
+  // drift makes those disagree, so no click arrives at all. The press always arrives.
+  const handleNodeSelect = useCallback(
+    (nodeId: string, e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+      const evt = e.evt as MouseEvent
+      const outcome = selectionOnPress(useCanvasStore.getState().selectedNodeIds, nodeId, {
+        shiftKey: evt.shiftKey,
+        metaKey: evt.metaKey,
+        button: 'button' in evt ? evt.button : undefined,
+      })
+      switch (outcome.action) {
+        case 'ignore':
+        case 'keep-group':
+          return
+        case 'toggle':
+          toggleNodeSelection(outcome.nodeId)
+          return
+        case 'replace':
+          setSelectedNodeIds([outcome.nodeId])
+      }
+    },
+    [setSelectedNodeIds, toggleNodeSelection]
+  )
+
+  // A press that lands on nothing looks a few pixels around the pointer before giving up.
+  // A garment's hit area is an alpha mask rasterised at on-screen scale, so thin detail (a
+  // chain strap, a heel, a spaghetti strap) comes out with no coverage: visible, unclickable.
+  // Measured over every visible garment pixel of the Melbourne + Sydney capsule, pressing the
+  // garment resolved to nothing 16.6% of the time; this ring takes that to 0.5%.
+  const TOLERANCE_PX = 4
+  const pickNodeNearPointer = useCallback(() => {
+    const stage = stageRef.current
+    if (!stage) return null
+    const pos = stage.getPointerPosition()
+    if (!pos) return null
+    const known = new Set(useCanvasStore.getState().state.nodes.map((n) => n.id))
+    for (const { dx, dy } of ringOffsets(TOLERANCE_PX)) {
+      const id = stage.getIntersection({ x: pos.x + dx, y: pos.y + dy })?.id()
+      if (id && known.has(id)) return id
+    }
+    return null
+  }, [])
+
+  // Records where the press began, and answers "was this really empty board?". False when the
+  // press was on a piece, and false when it was near enough to one that we selected it instead.
+  const pressBeganOnEmptyBoard = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (e.target !== e.target.getStage()) { pressedEmpty.current = false; return false }
+      const nearby = pickNodeNearPointer()
+      if (nearby) { pressedEmpty.current = false; handleNodeSelect(nearby, e); return false }
+      pressedEmpty.current = true
+      return true
+    },
+    [pickNodeNearPointer, handleNodeSelect]
+  )
+
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      pressedEmpty.current = e.target === e.target.getStage()
-      if (!pressedEmpty.current) return
+      if (!pressBeganOnEmptyBoard(e)) return
       const stage = e.target.getStage()
       if (!stage) return
       const pos = stage.getPointerPosition()
@@ -556,7 +647,7 @@ export function LookCanvas() {
       isDraggingSelection.current = false
       setSelectionRect(null)
     },
-    []
+    [pressBeganOnEmptyBoard]
   )
 
   const handleStageMouseMove = useCallback(
@@ -614,31 +705,6 @@ export function LookCanvas() {
       setSelectionRect(null)
     },
     [state.nodes, selectionRect, setSelectedNodeIds]
-  )
-
-  // Fires on the PRESS. Konva only fires `click` when the shape under the pointer at press is
-  // the same shape at release, and with a pixel-perfect hit mask on a dense capsule a two-pixel
-  // drift makes those disagree, so no click arrives at all. The press always arrives.
-  const handleNodeSelect = useCallback(
-    (nodeId: string, e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-      const evt = e.evt as MouseEvent
-      const outcome = selectionOnPress(useCanvasStore.getState().selectedNodeIds, nodeId, {
-        shiftKey: evt.shiftKey,
-        metaKey: evt.metaKey,
-        button: 'button' in evt ? evt.button : undefined,
-      })
-      switch (outcome.action) {
-        case 'ignore':
-        case 'keep-group':
-          return
-        case 'toggle':
-          toggleNodeSelection(outcome.nodeId)
-          return
-        case 'replace':
-          setSelectedNodeIds([outcome.nodeId])
-      }
-    },
-    [setSelectedNodeIds, toggleNodeSelection]
   )
 
   // Group resize: when 2+ nodes are selected, ONE box wraps them all and scales/rotates them
@@ -704,8 +770,11 @@ export function LookCanvas() {
     // Seamless, box-free overlay: transparent, borderless, matches the text's font,
     // weight, decoration, alignment and colour so editing looks in-place.
     textarea.style.position = 'absolute'
-    textarea.style.top = `${stageBox.top + textPosition.y * scale}px`
-    textarea.style.left = `${stageBox.left + textPosition.x * scale}px`
+    // absolutePosition() already includes the stage scale, so it is screen offset from the
+    // stage origin. Multiplying by `scale` again put the box at a fraction of the right place;
+    // the sizes below DO need it, because width/height/fontSize are node-local.
+    textarea.style.top = `${stageBox.top + textPosition.y}px`
+    textarea.style.left = `${stageBox.left + textPosition.x}px`
     textarea.style.width = `${(textKonva.width() * scale) + 4}px`
     textarea.style.height = `${(textKonva.height() * scale) + 2}px`
     textarea.style.fontSize = `${node.font_size * scale}px`
@@ -794,6 +863,31 @@ export function LookCanvas() {
     >
       {/* Toolbar area — sits in the gray zone above the canvas */}
       <div className="w-full flex items-center justify-center py-3 shrink-0 relative">
+        <div className="absolute left-3 flex items-center gap-1">
+          <button
+            onClick={() => setZoom((z) => nextZoom(z, -1))}
+            disabled={zoom <= MIN_ZOOM}
+            className="p-1.5 rounded-sm border bg-white border-border text-text-muted hover:bg-tile disabled:opacity-30 transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setZoom(MIN_ZOOM)}
+            className="px-2 py-1 rounded-sm border bg-white border-border text-text-muted hover:bg-tile text-[10px] tabular-nums tracking-wider transition-colors"
+            title="Fit the whole board"
+          >
+            {zoomLabel(zoom)}
+          </button>
+          <button
+            onClick={() => setZoom((z) => nextZoom(z, 1))}
+            disabled={zoom >= MAX_ZOOM}
+            className="p-1.5 rounded-sm border bg-white border-border text-text-muted hover:bg-tile disabled:opacity-30 transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <CanvasToolbar />
         <button
           onClick={() => setShowGrid(!showGrid)}
@@ -808,9 +902,9 @@ export function LookCanvas() {
 
       {/* Canvas — the white look area. min-h-0 lets the flex child shrink so the
           board scales to fit instead of overflowing/clipping at the bottom. */}
-      <div ref={fitRef} className="flex-1 flex items-center justify-center pb-4 min-h-0 w-full">
+      <div ref={fitRef} className="flex-1 flex pb-4 min-h-0 w-full overflow-auto">
         <div
-          className="relative border border-border rounded bg-white shadow-sm"
+          className="relative m-auto shrink-0 border border-border rounded bg-white shadow-sm"
           style={{ width: CW * SCALE, height: CH * SCALE }}
         >
         <Stage
@@ -822,7 +916,7 @@ export function LookCanvas() {
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
-          onTouchStart={(e) => { pressedEmpty.current = e.target === e.target.getStage() }}
+          onTouchStart={(e) => { pressBeganOnEmptyBoard(e) }}
           onTap={(e) => {
             if (shouldClearSelection({
               pressedEmpty: pressedEmpty.current,

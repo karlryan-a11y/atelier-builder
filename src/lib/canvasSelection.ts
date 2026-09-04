@@ -70,3 +70,26 @@ export function selectionOnPress(
   if (current.length > 1 && current.includes(nodeId)) return { action: 'keep-group' }
   return { action: 'replace', nodeId }
 }
+
+/**
+ * Offsets to probe around a press that landed on nothing, nearest first, excluding the centre
+ * (the centre is what already missed).
+ *
+ * Why this is needed at all: a garment's hit area is an alpha mask rasterised at on-screen
+ * scale, so thin detail comes out of the rasteriser with no coverage. A chain strap, a heel, a
+ * spaghetti strap is visible and unclickable. Measured over every visible garment pixel of the
+ * Melbourne + Sydney packing capsule, pressing the garment resolved to nothing 16.6% of the
+ * time. Probing a 4px ring takes that to 0.5%, and 8px to 0%.
+ *
+ * Kept deliberately small. This is "she was aiming at the piece", not "find her something".
+ */
+export function ringOffsets(maxRadius: number, step = 2, spokes = 16): { dx: number; dy: number }[] {
+  const out: { dx: number; dy: number }[] = []
+  for (let radius = step; radius <= maxRadius; radius += step) {
+    for (let spoke = 0; spoke < spokes; spoke++) {
+      const angle = (spoke * 2 * Math.PI) / spokes
+      out.push({ dx: radius * Math.cos(angle), dy: radius * Math.sin(angle) })
+    }
+  }
+  return out
+}
