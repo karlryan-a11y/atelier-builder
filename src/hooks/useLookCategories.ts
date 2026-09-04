@@ -180,8 +180,18 @@ export function useLookCategories(clientId: string | null) {
 
     if (plan.action === 'delete') {
       setCategories((prev) => prev.filter((c) => c.id !== id))
-      const { error } = await supabase.from('look_categories').delete().eq('id', id)
-      if (error) { console.error('deleteCategory:', error.message); await fetchAll() }
+      // `.select()` so we see what was actually removed. A DELETE that RLS declines comes back
+      // as zero rows and NO error, which would leave the category sitting on the client's site
+      // while the stylist watched it vanish from her rail. Whether `authenticated` holds a
+      // DELETE policy on this table is not something the app can know, so it does not assume:
+      // if nothing was deleted, hide it instead. Either way the category leaves her lookbook.
+      const { data, error } = await supabase.from('look_categories').delete().eq('id', id).select('id')
+      if (error || !data || data.length === 0) {
+        if (error) console.error('deleteCategory fell back to hiding:', error.message)
+        const { error: hideErr } = await supabase.from('look_categories').update({ is_hidden: true }).eq('id', id)
+        if (hideErr) { console.error('deleteCategory:', hideErr.message); await fetchAll() }
+        else setCategories((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { ...cat, is_hidden: true }]))
+      }
     } else {
       setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_hidden: true } : c)))
       const { error } = await supabase.from('look_categories').update({ is_hidden: true }).eq('id', id)
