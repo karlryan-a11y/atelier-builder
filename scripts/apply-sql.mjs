@@ -31,15 +31,21 @@ if (!password) {
   process.exit(1)
 }
 
+// Supabase moved projects onto `aws-1-<region>` poolers. This list only had `aws-0-`,
+// so on 2026-09-04 every region answered "tenant not found" and the script reported
+// "no pooler region accepted the connection" — which reads as a dead host and is
+// actually a hostname prefix. This project answers on aws-1-us-east-1. Prefixes first,
+// so the working one is found in one attempt rather than twelve.
+const PREFIXES = ['aws-1', 'aws-0']
 const REGIONS = [
   'us-east-1', 'us-west-1', 'us-east-2', 'us-west-2',
   'eu-west-1', 'eu-west-2', 'eu-central-1',
   'ap-southeast-1', 'ap-northeast-1', 'ap-south-1', 'sa-east-1',
-]
+].flatMap((r) => PREFIXES.map((p) => `${p}-${r}`))
 
 for (const region of REGIONS) {
   const client = new pg.Client({
-    connectionString: `postgresql://postgres.lejwzpwntjaleqgrcakq:${password}@aws-0-${region}.pooler.supabase.com:5432/postgres`,
+    connectionString: `postgresql://postgres.lejwzpwntjaleqgrcakq:${password}@${region}.pooler.supabase.com:5432/postgres`,
     ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 5000,
   })
