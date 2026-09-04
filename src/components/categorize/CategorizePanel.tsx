@@ -13,18 +13,19 @@ import type { LookCanvasState } from '@/types/canvas'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
 import { ResidencesTab } from './ResidencesTab'
+import { NestingTab } from './NestingTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import type { TransitionedLook } from '@/hooks/useTransitions'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
-import { hasResidences } from '@/lib/residences'
+import { hasResidences, residencesFrom } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
-type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'audit' | 'review' | 'transitions'
+type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 export function CategorizePanel() {
@@ -46,8 +47,13 @@ export function CategorizePanel() {
 
   // Residence review queue — only meaningful for clients with homes configured, so the
   // tab itself is gated below on the taxonomy rather than shown empty to everyone.
-  const residenceReview = useResidenceReview(activeClient?.id ?? null)
+  const residenceReview = useResidenceReview(activeClient?.id ?? null, categories)
   const showResidences = hasResidences(categories)
+  // slug -> her label, for every surface that has to know a home from a garment type.
+  const residenceSlugs = useMemo(
+    () => new Map(residencesFrom(categories).map((c) => [c.slug, c.label ?? c.slug])),
+    [categories],
+  )
 
   const [mode, setMode] = useState<Mode>('looks')
   const [brush, setBrush] = useState<string | null>(null)   // category ID
@@ -457,6 +463,21 @@ export function CategorizePanel() {
                 categories so search works, and fix color mismatches. Use the pills on the right.
               </p>
             </>
+          ) : mode === 'nesting' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Nesting</p>
+              <p className="text-[10px] text-[#888] leading-relaxed">
+                Put a category underneath another one, so her Collection reads Outerwear with Jackets
+                and Coats under it instead of one long list.
+              </p>
+              <p className="text-[10px] text-[#888] leading-relaxed mt-3">
+                A heading is a filter too. Tapping it returns everything underneath as well as the
+                pieces filed on it directly.
+              </p>
+              <p className="text-[10px] text-[#888] leading-relaxed mt-3">
+                Nothing is filled in for you, and anything left on Top level stays where it is.
+              </p>
+            </>
           ) : mode === 'collection' ? (
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
@@ -646,7 +667,7 @@ export function CategorizePanel() {
             </>
           )}
         </div>
-        {mode !== 'collection' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
+        {mode !== 'collection' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -668,7 +689,7 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'residences', 'capsules', 'collection', 'audit', 'review', 'transitions'] as const)
+            {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
               .filter((m) => m !== 'residences' || showResidences)
               .map((m) => (
               <button
@@ -745,10 +766,13 @@ export function CategorizePanel() {
           </ErrorBoundary>
         ) : (
         <div className="flex-1 overflow-y-auto p-6">
-          {mode === 'collection' ? (
+          {mode === 'nesting' ? (
+            <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
+          ) : mode === 'collection' ? (
             <CollectionTab
               clientId={activeClient?.id ?? null}
               filterCategories={activeGarmentCats}
+              residenceSlugs={residenceSlugs}
               onCategoryCounts={onGarmentCounts}
               onTransitioned={transitions.refetch}
             />

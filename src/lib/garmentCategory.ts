@@ -6,6 +6,7 @@
 // override do we fall back to tag/name detection. Custom categories are "created"
 // simply by assigning an item to a new slug — no separate registry table needed.
 import { CATEGORY_LABELS, resolveCategory } from './categorize'
+import { withAncestors } from './categoryNesting'
 import { displayName, type ClosetItem } from './images'
 
 /** A fixed-taxonomy slug (in categorize.ts), e.g. 'dresses', 'hats'. */
@@ -42,8 +43,21 @@ export function primaryCategoryOf(item: ClosetItem, tagNames: string[] = []): st
  * ALL categories an item belongs to: its primary garment category first, then any
  * additional "Also in" groupings from `custom_categories[]` (e.g. an item that is a
  * Top AND in the client's "49ers" custom category). Deduped; empties dropped.
+ *
+ * `parentBySlug` is the client's nesting tree (ADR-0113). With one, a piece filed under
+ * Earrings is also findable under Jewelry, so the builder's filters agree with the
+ * lookbook's. Without one — every client until a stylist nests her categories — this
+ * returns exactly what it returned before.
+ *
+ * KEEP IN STEP WITH THE TWIN: atelier-looks' `categoriesOf` takes `exclude` in this
+ * position and `parentBySlug` after it. The types differ (Set vs Map) so copying a call
+ * across repos wrong is a compile error, not a wrong answer on a client's page.
  */
-export function categoriesOf(item: ClosetItem, tagNames: string[] = []): string[] {
+export function categoriesOf(
+  item: ClosetItem,
+  tagNames: string[] = [],
+  parentBySlug?: Map<string, string>,
+): string[] {
   const out: string[] = []
   const primary = primaryCategoryOf(item, tagNames)
   if (primary) out.push(primary)
@@ -51,7 +65,8 @@ export function categoriesOf(item: ClosetItem, tagNames: string[] = []): string[
     const slug = slugifyCategory(String(c))
     if (slug && !out.includes(slug)) out.push(slug)
   }
-  return out
+  // Ancestors last, so out[0] stays the piece's own primary category.
+  return parentBySlug?.size ? withAncestors(out, parentBySlug) : out
 }
 
 /** Turn a typed label into a stable slug, e.g. "Rompers" -> "rompers". */
