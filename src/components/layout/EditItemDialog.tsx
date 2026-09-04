@@ -3,7 +3,6 @@ import { X, Save, Eraser, Upload, Archive, RotateCw, Plus, Star } from 'lucide-r
 import type { ClosetItem } from '@/lib/images'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
-import { isResidenceSlug } from '@/lib/residences'
 import { COLOR_ORDER, COLOR_SWATCH, MULTI_SWATCH, CUSTOM_SWATCH, colorsOf, normalizeColorName } from '@/lib/colorFamily'
 
 const LIGHT_COLORS = new Set(['White', 'Ivory', 'Blush', 'Light Blue', 'Yellow'])
@@ -22,6 +21,16 @@ interface EditItemDialogProps {
   saving: boolean
   /** Custom categories already used by this client, offered alongside the fixed ones. */
   customCategories?: { slug: string; label: string }[]
+  /**
+   * The slugs of this client's HOMES. A home is not a garment type, so naming one in
+   * Category is redirected to "Also in" rather than overwriting what the piece IS. Passed in
+   * because which slugs are homes is a property of her rows, not of the word (ADR-0111):
+   * "aspen" is a home for one client and an ordinary category for another. A Map rather than
+   * a Set so the warning can call the home what SHE calls it: the slug is permanent and the
+   * label is hers to rename, so labelForCategory would say "Chicago" long after she renamed
+   * it to Lake House.
+   */
+  residenceSlugs?: Map<string, string>
   /** CORS-safe URL of the item's current image, shown as a preview so image tools (rotate) are legible. */
   imageUrl?: string | null
   /** When true, show the "Also in" multi-category editor (writes custom_categories[]). Only the
@@ -52,7 +61,7 @@ interface EditItemDialogProps {
   clientFirst?: string
 }
 
-export function EditItemDialog({ item, saving, customCategories = [], imageUrl, enableMultiCategory = false, enableMultiColor = false, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = false, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
   const clientOwns = (f: string) => (clientEditedFields ?? []).includes(f)
   const who = clientFirst || 'The client'
@@ -108,8 +117,8 @@ export function EditItemDialog({ item, saving, customCategories = [], imageUrl, 
     // A home is not a garment type. Typing one into Category replaces what the piece IS, so the
     // coat stops being Outerwear everywhere — the mistake that cost 119 of Margaux Ellery's
     // pieces their garment type. Move it to "Also in", where it is additive, and say so.
-    if (isResidenceSlug(finalCategory)) {
-      const label = labelForCategory(finalCategory)
+    if (residenceSlugs?.has(finalCategory)) {
+      const label = residenceSlugs.get(finalCategory) || labelForCategory(finalCategory)
       alert(
         `"${label}" is a home, not a garment type.\n\n` +
         `Category replaces what this piece IS — it would drop out of Tops, Shoes and Outerwear.\n\n` +

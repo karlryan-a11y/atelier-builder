@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { residenceOfItem, type ResidenceSlug } from '@/lib/residences'
+import { residenceOfItem, residencesFrom, type ResidenceCategoryRow } from '@/lib/residences'
 
 /**
  * The residence review queue for a multi-residence client.
@@ -26,23 +26,34 @@ import { residenceOfItem, type ResidenceSlug } from '@/lib/residences'
 
 export interface ResidenceProposal {
   lookId: string
-  slugs: ResidenceSlug[]
+  slugs: string[]
   confidence: 'high' | 'medium' | 'low'
   reason: string | null
 }
 
 /** Per-residence count of pieces in a look the stylist already placed in that home. */
-export type Provenance = Partial<Record<ResidenceSlug, number>>
+export type Provenance = Partial<Record<string, number>>
 
-export function useResidenceReview(clientId: string | null) {
+export function useResidenceReview(clientId: string | null, categories: ResidenceCategoryRow[] = []) {
   const [proposals, setProposals] = useState<Map<string, ResidenceProposal>>(new Map())
-  const [itemResidence, setItemResidence] = useState<Map<string, ResidenceSlug[]>>(new Map())
+  const [itemResidence, setItemResidence] = useState<Map<string, string[]>>(new Map())
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+
+  // A STRING, not the array. `categories` is a fresh identity on every parent render, so
+  // depending on it directly would make fetchAll new every render and refetch in a loop. This
+  // changes only when her homes actually change, which is exactly when provenance must be
+  // recomputed -- including when a stylist renames one.
+  const residenceKey = useMemo(
+    () => residencesFrom(categories).map((c) => `${c.slug}:${c.label ?? ''}`).sort().join('|'),
+    [categories],
+  )
 
   const fetchAll = useCallback(async () => {
     if (!clientId) { setProposals(new Map()); setItemResidence(new Map()); return }
     setLoading(true)
+    // Rebuilt from the key so the closure does not capture a stale array.
+    const cats = residencesFrom(categories)
 
     const [propRes, itemRes] = await Promise.all([
       supabase
@@ -73,19 +84,20 @@ export function useResidenceReview(clientId: string | null) {
 
     setProposals(new Map((propRes.data ?? []).map((r: any) => [r.look_id, {
       lookId: r.look_id,
-      slugs: (r.proposed_slugs ?? []) as ResidenceSlug[],
+      slugs: (r.proposed_slugs ?? []) as string[],
       confidence: r.confidence,
       reason: r.reason,
     }])))
 
-    const placed = new Map<string, ResidenceSlug[]>()
+    const placed = new Map<string, string[]>()
     for (const it of itemRes) {
-      const res = residenceOfItem(it)
+      const res = residenceOfItem(it, cats)
       if (res.length) placed.set(it.id, res)
     }
     setItemResidence(placed)
     setLoading(false)
-  }, [clientId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- residenceKey stands in for `categories`
+  }, [clientId, residenceKey])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 

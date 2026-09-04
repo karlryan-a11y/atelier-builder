@@ -5,7 +5,6 @@ import { styledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
-import { isResidenceSlug } from '@/lib/residences'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
@@ -26,9 +25,14 @@ const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', c
 // Each item's garment category is resolved with the SAME resolver as the lookbook + Style canvas
 // (override → tag → name), so GoodPix carry-overs categorize too. Reports counts up for the rail
 // filter and accepts a garment-category filter.
-export function CollectionTab({ clientId, filterCategories, onCategoryCounts, onTransitioned }: {
+export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onTransitioned }: {
   clientId: string | null
   filterCategories?: Set<string>
+  /**
+   * slug -> label for this client's HOMES (ADR-0111). Comes from her look_categories rows,
+   * because which slugs are homes is a property of the row and not of the word.
+   */
+  residenceSlugs?: Map<string, string>
   onCategoryCounts?: (counts: Map<string, number>) => void
   /** Called after a stylist transitions a piece out, so the Transitions tab + badge refresh live. */
   onTransitioned?: () => void
@@ -69,8 +73,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
   // additive and destroys nothing — and say so rather than silently doing something else.
   async function bulkSetCategory(slug: string) {
     if (selected.size === 0) return
-    if (isResidenceSlug(slug)) {
-      const label = labelForCategory(slug)
+    if (residenceSlugs?.has(slug)) {
+      const label = residenceSlugs.get(slug) || labelForCategory(slug)
       alert(
         `"${label}" is a home, not a garment type.\n\n` +
         `"Set category" replaces what a piece IS — filing these under ${label} would take them ` +
@@ -665,8 +669,8 @@ export function CollectionTab({ clientId, filterCategories, onCategoryCounts, on
         </div>
       )}
 
-      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} onClose={() => setAdding(false)} onAdded={refetch} />}
-      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
+      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
+      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
 
       {confirmState && (() => {
         const name = displayName(confirmState.item) || 'this piece'

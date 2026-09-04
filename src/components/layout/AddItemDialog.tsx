@@ -3,7 +3,6 @@ import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
-import { isResidenceSlug } from '@/lib/residences'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s]) => s !== 'other')
@@ -41,11 +40,21 @@ interface Props {
   clientId: string
   clientName?: string
   customCategories?: { slug: string; label: string }[]
+  /**
+   * The slugs of this client's HOMES. A home is not a garment type, so naming one in
+   * Category is redirected to "Also in" rather than overwriting what the piece IS. Passed in
+   * because which slugs are homes is a property of her rows, not of the word (ADR-0111):
+   * "aspen" is a home for one client and an ordinary category for another. A Map rather than
+   * a Set so the warning can call the home what SHE calls it: the slug is permanent and the
+   * label is hers to rename, so labelForCategory would say "Chicago" long after she renamed
+   * it to Lake House.
+   */
+  residenceSlugs?: Map<string, string>
   onClose: () => void
   onAdded: () => void
 }
 
-export function AddItemDialog({ clientId, clientName, customCategories = [], onClose, onAdded }: Props) {
+export function AddItemDialog({ clientId, clientName, customCategories = [], residenceSlugs, onClose, onAdded }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [processing, setProcessing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -124,8 +133,8 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], onC
     // A home is not a garment type. Category replaces what the piece IS, so a coat filed under a
     // residence stops being Outerwear everywhere (ADR-0082 / the Margaux Ellery loss). Move it to
     // "Also in", where it is additive, and say so — same rule as the edit dialog.
-    if (isResidenceSlug(finalCategory)) {
-      const label = labelForCategory(finalCategory)
+    if (residenceSlugs?.has(finalCategory)) {
+      const label = residenceSlugs.get(finalCategory) || labelForCategory(finalCategory)
       alert(
         `"${label}" is a home, not a garment type.\n\n` +
         `Category replaces what this piece IS — it would drop out of Tops, Shoes and Outerwear.\n\n` +

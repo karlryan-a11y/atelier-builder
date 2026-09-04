@@ -25,6 +25,13 @@ export interface LookCategory {
   sort_order: number
   is_hidden: boolean
   /**
+   * One of the client's HOMES (ADR-0111). Two or more flagged turns on her home-page tiles
+   * and the Collection home picker; fewer and her lookbook renders exactly as it did before
+   * the feature existed. Set from the Categorize rail, never inferred from the slug — which
+   * is what makes "add Mexico City as a home" a checkbox instead of a release.
+   */
+  is_residence: boolean
+  /**
    * Stylist-only note on how to style this category, e.g. "always a sports jacket, never
    * jeans" on Summit Club. Amaia asked for it: the rule lives in one stylist's head today,
    * so a second stylist covering her client cannot know it. NOT rendered on the client
@@ -73,7 +80,7 @@ export function useLookCategories(clientId: string | null) {
     setLoading(true)
     const [catsRes, looksRes, capsRes] = await Promise.all([
       supabase.from('look_categories')
-        .select('id, slug, label, sort_order, is_hidden, description')
+        .select('id, slug, label, sort_order, is_hidden, is_residence, description')
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
@@ -157,7 +164,7 @@ export function useLookCategories(clientId: string | null) {
     const sort_order = categories.length
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order })
-      .select('id, slug, label, sort_order, is_hidden, description').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description').single()
     if (error || !data) { console.error('createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
@@ -180,7 +187,7 @@ export function useLookCategories(clientId: string | null) {
     if (!cat) return null
     const lookCount = looks.filter((l) => l.categoryIds.includes(id)).length
     const capsuleCount = capsules.filter((c) => c.categoryIds.includes(id)).length
-    const plan = planCategoryDeletion({ slug: cat.slug, label: cat.label, lookCount, capsuleCount, clientName })
+    const plan = planCategoryDeletion({ slug: cat.slug, label: cat.label, isResidence: cat.is_residence === true, lookCount, capsuleCount, clientName })
 
     if (plan.action === 'refuse') { confirmWith(plan.message); return plan }
     if (!confirmWith(plan.message)) return null
@@ -220,6 +227,22 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: l } : c)))
     const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id)
     if (error) { console.error('renameCategory:', error.message); await fetchAll() }
+  }, [fetchAll])
+
+  /**
+   * Mark a category as one of the client's homes, or stop it being one (ADR-0111).
+   *
+   * This is the whole of self-serve residences: two or more flagged and her home page opens
+   * on tiles, fewer and it does not. Writes ONLY `is_residence` -- the slug is the permanent
+   * key the junction tables and every already-filed piece point at, so flagging and
+   * unflagging never orphans anything, and a home can be renamed independently. Unticking is
+   * the supported way to retire a home, and it is what makes a residence deletable again
+   * (see planCategoryDeletion).
+   */
+  const setCategoryResidence = useCallback(async (id: string, isResidence: boolean) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_residence: isResidence } : c)))
+    const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id)
+    if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
   }, [fetchAll])
 
   /**
@@ -355,7 +378,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, categories, looks, capsules, draftCount,
-    createCategory, renameCategory, setCategoryDescription, deleteCategory, restoreCategory,
+    createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -396,7 +419,7 @@ export function useLookCategoryVocab(clientId: string | null) {
   const refetch = useCallback(async () => {
     if (!clientId) { setCategories([]); return }
     const { data } = await supabase.from('look_categories')
-      .select('id, slug, label, sort_order, is_hidden, description')
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description')
       .eq('client_id', clientId).order('sort_order').order('label')
     setCategories((data ?? []) as LookCategory[])
   }, [clientId])
@@ -410,7 +433,7 @@ export function useLookCategoryVocab(clientId: string | null) {
     if (existing) return existing
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order: categories.length })
-      .select('id, slug, label, sort_order, is_hidden, description').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, description').single()
     if (error || !data) { console.error('vocab createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory

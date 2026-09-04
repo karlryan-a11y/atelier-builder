@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote } from 'lucide-react'
+import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
@@ -31,7 +31,7 @@ type Status = 'draft' | 'published' | 'archived' | 'all'
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, deleteCategory, restoreCategory,
+    loading, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -579,6 +579,21 @@ export function CategorizePanel() {
                   </button>
                   {/* Note + Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
                       control does not exist on a tablet, which is where these are used. */}
+                  {/* HOME. The whole of self-serve residences (ADR-0111): tick two or more and
+                      her home page opens on one tile per home. Kept beside the pencil because
+                      the two go together, and shown filled when on so the state is legible
+                      without hovering, which does not exist on the tablet these are used on. */}
+                  <button
+                    onClick={() => setCategoryResidence(cat.id, !cat.is_residence)}
+                    className={`flex-none p-1 rounded transition-opacity ${cat.is_residence ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    aria-label={cat.is_residence ? `${cat.label} is one of her homes. Stop it being a home.` : `Make ${cat.label} one of her homes`}
+                    aria-pressed={cat.is_residence}
+                    title={cat.is_residence
+                      ? 'This is one of her homes. Click to stop it being one.'
+                      : 'Make this one of her homes. Two or more homes gives her a home page with a tile for each.'}
+                  >
+                    <Home className={`w-3 h-3 ${cat.is_residence ? 'fill-current' : ''}`} />
+                  </button>
                   <button
                     onClick={() => startNote(cat.id, cat.description)}
                     className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}

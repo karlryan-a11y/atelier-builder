@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Check, Home, Sparkles, Tag, X } from 'lucide-react'
 import type { LookCategory, TaggableLook } from '@/hooks/useLookCategories'
 import { useResidenceReview, type Provenance } from '@/hooks/useResidenceReview'
-import { isResidenceSlug, type ResidenceSlug } from '@/lib/residences'
 
 /**
  * Residence review — file the back-catalogue of looks by which home they belong to.
@@ -26,8 +25,8 @@ interface Props {
 type Filter = 'all' | 'high' | 'needs-eye' | 'aspen' | 'disagree'
 
 /** The residence the placed pieces point at, when they point anywhere clearly. */
-function provenanceLean(p: Provenance): ResidenceSlug | null {
-  const entries = Object.entries(p) as [ResidenceSlug, number][]
+function provenanceLean(p: Provenance): string | null {
+  const entries = Object.entries(p) as [string, number][]
   if (entries.length === 0) return null
   entries.sort((a, b) => b[1] - a[1])
   if (entries.length > 1 && entries[0][1] === entries[1][1]) return null // genuinely split
@@ -39,7 +38,7 @@ export function ResidencesTab({ looks, categories, review, assignLook }: Props) 
   const { proposals, provenanceFor, placedCount, accept, dismiss, busy, loading, byConfidence } = review
 
   const residenceCats = useMemo(
-    () => categories.filter((c) => isResidenceSlug(c.slug)),
+    () => categories.filter((c) => c.is_residence === true),
     [categories],
   )
   const catBySlug = useMemo(
@@ -163,7 +162,7 @@ export function ResidencesTab({ looks, categories, review, assignLook }: Props) 
                       ? <span className="text-[#bbb]">No pieces in this look placed yet</span>
                       : <>
                           <span className="text-[#bbb]">Your pieces: </span>
-                          {(Object.entries(prov) as [ResidenceSlug, number][])
+                          {(Object.entries(prov) as [string, number][])
                             .sort((a, b) => b[1] - a[1])
                             .map(([slug, n], i) => (
                               <span key={slug}>{i > 0 ? ' · ' : ''}{n} {labelOfSlug(slug)}</span>

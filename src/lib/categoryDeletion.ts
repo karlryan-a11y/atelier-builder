@@ -1,15 +1,15 @@
-import { isResidenceSlug } from './residences.ts'
-
 /**
  * What "delete this category" should actually do — decided in one pure place so the
  * confirm text the stylist reads and the write that follows can never disagree.
  *
  * Three outcomes:
  *
- *  refuse — the category is a RESIDENCE (Aspen / The Hamptons / New York City). On the
- *    handful of multi-home clients these are not filters, they drive the home-page tiles
- *    and decide which pieces appear in her Collection when she picks a house. Deleting one
- *    breaks that silently, so the button says no rather than asking.
+ *  refuse — the category is one of this client's HOMES. These are not filters: they drive
+ *    her home-page tiles and decide which pieces appear in her Collection when she picks a
+ *    house. Deleting one breaks that silently, so the button says no rather than asking.
+ *    Since ADR-0111 the refusal is no longer a dead end — a home is a checkbox on the
+ *    category, so the message tells her to untick Home and then delete, which she can do
+ *    herself. It used to say "ask Karl".
  *
  *  delete — nothing is filed under it, so the row goes for good. Nothing is lost because
  *    there was nothing in it.
@@ -32,6 +32,12 @@ export type CategoryDeletionPlan =
 export interface CategoryDeletionInput {
   slug: string
   label: string
+  /**
+   * Whether this category is one of the client's homes. Passed in from her row rather than
+   * derived from the slug: "aspen" is a home for the client whose stylist said so and an
+   * ordinary category for everyone else, and only the row knows which (ADR-0111).
+   */
+  isResidence: boolean
   lookCount: number
   capsuleCount: number
   /** The client's first name, so the message reads like a sentence about a person. */
@@ -47,14 +53,14 @@ const whose = (clientName?: string) => {
   return first ? `${first}'s` : "this client's"
 }
 
-export function planCategoryDeletion({ slug, label, lookCount, capsuleCount, clientName }: CategoryDeletionInput): CategoryDeletionPlan {
-  if (isResidenceSlug(slug)) {
+export function planCategoryDeletion({ label, isResidence, lookCount, capsuleCount, clientName }: CategoryDeletionInput): CategoryDeletionPlan {
+  if (isResidence) {
     return {
       action: 'refuse',
       message:
         `${label} is one of ${whose(clientName)} homes.\n\n` +
         `Her lookbook is built around them, so this one cannot be deleted.\n\n` +
-        `Rename it instead, or ask Karl to retire the home.`,
+        `Rename it if the name is wrong. To remove the home, untick Home first, then delete.`,
     }
   }
 
