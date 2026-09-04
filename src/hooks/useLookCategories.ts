@@ -167,12 +167,13 @@ export function useLookCategories(clientId: string | null) {
   const deleteCategory = useCallback(async (
     id: string,
     confirmWith: (message: string) => boolean,
+    clientName?: string,
   ): Promise<CategoryDeletionPlan | null> => {
     const cat = categories.find((c) => c.id === id)
     if (!cat) return null
     const lookCount = looks.filter((l) => l.categoryIds.includes(id)).length
     const capsuleCount = capsules.filter((c) => c.categoryIds.includes(id)).length
-    const plan = planCategoryDeletion({ slug: cat.slug, label: cat.label, lookCount, capsuleCount })
+    const plan = planCategoryDeletion({ slug: cat.slug, label: cat.label, lookCount, capsuleCount, clientName })
 
     if (plan.action === 'refuse') { confirmWith(plan.message); return plan }
     if (!confirmWith(plan.message)) return null

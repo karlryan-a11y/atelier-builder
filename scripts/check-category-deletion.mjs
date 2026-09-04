@@ -33,15 +33,28 @@ function expect(name, input, wantAction, wantInMessage = []) {
 // Residences are refused even when nothing is filed under them — emptiness is not the point,
 // the home tiles are built from the row itself.
 for (const slug of ['aspen', 'hamptons', 'new-york-city']) {
-  expect(`residence "${slug}" with looks`, { slug, label: slug, lookCount: 12, capsuleCount: 1 }, 'refuse', ['homes'])
-  expect(`residence "${slug}" empty`, { slug, label: slug, lookCount: 0, capsuleCount: 0 }, 'refuse', ['homes'])
+  expect(`residence "${slug}" with looks`, { slug, label: slug, lookCount: 12, capsuleCount: 1, clientName: 'Margaux Ellery' }, 'refuse', ["one of Margaux's homes"])
+  expect(`residence "${slug}" empty`, { slug, label: slug, lookCount: 0, capsuleCount: 0 }, 'refuse', ["one of this client's homes"])
 }
 
 // Empty ordinary category: hard delete. These are Maegan's four on Danielle York.
-expect('empty category', { slug: 'gloves', label: 'gloves', lookCount: 0, capsuleCount: 0 }, 'delete', ['cannot be undone'])
+expect('empty category', { slug: 'gloves', label: 'gloves', lookCount: 0, capsuleCount: 0 }, 'delete', ["can't be undone"])
 
 // Occupied: hide, and the stylist must be told exactly how much is filed under it.
 expect('one look', { slug: 'france', label: 'France', lookCount: 1, capsuleCount: 0 }, 'hide', ['1 look', 'stays'])
+// No jargon reaches the stylist: these are the words we slipped into the first draft.
+for (const jargon of ['residence picker', 'junction', 'is_hidden', 'cascade', 'assignment', 'taxonomy', 'slug']) {
+  for (const probe of [
+    { slug: 'aspen', label: 'Aspen', lookCount: 3, capsuleCount: 0, clientName: 'Margaux Ellery' },
+    { slug: 'x', label: 'X', lookCount: 0, capsuleCount: 0 },
+    { slug: 'y', label: 'Y', lookCount: 4, capsuleCount: 2 },
+  ]) {
+    checked++
+    if (planCategoryDeletion(probe).message.toLowerCase().includes(jargon)) {
+      failures.push(`jargon "${jargon}" reached the stylist in the "${planCategoryDeletion(probe).action}" message`)
+    }
+  }
+}
 expect('many looks', { slug: 'to-be-tried', label: 'To Be Tried', lookCount: 47, capsuleCount: 0 }, 'hide', ['47 looks', 'stay'])
 expect('capsules only', { slug: 'packing', label: 'Packing Capsules', lookCount: 0, capsuleCount: 3 }, 'hide', ['3 capsules'])
 expect('both', { slug: 'lake-house', label: 'lake house', lookCount: 2, capsuleCount: 1 }, 'hide', ['2 looks and 1 capsule'])

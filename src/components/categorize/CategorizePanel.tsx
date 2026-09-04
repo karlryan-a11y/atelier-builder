@@ -380,7 +380,7 @@ export function CategorizePanel() {
   }
   async function handleDeleteCategory(cat: LookCategory) {
     // window.confirm both asks and, for a refused residence, is the only thing shown.
-    const plan = await deleteCategory(cat.id, (message) => window.confirm(message))
+    const plan = await deleteCategory(cat.id, (message) => window.confirm(message), activeClient?.name)
     if (plan?.action !== 'refuse' && activeBrush === cat.id) setBrush(null)
   }
 

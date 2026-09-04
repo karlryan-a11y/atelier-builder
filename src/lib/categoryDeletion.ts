@@ -19,6 +19,10 @@ import { isResidenceSlug } from './residences.ts'
  *    The client's lookbook already skips hidden categories (getLookCategories filters
  *    is_hidden), so hiding removes it from her site exactly as a delete would, and a
  *    mis-click stays recoverable.
+ *
+ * The wording is for a stylist, not for us. She does not know what a "residence picker" or a
+ * "junction table" is and should not have to: every sentence here is about her client's
+ * lookbook and what happens to it.
  */
 export type CategoryDeletionPlan =
   | { action: 'refuse'; message: string }
@@ -30,40 +34,51 @@ export interface CategoryDeletionInput {
   label: string
   lookCount: number
   capsuleCount: number
+  /** The client's first name, so the message reads like a sentence about a person. */
+  clientName?: string
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export function planCategoryDeletion({ slug, label, lookCount, capsuleCount }: CategoryDeletionInput): CategoryDeletionPlan {
+/** "Margaux's" / "this client's" — never a bare possessive with no name. */
+const whose = (clientName?: string) => {
+  const first = (clientName ?? '').trim().split(/\s+/)[0]
+  return first ? `${first}'s` : "this client's"
+}
+
+export function planCategoryDeletion({ slug, label, lookCount, capsuleCount, clientName }: CategoryDeletionInput): CategoryDeletionPlan {
   if (isResidenceSlug(slug)) {
     return {
       action: 'refuse',
       message:
-        `"${label}" is one of this client's homes, not an ordinary category.\n\n` +
-        `Her home tiles and her Collection's residence picker are built from it, so deleting it ` +
-        `would break both without warning. Rename it if the name is wrong; to retire a home, ` +
-        `say so and it can be done deliberately.`,
+        `You can't delete "${label}" — it's one of ${whose(clientName)} homes.\n\n` +
+        `The front page of her lookbook has a tile for each home, and her Collection lets her ` +
+        `look at one house at a time. Both are built from this. Deleting it would break them.\n\n` +
+        `You can rename it with the pencil. If a home really does need to come off her ` +
+        `lookbook, ask Karl.`,
     }
   }
 
   if (lookCount === 0 && capsuleCount === 0) {
     return {
       action: 'delete',
-      message: `Delete "${label}"?\n\nNothing is filed under it, so it just disappears from the client's site. This cannot be undone.`,
+      message: `Delete "${label}"?\n\nNothing is in it, so it just disappears from her lookbook.\n\nThis can't be undone.`,
     }
   }
 
   const parts: string[] = []
   if (lookCount) parts.push(plural(lookCount, 'look', 'looks'))
   if (capsuleCount) parts.push(plural(capsuleCount, 'capsule', 'capsules'))
+  const total = lookCount + capsuleCount
 
   return {
     action: 'hide',
     message:
       `Delete "${label}"?\n\n` +
-      `It disappears from the client's site straight away. ${parts.join(' and ')} ` +
-      `${lookCount + capsuleCount === 1 ? 'stays' : 'stay'} on her lookbook — ` +
-      `${lookCount + capsuleCount === 1 ? 'it just loses' : 'they just lose'} this tag.\n\n` +
-      `Because things are filed under it, it is kept in Hidden below where you can restore it.`,
+      `It comes off her lookbook straight away.\n\n` +
+      `The ${parts.join(' and ')} in it ${total === 1 ? 'stays' : 'stay'} — ` +
+      `${total === 1 ? 'it just loses' : 'they just lose'} this tag. Nothing is deleted.\n\n` +
+      `Because it isn't empty, it's kept under Hidden at the bottom of the list, so you can ` +
+      `put it back if you need to.`,
   }
 }
