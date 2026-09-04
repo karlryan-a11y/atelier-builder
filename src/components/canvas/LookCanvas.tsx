@@ -7,6 +7,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform } from './CanvasAdapter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3 } from 'lucide-react'
+import { selectionOnPress, shouldClearSelection } from '@/lib/canvasSelection'
 import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
@@ -21,6 +22,7 @@ interface ClosetItemImageProps {
   /** True only when this is the ONLY selected node — then it shows its own resize box.
    *  When several are selected, a single group box (in the parent) resizes them together. */
   solo: boolean
+  /** Fires on the PRESS, not the click. See lib/canvasSelection for why. */
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
   onDragStart?: () => void
   onDragMove?: (x: number, y: number) => void
@@ -120,8 +122,8 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
           scaleY={config.scaleY}
           rotation={config.rotation}
           draggable={config.draggable}
-          onClick={onSelect}
-          onTap={onSelect}
+          onMouseDown={onSelect}
+          onTouchStart={onSelect}
           onDragStart={() => onDragStart?.()}
           onDragMove={(e) => onDragMove?.(e.target.x(), e.target.y())}
           onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
@@ -162,6 +164,7 @@ interface TextNodeProps {
   isSelected: boolean
   solo: boolean
   editing: boolean
+  /** Fires on the PRESS, not the click. See lib/canvasSelection for why. */
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
   onDragStart?: () => void
   onDragMove?: (x: number, y: number) => void
@@ -208,8 +211,8 @@ function TextNodeElement({ node, isSelected, solo, editing, onSelect, onDragStar
         fill={node.fill}
         rotation={node.rotation}
         draggable
-        onClick={onSelect}
-        onTap={onSelect}
+        onMouseDown={onSelect}
+        onTouchStart={onSelect}
         onDblClick={onDblClick}
         onDblTap={onDblClick}
         onDragStart={() => onDragStart?.()}
@@ -439,6 +442,10 @@ export function LookCanvas() {
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const selectionStart = useRef<{ x: number; y: number } | null>(null)
   const isDraggingSelection = useRef(false)
+  // Where the press began. A release on empty board only clears the selection when the press
+  // began there too - a press that started on a piece and drifted off it is the bug, not an
+  // intent to deselect. See lib/canvasSelection.
+  const pressedEmpty = useRef(false)
 
   const { setNodeRef } = useDroppable({ id: 'canvas-drop-target' })
 
@@ -537,7 +544,8 @@ export function LookCanvas() {
 
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (e.target !== e.target.getStage()) return
+      pressedEmpty.current = e.target === e.target.getStage()
+      if (!pressedEmpty.current) return
       const stage = e.target.getStage()
       if (!stage) return
       const pos = stage.getPointerPosition()
@@ -594,7 +602,11 @@ export function LookCanvas() {
           return overlaps(box)
         })
         setSelectedNodeIds(hits.map((n) => n.id))
-      } else if (e.target === e.target.getStage()) {
+      } else if (shouldClearSelection({
+        pressedEmpty: pressedEmpty.current,
+        releasedEmpty: e.target === e.target.getStage(),
+        marquee: false,
+      })) {
         setSelectedNodeIds([])
       }
       selectionStart.current = null
@@ -604,17 +616,26 @@ export function LookCanvas() {
     [state.nodes, selectionRect, setSelectedNodeIds]
   )
 
+  // Fires on the PRESS. Konva only fires `click` when the shape under the pointer at press is
+  // the same shape at release, and with a pixel-perfect hit mask on a dense capsule a two-pixel
+  // drift makes those disagree, so no click arrives at all. The press always arrives.
   const handleNodeSelect = useCallback(
     (nodeId: string, e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
       const evt = e.evt as MouseEvent
-      if (evt.shiftKey || evt.metaKey) {
-        toggleNodeSelection(nodeId)
-      } else {
-        // If this item is already part of a multi-selection, KEEP the group — otherwise a plain
-        // click (before a drag) would collapse to a single item and break moving them together.
-        const cur = useCanvasStore.getState().selectedNodeIds
-        if (cur.length > 1 && cur.includes(nodeId)) return
-        setSelectedNodeIds([nodeId])
+      const outcome = selectionOnPress(useCanvasStore.getState().selectedNodeIds, nodeId, {
+        shiftKey: evt.shiftKey,
+        metaKey: evt.metaKey,
+        button: 'button' in evt ? evt.button : undefined,
+      })
+      switch (outcome.action) {
+        case 'ignore':
+        case 'keep-group':
+          return
+        case 'toggle':
+          toggleNodeSelection(outcome.nodeId)
+          return
+        case 'replace':
+          setSelectedNodeIds([outcome.nodeId])
       }
     },
     [setSelectedNodeIds, toggleNodeSelection]
@@ -801,7 +822,14 @@ export function LookCanvas() {
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
-          onTap={(e) => { if (e.target === e.target.getStage()) setSelectedNodeIds([]) }}
+          onTouchStart={(e) => { pressedEmpty.current = e.target === e.target.getStage() }}
+          onTap={(e) => {
+            if (shouldClearSelection({
+              pressedEmpty: pressedEmpty.current,
+              releasedEmpty: e.target === e.target.getStage(),
+              marquee: false,
+            })) setSelectedNodeIds([])
+          }}
           style={{ background: state.canvas.background, borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
         >
           <Layer>
