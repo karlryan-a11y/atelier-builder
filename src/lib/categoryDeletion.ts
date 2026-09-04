@@ -20,9 +20,9 @@ import { isResidenceSlug } from './residences.ts'
  *    is_hidden), so hiding removes it from her site exactly as a delete would, and a
  *    mis-click stays recoverable.
  *
- * The wording is for a stylist, not for us. She does not know what a "residence picker" or a
- * "junction table" is and should not have to: every sentence here is about her client's
- * lookbook and what happens to it.
+ * The wording is for a stylist, not for us. Short lines, her client's name, no jargon and no
+ * em dashes. She is reading this between appointments, so it says the one thing she needs and
+ * stops. check-category-deletion.mjs enforces all of that.
  */
 export type CategoryDeletionPlan =
   | { action: 'refuse'; message: string }
@@ -40,7 +40,8 @@ export interface CategoryDeletionInput {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** "Margaux's" / "this client's" — never a bare possessive with no name. */
+/** "Margaux" / "this client" — a first name whenever we have one. */
+const who = (clientName?: string) => (clientName ?? '').trim().split(/\s+/)[0] || 'this client'
 const whose = (clientName?: string) => {
   const first = (clientName ?? '').trim().split(/\s+/)[0]
   return first ? `${first}'s` : "this client's"
@@ -51,18 +52,16 @@ export function planCategoryDeletion({ slug, label, lookCount, capsuleCount, cli
     return {
       action: 'refuse',
       message:
-        `You can't delete "${label}" — it's one of ${whose(clientName)} homes.\n\n` +
-        `The front page of her lookbook has a tile for each home, and her Collection lets her ` +
-        `look at one house at a time. Both are built from this. Deleting it would break them.\n\n` +
-        `You can rename it with the pencil. If a home really does need to come off her ` +
-        `lookbook, ask Karl.`,
+        `${label} is one of ${whose(clientName)} homes.\n\n` +
+        `Her lookbook is built around them, so this one cannot be deleted.\n\n` +
+        `Rename it instead, or ask Karl to retire the home.`,
     }
   }
 
   if (lookCount === 0 && capsuleCount === 0) {
     return {
       action: 'delete',
-      message: `Delete "${label}"?\n\nNothing is in it, so it just disappears from her lookbook.\n\nThis can't be undone.`,
+      message: `Delete ${label}?\n\nIt is empty. This cannot be undone.`,
     }
   }
 
@@ -74,11 +73,10 @@ export function planCategoryDeletion({ slug, label, lookCount, capsuleCount, cli
   return {
     action: 'hide',
     message:
-      `Delete "${label}"?\n\n` +
-      `It comes off her lookbook straight away.\n\n` +
-      `The ${parts.join(' and ')} in it ${total === 1 ? 'stays' : 'stay'} — ` +
-      `${total === 1 ? 'it just loses' : 'they just lose'} this tag. Nothing is deleted.\n\n` +
-      `Because it isn't empty, it's kept under Hidden at the bottom of the list, so you can ` +
-      `put it back if you need to.`,
+      `Delete ${label}?\n\n` +
+      `It comes off ${who(clientName)}'s lookbook now. ` +
+      `${parts.join(' and ')} ${total === 1 ? 'stays' : 'stay'}, ` +
+      `${total === 1 ? 'it just loses' : 'they just lose'} the tag.\n\n` +
+      `You will find it under Hidden if you want it back.`,
   }
 }

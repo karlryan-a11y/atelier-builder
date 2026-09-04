@@ -38,11 +38,32 @@ for (const slug of ['aspen', 'hamptons', 'new-york-city']) {
 }
 
 // Empty ordinary category: hard delete. These are Maegan's four on Danielle York.
-expect('empty category', { slug: 'gloves', label: 'gloves', lookCount: 0, capsuleCount: 0 }, 'delete', ["can't be undone"])
+expect('empty category', { slug: 'gloves', label: 'gloves', lookCount: 0, capsuleCount: 0 }, 'delete', ['cannot be undone'])
 
 // Occupied: hide, and the stylist must be told exactly how much is filed under it.
-expect('one look', { slug: 'france', label: 'France', lookCount: 1, capsuleCount: 0 }, 'hide', ['1 look', 'stays'])
-// No jargon reaches the stylist: these are the words we slipped into the first draft.
+expect('one look', { slug: 'france', label: 'France', lookCount: 1, capsuleCount: 0 }, 'hide', ['1 look stays'])
+// House style. Em dashes are banned outright, and each banned phrase below is one Karl had
+// to strike by hand from an earlier draft; the point of the list is that he only does that once.
+const PROBES = [
+  { slug: 'aspen', label: 'Aspen', lookCount: 3, capsuleCount: 0, clientName: 'Margaux Ellery' },
+  { slug: 'x', label: 'X', lookCount: 0, capsuleCount: 0 },
+  { slug: 'y', label: 'Y', lookCount: 4, capsuleCount: 2, clientName: 'Danielle York' },
+  { slug: 'z', label: 'Z', lookCount: 1, capsuleCount: 0, clientName: 'Danielle York' },
+]
+for (const probe of PROBES) {
+  checked++
+  const { action, message } = planCategoryDeletion(probe)
+  for (const dash of ['\u2014', '\u2013']) {
+    if (message.includes(dash)) failures.push(`the "${action}" message contains an ${dash === '\u2014' ? 'em' : 'en'} dash`)
+  }
+  for (const phrase of ['straight away', 'residence picker', 'junction', 'is_hidden', 'cascade', 'taxonomy']) {
+    if (message.toLowerCase().includes(phrase)) failures.push(`the "${action}" message says "${phrase}"`)
+  }
+  // Short enough to read between appointments.
+  for (const line of message.split('\n')) {
+    if (line.length > 130) failures.push(`the "${action}" message has a ${line.length}-character line: "${line.slice(0, 60)}..."`)
+  }
+}
 for (const jargon of ['residence picker', 'junction', 'is_hidden', 'cascade', 'assignment', 'taxonomy', 'slug']) {
   for (const probe of [
     { slug: 'aspen', label: 'Aspen', lookCount: 3, capsuleCount: 0, clientName: 'Margaux Ellery' },
@@ -55,9 +76,9 @@ for (const jargon of ['residence picker', 'junction', 'is_hidden', 'cascade', 'a
     }
   }
 }
-expect('many looks', { slug: 'to-be-tried', label: 'To Be Tried', lookCount: 47, capsuleCount: 0 }, 'hide', ['47 looks', 'stay'])
+expect('many looks', { slug: 'to-be-tried', label: 'To Be Tried', lookCount: 47, capsuleCount: 0 }, 'hide', ['47 looks stay'])
 expect('capsules only', { slug: 'packing', label: 'Packing Capsules', lookCount: 0, capsuleCount: 3 }, 'hide', ['3 capsules'])
-expect('both', { slug: 'lake-house', label: 'lake house', lookCount: 2, capsuleCount: 1 }, 'hide', ['2 looks and 1 capsule'])
+expect('both', { slug: 'lake-house', label: 'lake house', lookCount: 2, capsuleCount: 1 }, 'hide', ['2 looks and 1 capsule stay'])
 
 // A category merely NAMED like a home on a client who has none is still an ordinary category
 // only if its slug differs — the slug is what the residence code matches on.
