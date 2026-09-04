@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
-import { styledCoverage } from '@/lib/styledCoverage'
+import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
@@ -25,7 +25,7 @@ const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', c
 // Each item's garment category is resolved with the SAME resolver as the lookbook + Style canvas
 // (override → tag → name), so GoodPix carry-overs categorize too. Reports counts up for the rail
 // filter and accepts a garment-category filter.
-export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onTransitioned }: {
+export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned }: {
   clientId: string | null
   filterCategories?: Set<string>
   /**
@@ -34,6 +34,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
    */
   residenceSlugs?: Map<string, string>
   onCategoryCounts?: (counts: Map<string, number>) => void
+  /** Styled coverage per rail category, so the sidebar can show where the unstyled pieces are. */
+  onCategoryCoverage?: (coverage: Map<string, StyledCoverage>) => void
   /** Called after a stylist transitions a piece out, so the Transitions tab + badge refresh live. */
   onTransitioned?: () => void
 }) {
@@ -181,6 +183,18 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   // "how much of her shoe collection is styled". Costs no read: every piece and every look is
   // already on this screen (ADR-0105).
   const coverage = useMemo(() => styledCoverage(baseVisible.map((i) => i.id), lookUsage), [baseVisible, lookUsage])
+  // Per-category coverage for the rail. Deliberately computed over the WHOLE collection, not the
+  // filtered view: the rail is how she chooses what to filter TO, so its rows must not change
+  // meaning when she taps one. Same buckets as the counts effect above, so the denominators match
+  // the numbers already printed beside each row.
+  const railCoverage = useMemo(
+    () => coverageByCategory(
+      items.filter((i) => !i.is_deleted).map((i) => ({ id: i.id, categories: categoriesByItem.get(i.id) ?? [] })),
+      lookUsage,
+    ),
+    [items, categoriesByItem, lookUsage],
+  )
+  useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
   const visible = useMemo(
     () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
     [baseVisible, unconfirmedOnly],

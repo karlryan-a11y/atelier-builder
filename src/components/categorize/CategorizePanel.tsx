@@ -4,6 +4,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
+import { TOTAL_SLUG, type StyledCoverage } from '@/lib/styledCoverage'
 import { supabase } from '@/lib/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
@@ -27,6 +28,59 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
+
+/**
+ * One row of the Collection rail: the category, how much of it the client can actually see
+ * styled, and a hairline rule showing the same thing at a glance.
+ *
+ * ONE renderer for all three lists in that rail (All items, the fixed garment structure, and
+ * the client's custom categories) on purpose. The rail has grown a list three times; the
+ * previous change to it reached two lists out of three (ADR-0106, "a rewrite claiming every
+ * surface enumerates the surfaces"). A fourth list cannot forget the meter if there is nowhere
+ * else to write one.
+ *
+ * The pair reads styled/owned, matching the header line above the grid, and the rule under it
+ * carries the SAME two colours the header text uses: warm grey for pieces in a published look,
+ * amber for pieces whose only looks are drafts. Amber is never good news. It is finished styling
+ * the client cannot see.
+ *
+ * NOT blush. Blush is #F8E5E7, lighter than the #EFEBE6 track it sits on, so a fully styled
+ * category rendered as a pale line indistinguishable from an empty one. Checked in WebKit.
+ */
+function CategoryRow({ label, count, coverage, on, onClick }: {
+  label: string
+  count: number
+  coverage?: StyledCoverage
+  on: boolean
+  onClick: () => void
+}) {
+  const styled = coverage?.styled ?? 0
+  const draftOnly = coverage?.draftOnly ?? 0
+  const pct = count > 0 ? Math.min(100, (styled / count) * 100) : 0
+  const draftPct = count > 0 ? Math.min(100 - pct, (draftOnly / count) * 100) : 0
+  return (
+    <button
+      onClick={onClick}
+      title={coverage && count > 0
+        ? `${styled} of ${count} in a look she can see${draftOnly > 0 ? `, ${draftOnly} more only in unpublished looks` : ''}`
+        : undefined}
+      className={`w-full px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="truncate">{label}</span>
+        <span className={`shrink-0 tabular-nums ${on ? 'text-white/60' : 'text-[#bbb]'}`}>
+          {coverage && count > 0 ? `${styled}/${count}` : count}
+        </span>
+      </span>
+      {coverage && count > 0 && (
+        <span aria-hidden className={`mt-1.5 flex h-0.5 w-full overflow-hidden rounded-full ${on ? 'bg-white/25' : 'bg-[#EFEBE6]'}`}>
+          <span className={on ? 'bg-white' : 'bg-[#8a7a6a]'} style={{ width: `${pct}%` }} />
+          {draftOnly > 0 && <span className={on ? 'bg-white/50' : 'bg-[#9a6b3f]'} style={{ width: `${draftPct}%` }} />}
+        </span>
+      )}
+    </button>
+  )
+}
 
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
@@ -73,6 +127,8 @@ export function CategorizePanel() {
   const [garmentCounts, setGarmentCounts] = useState<Map<string, number>>(new Map())
   const [activeGarmentCats, setActiveGarmentCats] = useState<Set<string>>(new Set())
   const onGarmentCounts = useCallback((c: Map<string, number>) => setGarmentCounts(c), [])
+  const [garmentCoverage, setGarmentCoverage] = useState<Map<string, StyledCoverage>>(new Map())
+  const onGarmentCoverage = useCallback((c: Map<string, StyledCoverage>) => setGarmentCoverage(c), [])
   const toggleGarment = (slug: string) =>
     setActiveGarmentCats((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
 
@@ -484,14 +540,19 @@ export function CategorizePanel() {
               <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
                 Garment categories from digitization. Click to filter the collection; edit any item with its pencil.
               </p>
+              <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
+                The number on each row is how many of those pieces are in a look the client can see,
+                out of how many she owns. The rule underneath shows it at a glance, and turns amber
+                where looks are still unpublished.
+              </p>
               <div className="flex flex-col gap-1 overflow-y-auto pr-1">
-                <button
+                <CategoryRow
+                  label="All items"
+                  count={garmentCounts.get(TOTAL_SLUG) ?? 0}
+                  coverage={garmentCoverage.get(TOTAL_SLUG)}
+                  on={activeGarmentCats.size === 0}
                   onClick={() => setActiveGarmentCats(new Set())}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${activeGarmentCats.size === 0 ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
-                >
-                  <span>All items</span>
-                  <span className={activeGarmentCats.size === 0 ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get('__total__') ?? 0}</span>
-                </button>
+                />
                 {SIDEBAR_STRUCTURE.map((node) => {
                   const slugs = node.kind === 'group' ? node.children : [node.slug]
                   const present = slugs.filter((s) => (garmentCounts.get(s) ?? 0) > 0)
@@ -504,21 +565,21 @@ export function CategorizePanel() {
                       {present.map((slug) => {
                         const on = activeGarmentCats.has(slug)
                         return (
-                          <button
+                          <CategoryRow
                             key={slug}
+                            label={CATEGORY_LABELS[slug]}
+                            count={garmentCounts.get(slug) ?? 0}
+                            coverage={garmentCoverage.get(slug)}
+                            on={on}
                             onClick={() => toggleGarment(slug)}
-                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
-                          >
-                            <span>{CATEGORY_LABELS[slug]}</span>
-                            <span className={on ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get(slug) ?? 0}</span>
-                          </button>
+                          />
                         )
                       })}
                     </div>
                   )
                 })}
                 {(() => {
-                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== '__total__' && !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
                   if (customSlugs.length === 0) return null
                   return (
                     <div className="mt-1">
@@ -526,11 +587,14 @@ export function CategorizePanel() {
                       {customSlugs.map((slug) => {
                         const on = activeGarmentCats.has(slug)
                         return (
-                          <button key={slug} onClick={() => toggleGarment(slug)}
-                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}>
-                            <span>{labelForCategory(slug)}</span>
-                            <span className={on ? 'text-white/60' : 'text-[#bbb]'}>{garmentCounts.get(slug) ?? 0}</span>
-                          </button>
+                          <CategoryRow
+                            key={slug}
+                            label={labelForCategory(slug)}
+                            count={garmentCounts.get(slug) ?? 0}
+                            coverage={garmentCoverage.get(slug)}
+                            on={on}
+                            onClick={() => toggleGarment(slug)}
+                          />
                         )
                       })}
                     </div>
@@ -789,6 +853,7 @@ export function CategorizePanel() {
               filterCategories={activeGarmentCats}
               residenceSlugs={residenceSlugs}
               onCategoryCounts={onGarmentCounts}
+              onCategoryCoverage={onGarmentCoverage}
               onTransitioned={transitions.refetch}
             />
           ) : loading ? (

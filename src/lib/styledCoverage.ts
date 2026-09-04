@@ -82,3 +82,43 @@ export function styledCoverage(
 
   return { total, styled, draftOnly, unstyled, percent, label }
 }
+
+/** The slug "All items" is filed under in a coverage map. Matches the rail's count map. */
+export const TOTAL_SLUG = '__total__'
+
+/**
+ * The same measure, broken down the way the Collection rail is: one entry per garment category
+ * plus TOTAL_SLUG for "All items". Maegan asked for the number; Karl asked to see it per
+ * category, because "94% styled" across a whole wardrobe hides the fact that every unstyled
+ * piece is a shoe.
+ *
+ * A piece belongs to every category `categoriesOf` gives it (garment type plus each "Also in"),
+ * so it is counted under each — exactly like the rail's own counts, which is why the two
+ * denominators agree row for row. TOTAL_SLUG counts DISTINCT pieces, so it is not the sum of
+ * the rows.
+ *
+ * Delegates to styledCoverage per bucket rather than restating what "styled" means. There is one
+ * definition and this is not a second one.
+ */
+export function coverageByCategory(
+  items: Iterable<{ id: string; categories: readonly string[] }>,
+  usage: Map<string, LookPublishState[]>,
+): Map<string, StyledCoverage> {
+  const buckets = new Map<string, string[]>()
+  const all: string[] = []
+
+  for (const item of items) {
+    all.push(item.id)
+    for (const slug of item.categories) {
+      if (!slug || slug === TOTAL_SLUG) continue
+      const b = buckets.get(slug)
+      if (b) b.push(item.id)
+      else buckets.set(slug, [item.id])
+    }
+  }
+
+  const out = new Map<string, StyledCoverage>()
+  out.set(TOTAL_SLUG, styledCoverage(all, usage))
+  for (const [slug, ids] of buckets) out.set(slug, styledCoverage(ids, usage))
+  return out
+}

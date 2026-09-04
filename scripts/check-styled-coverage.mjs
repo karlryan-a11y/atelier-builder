@@ -23,7 +23,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { styledCoverage, LABEL_MAX_CHARS } from '../src/lib/styledCoverage.ts'
+import { styledCoverage, coverageByCategory, LABEL_MAX_CHARS, TOTAL_SLUG } from '../src/lib/styledCoverage.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let checked = 0
@@ -135,6 +135,106 @@ for (const label of probes) {
   }
 }
 
+// ── 3. The rail renders coverage on EVERY one of its lists ───────────────────
+// The Collection rail has three lists: All items, the fixed garment structure, and the client's
+// own custom categories. A previous sweep through this file reached two lists out of three, which
+// is the shape ADR-0106 named. There is now one row renderer and no inline row markup, so a
+// fourth list cannot be added without it. This fails if anyone writes a bare row again.
+const PANEL = 'src/components/categorize/CategorizePanel.tsx'
+const panelSrc = fs.readFileSync(path.join(root, PANEL), 'utf8')
+const railStart = panelSrc.indexOf("Filter by category")
+const railEnd = panelSrc.indexOf("Active category", railStart)
+checked++
+if (railStart < 0 || railEnd < 0) {
+  failures.push(`${PANEL}: could not locate the Collection rail`)
+} else {
+  const rail = panelSrc.slice(railStart, railEnd)
+  const rows = (rail.match(/<CategoryRow\b/g) ?? []).length
+  const inlineRows = (rail.match(/<button\b/g) ?? []).length
+  console.log(`  ${PANEL}: Collection rail renders ${rows} list(s) through CategoryRow, ${inlineRows} hand-written row button(s)`)
+  checked++
+  if (rows < 3) failures.push(`${PANEL}: only ${rows} of the rail's 3 lists render through CategoryRow`)
+  checked++
+  if (inlineRows > 0) failures.push(`${PANEL}: ${inlineRows} hand-written row button(s) left in the rail — they will not show coverage`)
+  checked++
+  if (!/coverage=\{garmentCoverage\.get\(TOTAL_SLUG\)\}/.test(rail)) {
+    failures.push(`${PANEL}: "All items" no longer reads its coverage from TOTAL_SLUG`)
+  }
+}
+// The meter must not be hover-gated. The stylists work on an iPad and hover does not exist
+// there — that is why the rename pencil went unfound for months. (0108)
+checked++
+const rowFn = panelSrc.slice(panelSrc.indexOf('function CategoryRow'), panelSrc.indexOf('export function CategorizePanel'))
+if (!rowFn) {
+  failures.push(`${PANEL}: CategoryRow is gone`)
+} else if (/opacity-0|group-hover|hidden\s+group-hover/.test(rowFn)) {
+  failures.push(`${PANEL}: CategoryRow hides something behind hover, which does not exist on the stylists' iPad`)
+}
+// The meter must not be drawn in blush. Blush (#F8E5E7) is LIGHTER than the #EFEBE6 track it
+// sits on, so a fully styled category rendered as a pale line that read as an empty one.
+// Measured in WebKit on 2026-09-04. The fill uses the same two colours as the header text.
+checked++
+if (/bg-blush|#F8E5E7/i.test(rowFn)) {
+  failures.push(`${PANEL}: the coverage meter is drawn in blush, which is lighter than its own track — a full row will read as an empty one`)
+}
+checked++
+if (!/bg-\[#8a7a6a\]/.test(rowFn) || !/bg-\[#9a6b3f\]/.test(rowFn)) {
+  failures.push(`${PANEL}: the meter no longer uses the header's two colours (#8a7a6a styled, #9a6b3f drafts)`)
+}
+
+// ── 4. Per-category coverage ─────────────────────────────────────────────────
+function cat(name, items, usage, want) {
+  checked++
+  const got = coverageByCategory(items, new Map(usage))
+  for (const [slug, expected] of Object.entries(want)) {
+    const c = got.get(slug)
+    if (!c) { failures.push(`${name}: no bucket for "${slug}"`); continue }
+    for (const [k, v] of Object.entries(expected)) {
+      if (c[k] !== v) failures.push(`${name}: ${slug}.${k} expected ${JSON.stringify(v)}, got ${JSON.stringify(c[k])}`)
+    }
+  }
+}
+
+// A piece counts under EVERY category it is filed in, exactly like the rail's own counts, so the
+// denominators agree row for row. TOTAL_SLUG counts distinct pieces, so it is NOT the sum.
+cat('multi-category piece', [
+  { id: 'a', categories: ['dresses', 'aspen'] },
+  { id: 'b', categories: ['dresses'] },
+  { id: 'c', categories: ['shoes'] },
+], [['a', [P]]], {
+  [TOTAL_SLUG]: { total: 3, styled: 1 },
+  dresses: { total: 2, styled: 1, percent: 50 },
+  aspen: { total: 1, styled: 1, percent: 100 },
+  shoes: { total: 1, styled: 0, percent: 0 },
+})
+
+// A category where every piece is only in drafts must read 0 styled and say so.
+cat('all-draft category', [
+  { id: 'a', categories: ['shoes'] },
+  { id: 'b', categories: ['shoes'] },
+], [['a', [D]], ['b', [D, D]]], {
+  shoes: { total: 2, styled: 0, draftOnly: 2, percent: 0 },
+})
+
+// A piece with no categories still counts in the total. It is hers whether or not it is filed.
+cat('uncategorized piece', [{ id: 'a', categories: [] }], [], { [TOTAL_SLUG]: { total: 1, unstyled: 1 } })
+
+// A collection with nothing in it produces a total bucket and no category rows.
+{
+  checked++
+  const empty = coverageByCategory([], new Map())
+  if (empty.size !== 1 || empty.get(TOTAL_SLUG)?.label !== 'No collection yet') {
+    failures.push(`empty collection: expected only a ${TOTAL_SLUG} bucket reading "No collection yet", got ${empty.size} bucket(s)`)
+  }
+}
+
+// TOTAL_SLUG must never become a category row of its own.
+{
+  checked++
+  const got = coverageByCategory([{ id: 'a', categories: [TOTAL_SLUG, 'shoes'] }], new Map([['a', [P]]]))
+  if (got.get(TOTAL_SLUG).total !== 1) failures.push(`${TOTAL_SLUG} was treated as a category`)
+}
+
 console.log(`styled-coverage: exercised ${checked} cases against styledCoverage + the ${HOOK} SELECT contract`)
 if (checked === 0) { console.error('FAIL — the guard inspected nothing'); process.exit(1) }
 if (failures.length) {
@@ -142,4 +242,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`)
   process.exit(1)
 }
-console.log('PASS — published decides styled, drafts are named separately, and the SELECT still carries the column.')
+console.log('PASS — published decides styled, drafts are named separately, every rail list shows it, and the SELECT still carries the column.')
