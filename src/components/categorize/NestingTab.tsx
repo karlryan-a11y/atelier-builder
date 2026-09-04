@@ -5,10 +5,10 @@ import { useLookCategories } from '@/hooks/useLookCategories'
 import { categoriesOf, labelForCategory } from '@/lib/garmentCategory'
 import { parentMapFrom } from '@/lib/categoryNesting'
 import { pairingsFrom } from '@/lib/categoryPairings'
-import { GroupsEditor, type GroupEntry } from './GroupsEditor'
+import { NestingEditor, type NestingEntry } from './NestingEditor'
 
 /**
- * The "Groups" tab. One screen, two taxonomies. (ADR-0113)
+ * The "Nesting categories" tab. One screen, two taxonomies. (ADR-0113)
  *
  * ADR-0099 says a piece has two kinds of category and every surface must say which, so
  * this one says which, out loud, with a switch:
@@ -41,7 +41,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
     )),
     [items, tagNameById],
   )
-  const pieceEntries = useMemo<GroupEntry[]>(() => {
+  const pieceEntries = useMemo<NestingEntry[]>(() => {
     const p = pairingsFrom(itemCatSets)
     const out = [...p.entries()].map(([slug, v]) => ({ slug, label: labelForCategory(slug), count: v.of, pairs: v.with }))
     // A group she just made has no pieces of its own, so the pairings never saw it.
@@ -63,7 +63,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
     return looks.filter((l) => !l.archived).map((l) => l.categoryIds.map((id) => slugById.get(id)).filter((s): s is string => !!s))
   }, [categories, looks])
 
-  const lookEntries = useMemo<GroupEntry[]>(() => {
+  const lookEntries = useMemo<NestingEntry[]>(() => {
     const p = pairingsFrom(lookCatSets)
     const labelBySlug = new Map(categories.map((c) => [c.slug, c.label ?? c.slug]))
     return categories
@@ -95,7 +95,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
   return (
     <div className="flex flex-col gap-6 max-w-[900px]">
       <div className="flex flex-col gap-3">
-        <h2 className="text-[15px] tracking-[0.06em]">Groups</h2>
+        <h2 className="text-[15px] tracking-[0.06em]">Nesting categories</h2>
         <div className="flex items-center gap-1 bg-[#F8F7F5] rounded p-0.5 self-start">
           {([['collection', 'Collection'], ['looks', 'Looks']] as const).map(([k, label]) => (
             <button
@@ -113,7 +113,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
       </div>
 
       {which === 'collection' ? (
-        <GroupsEditor
+        <NestingEditor
           entries={pieceEntries}
           parentBySlug={closet.parentBySlug}
           setParent={(slug, parent) => closet.setParent(slug, parent, pieceEntries.find((e) => e.slug === slug)?.label)}
@@ -125,7 +125,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
           totalFor={(slug, kids) => totalOver(itemCatSets, slug, kids)}
         />
       ) : (
-        <GroupsEditor
+        <NestingEditor
           entries={lookEntries}
           parentBySlug={lookParents}
           setParent={async (slug, parent) => {

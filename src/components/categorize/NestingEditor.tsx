@@ -3,7 +3,7 @@ import { Loader2, Plus, X } from 'lucide-react'
 import { wouldCycle } from '@/lib/categoryNesting'
 
 /**
- * Building groups: a main category with other categories inside it. (ADR-0113)
+ * Nesting categories: a main category with other categories inside it. (ADR-0113)
  *
  * Presentational and taxonomy-agnostic, because this is needed twice and the screen
  * should not be explained twice. PIECES use it for the closet (Julia, on Danielle
@@ -20,7 +20,7 @@ import { wouldCycle } from '@/lib/categoryNesting'
  * CONCLUDE — nothing is ever ticked for her.
  */
 
-export interface GroupEntry {
+export interface NestingEntry {
   slug: string
   label: string
   /** How many pieces (or looks) carry this category. */
@@ -29,8 +29,8 @@ export interface GroupEntry {
   pairs: { slug: string; count: number }[]
 }
 
-export interface GroupsEditorProps {
-  entries: GroupEntry[]
+export interface NestingEditorProps {
+  entries: NestingEntry[]
   parentBySlug: Map<string, string>
   /** Returns false (with a message) when the write did not land. */
   setParent: (slug: string, parent: string | null) => Promise<{ ok: boolean; message?: string }>
@@ -43,7 +43,7 @@ export interface GroupsEditorProps {
   /** How many of each group's own + members' things there are. */
   totalFor: (slug: string, members: string[]) => number
   /**
-   * Make a brand new group. Required, because the group usually DOES NOT EXIST yet:
+   * Make a brand new nesting category. Required, because the group usually DOES NOT EXIST yet:
    * Janet Foutty has "SS Weekend Casual" and "FW Weekend Casual" and no plain
    * "Weekend Casual" to put them in, which is true of all four of her seasonal pairs.
    * Without this the screen can only rearrange categories a stylist already made, and
@@ -52,7 +52,7 @@ export interface GroupsEditorProps {
   createGroup: (label: string) => Promise<{ ok: boolean; slug?: string; message?: string }>
 }
 
-export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, loading, error, totalFor, createGroup }: GroupsEditorProps) {
+export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loading, error, totalFor, createGroup }: NestingEditorProps) {
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [problem, setProblem] = useState<string | null>(null)
   const [openFor, setOpenFor] = useState<string | null>(null)
@@ -60,15 +60,15 @@ export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, load
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
 
-  /** Create the group, then open its picker straight away — making it is never the goal. */
-  async function makeGroup() {
+  /** Create it, then open its picker straight away — making it is never the goal. */
+  async function makeNest() {
     const label = newName.trim()
     if (!label) return
     setProblem(null)
     setCreating(true)
     const res = await createGroup(label)
     setCreating(false)
-    if (!res.ok || !res.slug) { setProblem(res.message ?? 'That group could not be created.'); return }
+    if (!res.ok || !res.slug) { setProblem(res.message ?? 'That nesting category could not be created.'); return }
     setNewName('')
     setDraft(new Set())
     setOpenFor(res.slug)
@@ -87,7 +87,7 @@ export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, load
     return m
   }, [parentBySlug, bySlug])
 
-  const groups = entries.filter((c) => (members.get(c.slug)?.length ?? 0) > 0)
+  const nests = entries.filter((c) => (members.get(c.slug)?.length ?? 0) > 0)
   // An empty brand-new group belongs in the pool so she can fill it. It never reaches
   // the client that way: the lookbook drops a category with nothing published under it.
   const loose = entries.filter((c) => !parentBySlug.has(c.slug) && !(members.get(c.slug)?.length))
@@ -181,26 +181,26 @@ export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, load
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') makeGroup() }}
-          placeholder="New group, e.g. Weekend Casual"
+          onKeyDown={(e) => { if (e.key === 'Enter') makeNest() }}
+          placeholder="New nesting category, e.g. Weekend Casual"
           className="border border-[#E8E4DF] px-3 py-1.5 text-[13px] bg-white min-w-[260px]"
         />
         <button
-          onClick={makeGroup}
+          onClick={makeNest}
           disabled={!newName.trim() || creating}
           className="inline-flex items-center gap-1.5 px-4 py-1.5 text-[12px] tracking-[0.1em] uppercase bg-[#1A1A1A] text-white disabled:opacity-40"
         >
           {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          Create group
+          Create
         </button>
         <span className="text-[12px] text-[#888]">
-          Use this when the group does not exist yet, like Weekend Casual over SS and FW.
+          Use this when the nesting category does not exist yet, like Weekend Casual over SS and FW.
         </span>
       </div>
 
-      {groups.length > 0 && (
+      {nests.length > 0 && (
         <div className="flex flex-col gap-4">
-          {groups.map((g) => {
+          {nests.map((g) => {
             const kids = members.get(g.slug) ?? []
             return (
               <div key={g.slug} className="border border-[#E8E4DF] bg-white px-4 py-3.5">
@@ -240,12 +240,12 @@ export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, load
       <div className="flex flex-col gap-3">
         <div className="flex items-baseline gap-3">
           <p className="text-[11px] tracking-[0.28em] uppercase text-[#999]">
-            {groups.length ? 'Not in a group' : 'Her categories'}
+            {nests.length ? 'Not nested' : 'Her categories'}
           </p>
           <span className="text-[12px] text-[#BBB] tabular-nums">{loose.length}</span>
         </div>
         <p className="text-[12px] text-[#888] max-w-[70ch]">
-          Tap the one that should be the group, then choose what goes inside it. Anything left here
+          Tap the one that should be the nesting category, then choose what goes inside it. Anything left here
           stays exactly where it is on her site today.
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -260,7 +260,7 @@ export function GroupsEditor({ entries, parentBySlug, setParent, unit, who, load
             </button>
           ))}
         </div>
-        {openFor && !groups.some((g) => g.slug === openFor) && (
+        {openFor && !nests.some((g) => g.slug === openFor) && (
           <Picker group={openFor} label={bySlug.get(openFor)?.label ?? openFor} />
         )}
       </div>

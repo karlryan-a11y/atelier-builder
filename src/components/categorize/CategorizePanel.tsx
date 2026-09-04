@@ -26,7 +26,7 @@ import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationP
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
-type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'groups' | 'audit' | 'review' | 'transitions'
+type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
 
 /**
@@ -578,12 +578,12 @@ export function CategorizePanel() {
                 categories so search works, and fix color mismatches. Use the pills on the right.
               </p>
             </>
-          ) : mode === 'groups' ? (
+          ) : mode === 'nesting' ? (
             <>
-              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Groups</p>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Nesting categories</p>
               <p className="text-[10px] text-[#888] leading-relaxed">
-                A main category with others inside it. Pieces: Outerwear holding Jackets and Coats.
-                Looks: Office Casual holding the seasonal ones.
+                A main category with others inside it. Collection: Outerwear holding Jackets and
+                Coats. Looks: Office Casual holding the seasonal ones.
               </p>
               <p className="text-[10px] text-[#888] leading-relaxed mt-3">
                 A heading is a filter too. Tapping it returns everything underneath as well as the
@@ -797,7 +797,7 @@ export function CategorizePanel() {
             </>
           )}
         </div>
-        {mode !== 'collection' && mode !== 'groups' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
+        {mode !== 'collection' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -819,7 +819,7 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
-            {(['looks', 'residences', 'capsules', 'collection', 'groups', 'audit', 'review', 'transitions'] as const)
+            {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
               .filter((m) => m !== 'residences' || showResidences)
               .map((m) => (
               <button
@@ -896,7 +896,7 @@ export function CategorizePanel() {
           </ErrorBoundary>
         ) : (
         <div className="flex-1 overflow-y-auto p-6">
-          {mode === 'groups' ? (
+          {mode === 'nesting' ? (
             <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
           ) : mode === 'collection' ? (
             <CollectionTab
