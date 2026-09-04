@@ -555,14 +555,6 @@ export function CategorizePanel() {
           ) : mode === 'collection' ? (
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
-              <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
-                Garment categories from digitization. Click to filter the collection; edit any item with its pencil.
-              </p>
-              <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
-                The number on each row is how many of those pieces are in a look the client can see,
-                out of how many she owns. The rule underneath shows it at a glance, and turns amber
-                where looks are still unpublished.
-              </p>
               <div className="flex flex-col gap-1 overflow-y-auto pr-1">
                 <CategoryRow
                   label="All items"

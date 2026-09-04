@@ -204,6 +204,41 @@ if ((rowFn.match(/tabular-nums/g) ?? []).length < 2) {
   failures.push(`${PANEL}: the percentage and the pair must both be tabular-nums to stay in a straight column`)
 }
 
+// ── 3b. The number goes stale the moment it stops being re-read ──────────────
+// "Will this continue to update properly when new looks are styled?" It does, and only because
+// of two things that are easy to undo by accident.
+//
+//   1. CollectionTab is CONDITIONALLY RENDERED on mode === 'collection', so it unmounts when the
+//      stylist leaves the tab and mounts again when she returns. Switching it to always-mounted
+//      and hidden — the usual "make tab switching feel faster" change — would freeze the coverage
+//      at whatever it was when she first opened the client, and nothing would look wrong.
+//   2. useItemLookUsage re-reads gp_looks in an effect keyed on the client, so that remount is a
+//      fresh read rather than a replay of cached rows.
+//
+// Publishing a look happens on the Looks tab, which is a different mode, so the trip back to
+// Collection always crosses a remount.
+{
+  const at = panelSrc.indexOf('<CollectionTab')
+  checked++
+  if (at < 0) {
+    failures.push(`${PANEL}: CollectionTab is not rendered here any more`)
+  } else {
+    const before = panelSrc.slice(Math.max(0, at - 400), at)
+    checked++
+    if (!/mode === 'collection'\s*\?/.test(before)) {
+      failures.push(`${PANEL}: CollectionTab is no longer rendered behind "mode === 'collection' ?" — if it stays mounted, the styled numbers freeze at whatever they were when the client was opened`)
+    }
+    checked++
+    if (/\bhidden\b|display:\s*'?none/.test(before)) {
+      failures.push(`${PANEL}: CollectionTab looks like it is kept mounted and hidden, which stops the styled numbers being re-read`)
+    }
+  }
+  checked++
+  if (!/\}, \[clientId\]\)/.test(hookSrc)) {
+    failures.push(`${HOOK}: the look read is no longer an effect keyed on the client, so remounting may not refresh the styled numbers`)
+  }
+}
+
 // ── 4. Per-category coverage ─────────────────────────────────────────────────
 function cat(name, items, usage, want) {
   checked++
