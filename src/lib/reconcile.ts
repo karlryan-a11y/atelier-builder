@@ -20,6 +20,11 @@ export interface ReconRow {
    *  without it the shared dialog would open with an empty list and save the emptiness back. */
   custom_categories: string[] | null
   color: string | null
+  /** The colour SET (ADR-0115): color_family is the primary, color_families[] the rest. Fetched for
+   *  the same reason custom_categories is — the shared dialog edits it, and a surface that shows a
+   *  field it never fetched saves an empty list back over real data. */
+  color_family: string | null
+  color_families: string[] | null
   style_note: string | null
   description: string | null
   source: string | null

@@ -25,6 +25,16 @@ const CORS = {
 
 // Same fixed taxonomy the Collection/lookbook uses (categorize.ts) — so the AI only ever suggests a
 // real, browsable category. Custom per-client categories are chosen in the UI.
+// Canonical palette. Duplicated from src/lib/colorFamily.ts because a Vercel function does not
+// share the app's module graph — scripts/check-color-palette.mjs asserts every copy agrees.
+const COLOR_ORDER = [
+  'Black', 'Grey', 'White', 'Ivory', 'Beige', 'Brown',
+  'Red', 'Burgundy', 'Orange', 'Yellow', 'Gold', 'Silver',
+  'Pink', 'Blush', 'Purple', 'Lavender',
+  'Navy', 'Blue', 'Light Blue', 'Teal', 'Green', 'Olive',
+  'Multicolor',
+]
+
 const FIXED_CATEGORIES = [
   'dresses', 'tops', 'skirts', 'pants', 'jeans', 'shorts', 'outerwear', 'swim',
   'activewear', 'shoes', 'bags', 'jewelry', 'belts', 'scarves', 'hats', 'sunglasses',
@@ -46,7 +56,11 @@ async function prefill(imageDataUri: string) {
     'You are cataloguing a single fashion item from its photo for a luxury personal-styling client closet. ' +
     'Return concise, accurate product metadata. For "category" choose the single best-fit slug from ONLY this list: ' +
     FIXED_CATEGORIES.join(', ') + '. ' +
-    'Respond ONLY as compact JSON: {"name":"<short product name>","brand":"<brand or empty if unreadable>","color":"<primary color>","category":"<slug>","material":"<material or empty>"}.'
+    'For "colors" list EVERY colour you can see, most dominant first, choosing ONLY from this list: ' +
+    COLOR_ORDER.join(', ') + '. A print or a piece with several colours gets several entries — do not ' +
+    'collapse it to "Multicolor" unless no individual colour reads clearly. "color" stays a free-text ' +
+    'description of the exact shade; "colors" is what the client filters by. ' +
+    'Respond ONLY as compact JSON: {"name":"<short product name>","brand":"<brand or empty if unreadable>","color":"<primary color>","colors":["<palette colour>"],"category":"<slug>","material":"<material or empty>"}.'
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -67,6 +81,10 @@ async function prefill(imageDataUri: string) {
       name: typeof v.name === 'string' ? v.name.trim() : '',
       brand: typeof v.brand === 'string' ? v.brand.trim() : '',
       color: typeof v.color === 'string' ? v.color.trim() : '',
+      // Only palette values survive — a colour no chip carries is a colour nothing can filter by.
+      colors: Array.isArray(v.colors)
+        ? [...new Set(v.colors.map((c: unknown) => String(c || '').trim()).filter((c: string) => COLOR_ORDER.includes(c)))]
+        : [],
       category: typeof v.category === 'string' && FIXED_CATEGORIES.includes(v.category.trim().toLowerCase()) ? v.category.trim().toLowerCase() : '',
       material: typeof v.material === 'string' ? v.material.trim() : '',
     }
@@ -98,6 +116,13 @@ async function publish(body: any) {
   const color = String(body.color || '').trim() || null
   const category = String(body.category || '').trim().toLowerCase() || null
   const styleNote = String(body.style_note || '').trim() || null
+  // The colour SET (ADR-0115), primary first. Palette values only, deduped, empties dropped — the
+  // same posture as "Also in" below.
+  const colors: string[] = [...new Set(
+    (Array.isArray(body.colors) ? body.colors : [])
+      .map((c: unknown) => String(c || '').trim())
+      .filter(Boolean),
+  )] as string[]
   // "Also in" — additional categories beyond the primary garment one. Stored as slugs, deduped, and
   // never carrying the primary itself (garmentCategory.categoriesOf puts the primary first already).
   const customCategories = [...new Set(
@@ -108,8 +133,10 @@ async function publish(body: any) {
   const patch = {
     name, brand, color, category, style_note: styleNote,
     custom_categories: customCategories,
+    color_family: colors[0] ?? null,
+    color_families: colors.slice(1),
     is_deleted: false, // now LIVE
-    raw: { item_name: name, brand, color, category, style_note: styleNote, custom_categories: customCategories, manual_add: true },
+    raw: { item_name: name, brand, color, colors, category, style_note: styleNote, custom_categories: customCategories, manual_add: true },
   }
   const resp = await rest(`gp_closet_items?id=eq.${id}&is_deleted=eq.true`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
   if (!resp.ok) throw new Error(`publish failed: ${await resp.text()}`)

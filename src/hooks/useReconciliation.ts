@@ -123,7 +123,7 @@ export function useReconciliation(clientId: string | null) {
     async function load() {
       const { data, error: qErr } = await supabase
         .from('gp_closet_items')
-        .select('id, client_id, name, name_override, brand, category, custom_categories, color, style_note, source, raw, primary_image_hash, processed_image_hash, original_garment_photo_r2_key, original_tag_photo_r2_key, intake_item_id, added_at')
+        .select('id, client_id, name, name_override, brand, category, custom_categories, color, color_family, color_families, style_note, source, raw, primary_image_hash, processed_image_hash, original_garment_photo_r2_key, original_tag_photo_r2_key, intake_item_id, added_at')
         .eq('client_id', clientId)
         .eq('is_deleted', false)
         .order('added_at', { ascending: false, nullsFirst: false })
@@ -162,6 +162,8 @@ export function useReconciliation(clientId: string | null) {
           brand: d.brand ?? null,
           category: d.category ?? null,
           custom_categories: d.custom_categories ?? null,
+          color_family: d.color_family ?? null,
+          color_families: d.color_families ?? null,
           color: d.color ?? null,
           style_note: typeof d.style_note === 'string' ? d.style_note : null,
           description,

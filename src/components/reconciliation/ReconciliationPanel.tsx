@@ -43,7 +43,9 @@ function toClosetItem(r: ReconRow): ClosetItem {
   return {
     id: r.id, client_id: r.client_id, name: r.name, name_override: r.name_override,
     style_note: r.style_note, category: r.category, custom_categories: r.custom_categories,
-    brand: r.brand ?? '', color: r.color, content_tag_ids: [], is_deleted: false,
+    brand: r.brand ?? '', color: r.color,
+    color_family: r.color_family, color_families: r.color_families,
+    content_tag_ids: [], is_deleted: false,
     raw: { ...r.raw, ...(r.liveUrl ? { processed_image: r.liveUrl } : {}) },
     primary_image_hash: r.primary_image_hash, processed_image_hash: r.processed_image_hash,
     source: r.source, added_at: r.added_at,
@@ -386,7 +388,7 @@ export function ReconciliationPanel() {
   }
 
   // ----- Edit dialog actions (reuse the shared dialog used in Collection) -----
-  async function saveEdit(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null }) {
+  async function saveEdit(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
     setSaving(true)
     const { error: e } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)

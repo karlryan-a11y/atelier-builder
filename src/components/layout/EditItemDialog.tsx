@@ -1,20 +1,10 @@
 import { useState, useRef } from 'react'
-import { X, Save, Eraser, Upload, Archive, RotateCw, Plus, Star } from 'lucide-react'
+import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
-import { COLOR_ORDER, COLOR_SWATCH, MULTI_SWATCH, CUSTOM_SWATCH, colorsOf, normalizeColorName } from '@/lib/colorFamily'
-
-const LIGHT_COLORS = new Set(['White', 'Ivory', 'Blush', 'Light Blue', 'Yellow'])
-function colorDot(c: string) {
-  const bg = c === 'Multicolor' ? MULTI_SWATCH : (COLOR_SWATCH[c] ?? CUSTOM_SWATCH)
-  return (
-    <span
-      className="inline-block w-2.5 h-2.5 rounded-full align-middle"
-      style={{ background: bg, boxShadow: LIGHT_COLORS.has(c) ? 'inset 0 0 0 1px rgba(0,0,0,.2)' : undefined }}
-    />
-  )
-}
+import { colorsOf } from '@/lib/colorFamily'
+import { ColorSetField } from '@/components/common/ColorSetField'
 
 interface EditItemDialogProps {
   item: ClosetItem
@@ -36,8 +26,10 @@ interface EditItemDialogProps {
   /** When true, show the "Also in" multi-category editor (writes custom_categories[]). Only the
    *  Collection tab opts in; other consumers (Audit, canvas closet) keep single-category editing. */
   enableMultiCategory?: boolean
-  /** When true, show the "Colors" chip editor (writes color_family primary + color_families[] extras).
-   *  Only the Collection tab opts in; other consumers keep the plain free-text color field. */
+  /** The "Colors" chip editor (writes color_family primary + color_families[] extras). DEFAULTS ON
+   *  per ADR-0115: a colour is a set, and a stylist surface that can assign one assigns the set.
+   *  Passing false is a CLAIM — say why in a comment, and note that a surface which shows this field
+   *  must also FETCH color_family + color_families, or it saves an empty set over real data. */
   enableMultiColor?: boolean
   onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
   onClose: () => void
@@ -61,7 +53,7 @@ interface EditItemDialogProps {
   clientFirst?: string
 }
 
-export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = false, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
   const clientOwns = (f: string) => (clientEditedFields ?? []).includes(f)
   const who = clientFirst || 'The client'
@@ -86,16 +78,6 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   )
   // Color set, primary first (stored as color_family + color_families[]). Only used when enableMultiColor.
   const [colorSet, setColorSet] = useState<string[]>(() => colorsOf(item))
-  const addableColors = COLOR_ORDER.filter((c) => !colorSet.includes(c))
-  function addColor(c: string) {
-    if (c && !colorSet.includes(c)) setColorSet((p) => [...p, c])
-  }
-  function removeColor(c: string) {
-    setColorSet((p) => p.filter((x) => x !== c))
-  }
-  function makeColorPrimary(c: string) {
-    setColorSet((p) => [c, ...p.filter((x) => x !== c)])
-  }
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
   // Offer every fixed category + this client's customs, minus the current primary and ones already added.
@@ -140,8 +122,8 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       ...(enableMultiCategory
         ? { custom_categories: alsoInFinal.filter((s) => s && s !== finalCategory) }
         : {}),
-      // Only the Collection tab manages the color set; when disabled, omit the keys so other
-      // consumers' saves never touch color_family / color_families.
+      // Every stylist surface manages the colour set (ADR-0115). A consumer that explicitly opts
+      // out omits the keys entirely, so its save can never touch color_family / color_families.
       ...(enableMultiColor
         ? { color_family: colorSet[0] ?? null, color_families: colorSet.slice(1) }
         : {}),
@@ -313,62 +295,11 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
           </div>
 
           {enableMultiColor && (
-            <div>
-              <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Colors</label>
-              <ClientNote field="color" />
-              {colorSet.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {colorSet.map((c, i) => (
-                    <span
-                      key={c}
-                      className={`inline-flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-full text-[11px] border ${
-                        i === 0 ? 'border-text bg-tile text-text' : 'border-border text-text-muted'
-                      }`}
-                    >
-                      {i === 0 ? (
-                        <Star className="h-2.5 w-2.5 fill-current" />
-                      ) : (
-                        <button onClick={() => makeColorPrimary(c)} title="Make primary" className="hover:text-text">
-                          <Star className="h-2.5 w-2.5" />
-                        </button>
-                      )}
-                      {colorDot(c)}
-                      {c}
-                      <button
-                        onClick={() => removeColor(c)}
-                        className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text"
-                        title="Remove"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="relative">
-                <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted/50 pointer-events-none" />
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (!v) return
-                    if (v === '__new__') { const n = window.prompt('New color name (e.g. Hot Pink):'); if (n && n.trim()) addColor(normalizeColorName(n)) }
-                    else addColor(v)
-                    e.currentTarget.value = ''
-                  }}
-                  className="w-full bg-tile rounded-sm pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
-                >
-                  <option value="">Add a color…</option>
-                  {addableColors.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                  <option value="__new__">＋ New color…</option>
-                </select>
-              </div>
-              <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
-                The first color is primary. Add more than one, or “New color” to name one that isn’t listed. The piece shows under each color in the client’s lookbook.
-              </p>
-            </div>
+            <ColorSetField
+              value={colorSet}
+              onChange={setColorSet}
+              note={<ClientNote field="color" />}
+            />
           )}
 
           <div>

@@ -6,6 +6,7 @@ import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
 import { CATEGORY_LABELS } from '@/lib/categorize'
+import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
@@ -212,6 +213,13 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         if (f === 'name') return (data.name_override ?? null) === (editing.name_override ?? null)
         if (f === 'brand') return (data.brand ?? null) === (editing.brand ?? null)
         if (f === 'category') return (data.category ?? null) === (editing.category ?? null)
+        // Colour was missing from this list, so a stylist could override a set the client chose and
+        // the piece went on claiming she owned it — forever. The comparison is the SET (ADR-0115),
+        // not the free-text shade note; the client only ever picks palette colours.
+        if (f === 'color') {
+          const next = [data.color_family ?? '', ...(data.color_families ?? [])].filter(Boolean).join('|')
+          return next === colorsOf(editing).join('|')
+        }
         return true
       })
       if (nextOwned.length !== owned.length) patch.client_edited_fields = nextOwned.length ? nextOwned : null

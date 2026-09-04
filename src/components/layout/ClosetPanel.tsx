@@ -220,7 +220,7 @@ export function ClosetPanel() {
   const [savingItem, setSavingItem] = useState(false)
   const [zoomIndex, setZoomIndex] = useState<number | null>(null)
 
-  async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null }) {
+  async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editingItem) return
     setSavingItem(true)
     // This panel already FILTERS by categoriesOf (primary + "Also in"), so the chips it shows are
@@ -232,6 +232,9 @@ export function ClosetPanel() {
         name_override: data.name_override, brand: data.brand, color: data.color,
         style_note: data.style_note, category: data.category,
         ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
+        // Same guard for the colour set (ADR-0115): the key is only present when the dialog
+        // manages it, so spreading it can never blank the columns.
+        ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
       })
       .eq('id', editingItem.id)
     setSavingItem(false)

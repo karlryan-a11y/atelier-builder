@@ -3,6 +3,7 @@ import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
+import { ColorSetField } from '@/components/common/ColorSetField'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s]) => s !== 'other')
@@ -63,6 +64,8 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   const [name, setName] = useState('')
   const [brand, setBrand] = useState('')
   const [color, setColor] = useState('')
+  // The colour SET (ADR-0115). Seeded from the AI prefill, then the stylist corrects it.
+  const [colorSet, setColorSet] = useState<string[]>([])
   const [category, setCategory] = useState('')
   const [styleNote, setStyleNote] = useState('')
   const [customMode, setCustomMode] = useState(false)
@@ -119,6 +122,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
       if (fields.name && !name) setName(fields.name)
       if (fields.brand && !brand) setBrand(fields.brand)
       if (fields.color && !color) setColor(fields.color)
+      if (Array.isArray(fields.colors) && fields.colors.length && !colorSet.length) setColorSet(fields.colors)
       if (fields.category && !category) setCategory(fields.category)
     } catch {
       alert('Could not process that photo — try again.')
@@ -149,6 +153,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
     try {
       const d = await api({
         action: 'publish', item_id: draftId, name: name.trim(), brand, color,
+        colors: colorSet,
         category: finalCategory, style_note: styleNote,
         custom_categories: alsoInFinal.filter(s => s && s !== finalCategory),
       })
@@ -266,6 +271,8 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
           </div>
 
           <Field label="Color" value={color} onChange={setColor} placeholder="e.g. Navy" />
+
+          <ColorSetField value={colorSet} onChange={setColorSet} />
 
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Styling Note</label>
