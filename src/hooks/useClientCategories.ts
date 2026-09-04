@@ -3,8 +3,17 @@ import { supabase } from '@/lib/supabase'
 import { parentMapFrom, wouldCycle, type NestingRow } from '@/lib/categoryNesting'
 
 /**
- * The client's closet-category tree — `client_categories`, given `parent_slug` by
- * migration 021. (ADR-0113)
+ * The client's closet-category tree — `client_categories`. (ADR-0113)
+ *
+ * STORED IN `group_label`, NOT a new column. Migration 006 created that field as
+ * "display-only section header (Clothing/Accessories/...)", which is the same question
+ * a parent answers: which group does this category sit in. It is nullable, it has never
+ * been read or written, and using it means this needed no DDL at all — which is what let
+ * it ship while the database password was unavailable.
+ *
+ * The in-memory field is still called `parent_slug`, because that is what it means. The
+ * translation happens here and in atelier-looks' `getClientCategories`, and nowhere else.
+ * If a properly named column is ever added, those two places change and nothing else does.
  *
  * FIRST READER AND WRITER THIS TABLE HAS EVER HAD. Migration 006 created it in June
  * with slug/label/kind/group_label/sort_order/is_hidden and a unique key on
@@ -33,7 +42,7 @@ export function useClientCategories(clientId: string | null) {
     setLoading(true)
     const { data, error: e } = await supabase
       .from('client_categories')
-      .select('slug, label, parent_slug, sort_order')
+      .select('slug, label, group_label, sort_order')
       .eq('client_id', clientId)
       .order('sort_order')
       .order('slug')
@@ -47,7 +56,9 @@ export function useClientCategories(clientId: string | null) {
       return
     }
     setError(null)
-    setRows((data ?? []) as NestingRow[])
+    setRows((data ?? []).map((r: any) => ({
+      slug: r.slug, label: r.label, parent_slug: r.group_label ?? null, sort_order: r.sort_order ?? 0,
+    })))
   }, [clientId])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
@@ -79,7 +90,7 @@ export function useClientCategories(clientId: string | null) {
           client_id: clientId,
           slug: child,
           label: label ?? child,
-          parent_slug: next,
+          group_label: next,
           // `kind` is NOT NULL with a default of 'garment' (migration 006). Sent
           // explicitly so an upsert that INSERTS does not depend on the default
           // surviving a future schema edit.
@@ -87,7 +98,7 @@ export function useClientCategories(clientId: string | null) {
         },
         { onConflict: 'client_id,slug' },
       )
-      .select('slug, label, parent_slug, sort_order')
+      .select('slug, label, group_label, sort_order')
 
     if (e) return { ok: false as const, message: e.message }
     if (!data?.length) {

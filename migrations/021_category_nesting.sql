@@ -1,48 +1,37 @@
 -- 021_category_nesting.sql
 -- Nesting categories in the closet (ADR-0113).
 --
--- Julia asked for parent categories on Danielle York's Collection: Outerwear as
--- the heading, Jackets and Coats underneath it. Measured on her live rows, her
--- Collection offers 37 flat "Custom" chips in one alphabetical list, and the
--- Jewelry chip returns 41 pieces when she owns 251 -- because Earrings,
--- Necklaces, Bracelets, Rings, Pendants, Time Pieces and Brooches are each their
--- own category with nothing recording that they belong to Jewelry.
+-- NOT REQUIRED. Nothing waits on this file. Nesting shipped with NO schema change.
 --
--- `client_categories` was created by migration 006 in June to hold exactly this
--- per-client taxonomy -- slug, label, kind, group_label, sort_order, is_hidden.
--- It has never had a row and nothing in either repo reads or writes it. This
--- migration adds the one thing it was missing and wires it up.
+-- The parent of a category is stored in `client_categories.group_label`, which
+-- migration 006 created in June as "display-only section header
+-- (Clothing/Accessories/...)" and which nothing has ever read or written. That is
+-- the same question a parent answers: which group does this category sit in. It is
+-- nullable and unused, so reusing it needed no DDL, which is what let this ship on
+-- the day the database password turned out to be unavailable.
 --
--- WHY A COLUMN AND NOT `group_label`: group_label is display-only text. A parent
--- has to be a category in its own right -- tappable, counted, and holding pieces
--- of its own (58 of Danielle's pieces are filed on Outerwear directly). A text
--- heading cannot be any of those things.
+-- Two places translate `group_label` to the name the code uses, `parent_slug`, and
+-- nowhere else knows:
+--   atelier-builder  src/hooks/useClientCategories.ts
+--   atelier-looks    src/lib/queries.ts  (getClientCategories)
 --
--- ADDITIVE + NULLABLE ONLY (shared-DB hard rule, ADR-0006). No renames, no drops,
--- SELECT stays open for the lookbook's anon key.
+-- IF A PROPERLY NAMED COLUMN IS EVER WANTED, this is the whole change: add it,
+-- copy the values across, then point those two files at it. Additive and nullable,
+-- so it is safe to apply at any time, and safe never to apply. Do NOT drop
+-- group_label afterwards -- a rollback would need it, and dropping is against the
+-- shared-database rule (ADR-0006) regardless.
 
--- The parent of this category, as a slug in the SAME client's namespace.
--- NULL  => top level.
--- 'tops' => nested under Tops, whether or not Tops has a row of its own (a fixed
---           taxonomy slug is a valid parent and needs no row).
---
--- Deliberately NOT a foreign key to client_categories(client_id, slug): a stylist
--- can nest under a fixed category that has no row, and an FK would reject that.
--- The application resolves parents by slug and drops any that do not resolve.
-ALTER TABLE client_categories ADD COLUMN IF NOT EXISTS parent_slug text;
+-- ALTER TABLE client_categories ADD COLUMN IF NOT EXISTS parent_slug text;
+-- UPDATE client_categories SET parent_slug = group_label WHERE parent_slug IS NULL;
+-- CREATE INDEX IF NOT EXISTS idx_client_categories_client
+--   ON client_categories(client_id, sort_order);
+-- ALTER TABLE client_categories DROP CONSTRAINT IF EXISTS client_categories_no_self_parent;
+-- ALTER TABLE client_categories ADD CONSTRAINT client_categories_no_self_parent
+--   CHECK (parent_slug IS NULL OR parent_slug <> slug);
+-- NOTIFY pgrst, 'reload schema';
 
--- Reading a client's whole tree is one query per page render, so index the way
--- it is read: everything for this client, ordered.
-CREATE INDEX IF NOT EXISTS idx_client_categories_client
-  ON client_categories(client_id, sort_order);
-
--- A category cannot be its own parent. Cycles longer than one hop are the
--- application's problem (the resolver is depth-capped and tracks visited slugs),
--- but the one-hop case is cheap to refuse outright and is the one a stylist will
--- actually create by mis-clicking a dropdown.
-ALTER TABLE client_categories DROP CONSTRAINT IF EXISTS client_categories_no_self_parent;
-ALTER TABLE client_categories ADD CONSTRAINT client_categories_no_self_parent
-  CHECK (parent_slug IS NULL OR parent_slug <> slug);
-
--- Refresh PostgREST so the API exposes the new column immediately.
-NOTIFY pgrst, 'reload schema';
+-- A category cannot be its own parent. Enforced in the application instead
+-- (`wouldCycle` in src/lib/categoryNesting.ts refuses it before it can be saved, and
+-- `parentMapFrom` drops it on read if one ever gets in), because the constraint above
+-- needs DDL and the application has to be cycle-safe either way: the tree is typed by
+-- a stylist through a dropdown, and a two-hop cycle is two presses away.
