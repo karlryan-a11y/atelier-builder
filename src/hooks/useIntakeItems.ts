@@ -10,6 +10,10 @@ export interface IntakeItem {
   extracted_brand: string | null
   extracted_name: string | null
   extracted_color: string | null
+  /** The colour SET (ADR-0115, migration 005). Primary + the rest. Fetched because Digitize now
+   *  EDITS it — omit it from the SELECT and both screens open on an empty set and save that back. */
+  extracted_color_family: string | null
+  extracted_color_families: string[] | null
   extracted_category: string | null
   extracted_material: string | null
   extracted_metadata: Record<string, unknown> | null
@@ -66,6 +70,7 @@ export function useIntakeItems(
         .select(`
           id, batch_id, client_id, pair_index, status,
           extracted_brand, extracted_name, extracted_color,
+          extracted_color_family, extracted_color_families,
           extracted_category, extracted_material, extracted_metadata,
           ai_image_primary_r2_key, ai_image_generated_at,
           metadata_extracted_at, created_at,

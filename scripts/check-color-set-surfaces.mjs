@@ -142,9 +142,36 @@ if (!/if \(f === 'color'\)/.test(collection)) {
     `      A stylist replaces the colours the client chose and the piece goes on claiming she owns them, forever.`)
 }
 
+// ── 6. DIGITIZE — the last two surfaces, and the only ones on the intake row ─
+// These do NOT use EditItemDialog: they edit `intake_items`, and the colour only reaches the piece
+// when a stylist approves it. Until migration 005 the closet_items VIEW did not expose
+// color_families at all, so a set was physically unwritable on this path however the UI was built.
+const DIGITIZE = [
+  { name: 'Digitize item detail', ui: 'src/components/intake/IntakeItemDetail.tsx' },
+  { name: 'Digitize inbox',       ui: 'src/components/intake/IntakeInbox.tsx' },
+]
+const intakeHook = read('src/hooks/useIntakeItems.ts')
+for (const c of ['extracted_color_family', 'extracted_color_families']) {
+  checked++
+  if (!new RegExp(`\\b${c}\\b`).test(intakeHook)) {
+    failures.push(
+      `src/hooks/useIntakeItems.ts: the SELECT no longer asks for ${c}.\n` +
+      `      Both Digitize screens EDIT it, so they would open on an empty set and save that back.`)
+  }
+}
+for (const d of DIGITIZE) {
+  const ui = read(d.ui)
+  checked++
+  if (!/<ColorSetField/.test(ui)) failures.push(`${d.name}: no colour-set editor. A stylist can only name one colour again, which is the whole of ADR-0115.`)
+  checked++
+  if (!/colors: colorSet/.test(ui)) failures.push(`${d.name}: approve no longer sends \`colors\` in metadata_overrides, so whatever she picked is dropped when the piece is added to the collection.`)
+  checked++
+  if (!/ReadOnlyColorSet/.test(ui)) failures.push(`${d.name}: the set is invisible when the panel is not in edit mode, so nobody can see a piece has no filter colour.`)
+}
+
 // ── Report ───────────────────────────────────────────────────────────────────
 // A green tick over nothing is how a broken guard survived three weeks here (ADR-0106).
-console.log(`colour-set surfaces: ${checked} assertions over ${SURFACES.length} surfaces (${callSites.length} EditItemDialog call sites found)`)
+console.log(`colour-set surfaces: ${checked} assertions over ${SURFACES.length + DIGITIZE.length} surfaces (${callSites.length} EditItemDialog call sites + ${DIGITIZE.length} Digitize screens)`)
 if (checked === 0 || SURFACES.length === 0 || callSites.length === 0) {
   console.error('FAIL: the guard inspected nothing.')
   process.exit(1)

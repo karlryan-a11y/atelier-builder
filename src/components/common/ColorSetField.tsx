@@ -95,3 +95,23 @@ export function ColorSetField({
     </div>
   )
 }
+
+/** The same set, not editable — for a Digitize panel that is not in edit mode. */
+export function ReadOnlyColorSet({ value, label = 'Filter colors' }: { value: string[]; label?: string }) {
+  return (
+    <div>
+      <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">{label}</label>
+      {value.length === 0 ? (
+        <p className="text-sm text-text-muted/50">Not set — the client cannot filter this piece by colour</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((c, i) => (
+            <span key={c} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] border ${i === 0 ? 'border-text bg-tile text-text' : 'border-border text-text-muted'}`}>
+              {colorDot(c)}{c}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

@@ -3,6 +3,7 @@ import { Check, X, Edit3 } from 'lucide-react'
 import type { IntakeItem } from '@/hooks/useIntakeItems'
 import { SignedImage } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
+import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -23,6 +24,10 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
   const [color, setColor] = useState(item.extracted_color || '')
+  // The colour SET the client filters by (ADR-0115). `color` above stays the shade description.
+  const [colorSet, setColorSet] = useState<string[]>(
+    [item.extracted_color_family, ...(item.extracted_color_families ?? [])].filter(Boolean) as string[],
+  )
   const [category, setCategory] = useState(item.extracted_category || '')
   const [material, setMaterial] = useState(item.extracted_material || '')
   const [rejecting, setRejecting] = useState(false)
@@ -61,6 +66,7 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
             brand: brand || null,
             item_name: name || null,
             color: color || null,
+            colors: colorSet,
             category: category || null,
             material: material || null,
           } : undefined,
@@ -181,6 +187,9 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
             <MetadataField label="Brand" value={brand} editing={editing} onChange={setBrand} />
             <MetadataField label="Item Name" value={name} editing={editing} onChange={setName} />
             <MetadataField label="Color" value={color} editing={editing} onChange={setColor} />
+            {editing
+              ? <ColorSetField value={colorSet} onChange={setColorSet} label="Filter colors" />
+              : <ReadOnlyColorSet value={colorSet} />}
             <MetadataField label="Category" value={category} editing={editing} onChange={setCategory} options={CATEGORIES} allowNew />
             <MetadataField label="Material" value={material} editing={editing} onChange={setMaterial} />
           </div>

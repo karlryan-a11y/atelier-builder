@@ -4,6 +4,7 @@ import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { useClientStore } from '@/stores/clientStore'
+import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
 import { exportGoodPixXlsx } from '@/lib/goodpix-export'
 import {
   isGoogleDriveConfigured,
@@ -640,6 +641,10 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
   const [color, setColor] = useState(item.extracted_color || '')
+  // The colour SET the client filters by (ADR-0115). `color` above stays the shade description.
+  const [colorSet, setColorSet] = useState<string[]>(
+    [item.extracted_color_family, ...(item.extracted_color_families ?? [])].filter(Boolean) as string[],
+  )
   const [category, setCategory] = useState(item.extracted_category || '')
   const [material, setMaterial] = useState(item.extracted_material || '')
   const [showRestyle, setShowRestyle] = useState(false)
@@ -843,6 +848,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
             brand: brand || null,
             item_name: name || null,
             color: color || null,
+            colors: colorSet,
             category: category || null,
             material: material || null,
           } : undefined,
@@ -1079,6 +1085,9 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
             <MetadataField label="Brand" value={brand} editing={editing} onChange={setBrand} />
             <MetadataField label="Color" value={color} editing={editing} onChange={setColor} />
+            {editing
+              ? <ColorSetField value={colorSet} onChange={setColorSet} label="Filter colors" />
+              : <ReadOnlyColorSet value={colorSet} />}
             <CategoryField value={category} editing={editing} onChange={setCategory} customCategories={customCategories} />
             <MetadataField label="Material" value={material} editing={editing} onChange={setMaterial} />
           </div>
