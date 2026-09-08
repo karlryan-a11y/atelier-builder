@@ -136,7 +136,11 @@ async function exists(key) {
 async function page(table, select, filters) {
   const out = []
   for (let from = 0; ; from += 1000) {
-    let q = db.from(table).select(select).range(from, from + 999)
+    // .range() without an ORDER BY is not a stable cursor: across 89 pages of
+    // gp_closet_items the platform run of 2026-09-08 reported the right total and
+    // still never listed 85 of Maegan Watson's 383 pieces, while a one-page run
+    // scoped to her client listed every one. Order by the primary key.
+    let q = db.from(table).select(select).order('id', { ascending: true }).range(from, from + 999)
     for (const [k, v] of Object.entries(filters)) q = q.eq(k, v)
     const { data, error } = await q
     if (error) { console.error(table, error.message); break }
