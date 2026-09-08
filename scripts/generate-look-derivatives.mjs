@@ -151,7 +151,7 @@ const looks = (await page('gp_looks', 'id, client_id, name, raw, archived, trans
   CLIENT ? { client_id: CLIENT, published: true } : { published: true }))
   .filter((l) => !l.archived && !l.transitioned_at)
 
-const items = await page('gp_closet_items', 'id, client_id, raw, is_deleted, transitioned_at',
+const items = await page('gp_closet_items', 'id, client_id, raw, is_deleted, transitioned_at, source, primary_image_hash, processed_image_hash',
   CLIENT ? { client_id: CLIENT, is_deleted: false } : { is_deleted: false })
 
 const targets = []
@@ -162,6 +162,19 @@ for (const l of looks) {
 }
 for (const it of items) {
   if (it.transitioned_at) continue
+  // An Atelier-digitized piece is rendered from its R2 key COLUMNS, not from `raw`
+  // (closet.astro: `processed_image_hash ?? primary_image_hash` when source is
+  // intake_pipeline). Its `raw` usually carries no image URL at all, so deriving
+  // the target from `raw` put none of these pieces on the list: on 2026-09-08,
+  // 1,678 of 2,916 live Atelier keys had no variant while every tile asked for one
+  // and fell back to a 0.5–2.3 MB original. Target the key the page asks for.
+  if (it.source === 'intake_pipeline') {
+    const key = it.processed_image_hash ?? it.primary_image_hash
+    if (!key) continue
+    const url = `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+    targets.push({ id: it.id, name: 'piece', dk: derivedKey(key, ITEM_WIDTH), url, width: ITEM_WIDTH })
+    continue
+  }
   const url = it.raw?.processed_image ?? it.raw?.image ?? it.raw?.images?.[0] ?? null
   const dk = derivedKeyForUrl(url, ITEM_WIDTH)
   if (dk) targets.push({ id: it.id, name: 'piece', dk, url, width: ITEM_WIDTH })
