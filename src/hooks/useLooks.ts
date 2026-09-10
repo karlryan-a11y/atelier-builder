@@ -132,6 +132,13 @@ export function useLooks(clientId: string | null) {
       row.description = ''
       row.archived = false
       row.total_comments = 0
+      // WHEN THIS LOOK WAS MADE. gp_looks.created_at has no database default and this insert
+      // never set it, so every one of the 497 looks ever built in Atelier carried NULL --
+      // measured on production 2026-09-10. The client's gallery breaks ties on this column, and
+      // a null tiebreaker is worse than none on a paged page: an ambiguous total order makes
+      // .range() skip and repeat rows between pages. The GoodPix scraper writes the real
+      // GoodPix date here, so both sources now mean the same thing. (ADR-0121)
+      row.created_at = new Date().toISOString()
     }
 
     const { data, error } = isNew

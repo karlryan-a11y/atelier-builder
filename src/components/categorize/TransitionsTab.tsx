@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { RotateCcw, Wand2, Archive } from 'lucide-react'
-import type { useTransitions, TransitionedLook } from '@/hooks/useTransitions'
+import type { useTransitions, TransitionedLook, TransitionedItem } from '@/hooks/useTransitions'
+import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 
 // Renders the transitioned pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook as a result. Restore returns a piece and re-publishes any
@@ -19,13 +20,21 @@ const REASON_LABEL: Record<string, string> = {
 
 export function TransitionsTab({ items, looks, loading, error, restoreItem, retireLook, onRestyle, restylingId }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
+  // WHICH PIECE PULLED THIS LOOK. Julia Driscoll, 2026-09-09: "can I find in the look which
+  // piece was the transitioned piece? I wasn't present during all of the transitioning."
+  // The answer was already in the row -- `transitioned_item_ids` names the exact cause -- and
+  // the tab loaded it, counted it and printed "Piece transitioned" without ever saying which.
+  // Every one of the 443 cause references on the platform resolves to a piece in `items`
+  // above (checked on production 2026-09-10), so this join costs nothing: no extra query, no
+  // extra fetch, both lists are already on this screen.
+  const itemById = new Map(items.map((i) => [i.id, i]))
   // Ref guard: blocks a second restore firing before React re-renders the disabled button
   // (state alone can lag a rapid double-tap / a stalled-then-retried click).
   const inFlight = useRef(false)
 
   async function onRetire(look: TransitionedLook) {
     if (inFlight.current) return
-    if (!confirm(`Retire "${look.name}" for good?\n\nIt leaves the client's lookbook and this queue. The look is archived, not deleted — Restore brings it back.`)) return
+    if (!confirm(`Retire "${lookTitle(look.name)}" for good?\n\nIt leaves the client's lookbook and this queue. The look is archived, not deleted — Restore brings it back.`)) return
     inFlight.current = true
     setBusy(look.id)
     try { await retireLook(look.id) }
@@ -114,10 +123,12 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
                   )}
                 </div>
                 <div className="px-3 py-2.5">
-                  <p className="text-[13px] text-[#1A1A1A] truncate">{look.name}</p>
-                  <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-1">
-                    {look.causeItemIds.length > 1 ? `${look.causeItemIds.length} pieces transitioned` : 'Piece transitioned'}
-                  </p>
+                  <p className="text-[13px] text-[#1A1A1A] truncate">{lookTitle(look.name)}</p>
+                  <CausePieces
+                    causeItemIds={look.causeItemIds}
+                    itemById={itemById}
+                    transitionedAt={look.transitionedAt}
+                  />
                   <div className="mt-2.5 flex items-center gap-4">
                     <button
                       onClick={() => onRestyle(look)}
@@ -142,6 +153,59 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * The missing sentence: WHICH piece knocked this look out of the lookbook, who removed it,
+ * and when. Before this the card said "Piece transitioned" and nothing else, so a stylist
+ * looking at 237 pulled looks (Alicia Hidalgo, 2026-09-10) could not tell which garment to
+ * style around without opening each one. 110 of those 237 are down over exactly one piece.
+ *
+ * Shows the piece's own thumbnail beside its brand and name, because a stylist recognises the
+ * garment faster than she reads it. The wording itself lives in lib/transitionCaption.ts so
+ * the build can check it against real rows -- see scripts/check-transition-caption.mjs.
+ */
+function CausePieces({ causeItemIds, itemById, transitionedAt }: {
+  causeItemIds: string[]
+  itemById: Map<string, TransitionedItem>
+  transitionedAt: string | null
+}) {
+  const caption = causeCaption(causeItemIds, (id) => itemById.get(id), transitionedAt)
+
+  if (caption.pieces.length === 0 && caption.unresolved === 0) {
+    return <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-1">{caption.headline}</p>
+  }
+
+  return (
+    <div className="mt-1.5">
+      <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa]">{caption.headline}</p>
+      <ul className="mt-1.5 space-y-1.5">
+        {caption.pieces.map((piece) => {
+          const full = itemById.get(piece.id)
+          return (
+            <li key={piece.id} className="flex items-center gap-2">
+              <span className="h-7 w-7 shrink-0 bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm overflow-hidden flex items-center justify-center">
+                {full?.image
+                  ? <img src={full.image} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
+                  : <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>}
+              </span>
+              <span className="min-w-0">
+                {piece.brand && (
+                  <span className="block text-[9px] tracking-[0.16em] uppercase text-[#8a7a6a] truncate">{piece.brand}</span>
+                )}
+                <span className="block text-[12px] text-[#1A1A1A] leading-tight truncate">{piece.name}</span>
+              </span>
+            </li>
+          )
+        })}
+        {caption.unresolved > 0 && (
+          <li className="text-[11px] text-[#b4443a]">
+            {caption.unresolved} {caption.unresolved === 1 ? 'piece' : 'pieces'} no longer in her collection - restore from the piece list above
+          </li>
+        )}
+      </ul>
     </div>
   )
 }

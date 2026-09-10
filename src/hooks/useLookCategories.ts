@@ -106,8 +106,13 @@ export function useLookCategories(clientId: string | null) {
         // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
         .is('transitioned_at', null)
         // Match the client lookbook's ordering so "On lookbook" == what she sees.
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
+        // NULLS FIRST: a look nobody has arranged is a new look, and a new look goes to the
+        // top. Mirrors atelier-looks/src/lib/lookOrder.ts -- change both or the stylist is
+        // arranging a list the client never sees in that order. (ADR-0121)
+        .order('sort_order', { ascending: true, nullsFirst: true })
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .order('extracted_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true }),
       supabase.from('gp_boards')
         .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids')
         .eq('client_id', clientId)
