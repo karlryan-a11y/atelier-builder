@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Search, ChevronDown, User, Plus, Loader2 } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useClientStore } from '@/stores/clientStore'
+import { ClientPickerLabel } from '@/components/common/ClientDuplicateNote'
 
 const TIERS = ['A-la-carte', 'Signature', 'White Glove', 'Elève']
 
@@ -116,7 +117,7 @@ export function ClientBar() {
                       activeClient?.id === c.id ? 'bg-[#F8F7F5] font-medium text-[#1A1A1A]' : 'text-[#444]'
                     }`}
                   >
-                    {c.name}
+                    <ClientPickerLabel client={c} />
                   </button>
                 ))}
               </div>

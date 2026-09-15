@@ -5,6 +5,8 @@ import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { useClientStore } from '@/stores/clientStore'
 import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
+import { ClientPickerLabel } from '@/components/common/ClientDuplicateNote'
+import { fetchClientDirectory, type ClientEntry } from '@/lib/clientDirectory'
 import { exportGoodPixXlsx } from '@/lib/goodpix-export'
 import {
   isGoogleDriveConfigured,
@@ -1698,7 +1700,7 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems, clientId }: { onB
 
 function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: () => void }) {
   const { activeClient } = useClientStore()
-  const [clients, setClients] = useState<Array<{ id: string; name: string }>>([])
+  const [clients, setClients] = useState<ClientEntry[]>([])
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id ?? '')
   const [batchLabel, setBatchLabel] = useState('')
   const [category, setCategory] = useState('clothing')
@@ -1725,18 +1727,15 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
 
   const [clientSearch, setClientSearch] = useState('')
 
-  // Load full client list (no limit)
+  // Load full client list (no limit), with duplicate notes (ADR-0122): uploading a
+  // closet into the empty twin of a client buries her photos where nobody looks.
   useEffect(() => {
-    supabase
-      .from('gp_clients')
-      .select('id, name')
-      .order('name')
-      .then(({ data }) => {
-        setClients(data ?? [])
-        if (!selectedClientId && activeClient?.id) {
-          setSelectedClientId(activeClient.id)
-        }
-      })
+    fetchClientDirectory().then((data) => {
+      setClients(data)
+      if (!selectedClientId && activeClient?.id) {
+        setSelectedClientId(activeClient.id)
+      }
+    })
   }, [])
 
   const handleFiles = useCallback((newFiles: File[]) => {
@@ -2087,7 +2086,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                         onClick={() => { setSelectedClientId(c.id); setClientSearch(c.name) }}
                         className="w-full text-left px-3 py-2.5 text-sm hover:bg-[#F8F7F5] transition-colors"
                       >
-                        {c.name}
+                        <ClientPickerLabel client={c} />
                       </button>
                     ))}
                   {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (

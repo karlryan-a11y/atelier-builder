@@ -1,22 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface Client {
-  id: string
-  name: string
-}
+import { fetchClientDirectory, type ClientEntry } from '@/lib/clientDirectory'
 
 export function useClients() {
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<ClientEntry[]>([])
   const [loading, setLoading] = useState(true)
 
   const refetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('id, name')
-      .order('name')
-
-    setClients(data ?? [])
+    setClients(await fetchClientDirectory())
     setLoading(false)
   }, [])
 
