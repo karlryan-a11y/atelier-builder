@@ -37,6 +37,8 @@ interface Props {
   // supports BOTH arranging and categorizing. Dragging only starts from the grip
   // handle, so a plain card click is free for tagging (no interaction conflict).
   activeBrushId?: string | null
+  /** Whether a card click tags. Off, a click does nothing but shift-select (lib/lookCategoryFilter.ts). */
+  tagging?: boolean
   selected?: Set<string>
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
   /** Extra per-card action buttons rendered under "Remove from lookbook" (e.g. the looks
@@ -46,7 +48,7 @@ interface Props {
 
 export function LookArrangeGrid({
   items, labelOf, onReorder, onRemove, onArchive, galleryName = 'Looks gallery',
-  activeBrushId = null, selected, onCardClick, renderActions,
+  activeBrushId = null, tagging = false, selected, onCardClick, renderActions,
 }: Props) {
   // Local order for snappy arrow/drag feedback; resynced whenever the published
   // set changes identity (add/remove/refetch).
@@ -88,7 +90,7 @@ export function LookArrangeGrid({
       <p className="text-[11px] text-[#888] mb-4 leading-relaxed">
         This is the order clients see in their {galleryName}. Drag a card, or use the
         arrows, to arrange it — changes save automatically.
-        {onCardClick && ' Click a card to tag it with the active category (shift-click to multi-select).'}
+        {onCardClick && tagging && ' Tagging is on: click a card to add it to the picked category or take it out.'}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={rectSortingStrategy}>
@@ -106,6 +108,7 @@ export function LookArrangeGrid({
                 isSelected={selected?.has(item.id) ?? false}
                 hasBrush={!!activeBrushId && item.categoryIds.includes(activeBrushId)}
                 onCardClick={onCardClick}
+                tagging={tagging}
                 renderActions={renderActions}
               />
             ))}
@@ -127,10 +130,11 @@ interface CardProps {
   isSelected: boolean
   hasBrush: boolean
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
+  tagging: boolean
   renderActions?: (item: ArrangeItem) => React.ReactNode
 }
 
-function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, renderActions }: CardProps) {
+function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, tagging, renderActions }: CardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: look.id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -145,7 +149,7 @@ function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive,
       style={style}
       onClick={(e) => onCardClick?.(look, e.shiftKey)}
       className={`group relative bg-white rounded-sm border-2 transition-colors ${
-        onCardClick ? 'cursor-pointer' : ''
+        onCardClick && tagging ? 'cursor-pointer' : ''
       } ${
         isDragging
           ? 'border-[#1A1A1A] shadow-lg'

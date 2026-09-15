@@ -143,7 +143,7 @@ for (const label of probes) {
 const PANEL = 'src/components/categorize/CategorizePanel.tsx'
 const panelSrc = fs.readFileSync(path.join(root, PANEL), 'utf8')
 const railStart = panelSrc.indexOf("Filter by category")
-const railEnd = panelSrc.indexOf("Active category", railStart)
+const railEnd = panelSrc.indexOf("Looks and Capsules rail", railStart)
 checked++
 if (railStart < 0 || railEnd < 0) {
   failures.push(`${PANEL}: could not locate the Collection rail`)

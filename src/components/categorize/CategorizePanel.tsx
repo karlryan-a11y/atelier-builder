@@ -25,6 +25,7 @@ import { hasResidences, residencesFrom } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { filterByCategory, cardClickAction, mergeSubsetOrder } from '@/lib/lookCategoryFilter'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -122,7 +123,11 @@ export function CategorizePanel() {
   )
 
   const [mode, setMode] = useState<Mode>('looks')
-  const [brush, setBrush] = useState<string | null>(null)   // category ID
+  // The category picked in the rail (an ID), or null for all of them. It FILTERS the grid.
+  // It only tags when `tagging` is on: see lib/lookCategoryFilter.ts for why a click used to
+  // re-file looks without saying so.
+  const [brush, setBrush] = useState<string | null>(null)
+  const [tagging, setTagging] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<Status>('draft')
   const [newCat, setNewCat] = useState('')
@@ -314,7 +319,7 @@ export function CategorizePanel() {
     if (name !== null) renameCapsule(capsule.id, name)
   }
 
-  const activeBrush = brush ?? categories[0]?.id ?? null
+  const activeBrush = brush && categories.some((c) => c.id === brush && !c.is_hidden) ? brush : null
   const labelOf = useMemo(() => {
     const m = new Map(categories.map((c) => [c.id, c.label]))
     return (id: string) => m.get(id) ?? '—'
@@ -330,7 +335,7 @@ export function CategorizePanel() {
   const queueCount = (arr: { published: boolean; archived: boolean }[]) =>
     arr.filter((i) => !i.published && !i.archived).length
 
-  const visible = useMemo(
+  const inStatus = useMemo(
     () => items.filter((i) => {
       if (status === 'all') return true
       if (status === 'archived') return i.archived
@@ -339,6 +344,12 @@ export function CategorizePanel() {
     }),
     [items, status],
   )
+  // Then by the category picked in the rail, unless tagging is on (tagging needs every card).
+  const visible = useMemo(
+    () => filterByCategory(inStatus, activeBrush, categories, tagging),
+    [inStatus, activeBrush, categories, tagging],
+  )
+  const filtering = !!activeBrush && !tagging
 
   // Per-card Edit/Rebuild + Rename actions for looks — shared between the queue grid and the
   // "On lookbook" arrange grid so GoodPix looks are editable from wherever Paige finds them.
@@ -458,12 +469,20 @@ export function CategorizePanel() {
     assignItem(item.id, catId, !has(item, catId))
   }
 
-  function onCardClick(item: { id: string; categoryIds: string[] }) {
-    if (selected.size > 0) {
+  function onCardClick(item: { id: string; categoryIds: string[] }, shiftKey = false) {
+    const action = cardClickAction({ shiftKey, selecting: selected.size > 0, tagging, categoryId: activeBrush })
+    if (action === 'select') {
       setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
-      return
+    } else if (action === 'tag' && activeBrush) {
+      toggleOnItem(item, activeBrush)
     }
-    if (activeBrush) toggleOnItem(item, activeBrush)
+  }
+
+  // The "On lookbook" grid saves its order as her gallery order. While it is filtered it holds
+  // only some of her looks, so their new order goes back into the slots they already had.
+  function reorderVisible(orderedIds: string[]) {
+    const reorder = mode === 'looks' ? reorderLooks : reorderCapsules
+    reorder(filtering ? mergeSubsetOrder(inStatus.map((i) => i.id), orderedIds) : orderedIds)
   }
 
   function applyBrushToSelected(remove = false) {
@@ -655,11 +674,33 @@ export function CategorizePanel() {
             </>
           ) : (
             <>
-          <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Active category</p>
+          {/* Looks and Capsules rail (check-styled-coverage ends the Collection rail here) */}
+          <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
           <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
-            Pick one, then click {mode} to tag them. Shift-click to multi-select. Pencil renames everywhere.
+            {tagging
+              ? `Tagging is on. Pick a category, then click ${mode} to add them to it or take them out.`
+              : `Click a category to see only its ${mode}. To file ${mode}, turn on Tag ${mode}.`}
           </p>
+          {/* Tagging is a switch she turns on, never a side effect of browsing. Off by default. */}
+          <button
+            onClick={() => { setTagging((t) => !t); setSelected(new Set()) }}
+            aria-pressed={tagging}
+            className={`mb-3 w-full flex items-center justify-between px-3 py-2 rounded border text-[11px] tracking-[0.12em] uppercase transition-colors ${
+              tagging ? 'bg-[#F8E5E7] border-[#1A1A1A] text-[#1A1A1A]' : 'border-[#E8E4DF] text-[#888] hover:text-[#1A1A1A]'
+            }`}
+          >
+            <span className="flex items-center gap-1.5"><Tag className="w-3 h-3" /> Tag {mode}</span>
+            <span>{tagging ? 'On' : 'Off'}</span>
+          </button>
           <div className="flex flex-col gap-1 overflow-y-auto pr-1">
+            {!tagging && categories.some((c) => !c.is_hidden) && (
+              <button
+                onClick={() => setBrush(null)}
+                className={`w-full text-left px-3 py-2 rounded text-[12px] transition-colors ${activeBrush === null ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+              >
+                All {mode}
+              </button>
+            )}
             {categories.filter((c) => !c.is_hidden).length === 0 && (
               <span className="text-[11px] text-[#bbb]">No categories yet — create one below.</span>
             )}
@@ -689,7 +730,7 @@ export function CategorizePanel() {
                   }`}
                 >
                   <div className="group flex items-center justify-between">
-                  <button onClick={() => setBrush(cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
+                  <button onClick={() => setBrush(!tagging && activeBrush === cat.id ? null : cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
                     {cat.label}
                   </button>
                   {/* Note + Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
@@ -824,7 +865,7 @@ export function CategorizePanel() {
               .map((m) => (
               <button
                 key={m}
-                onClick={() => { setMode(m); setSelected(new Set()) }}
+                onClick={() => { setMode(m); setSelected(new Set()); setTagging(false) }}
                 className={`relative px-4 py-1.5 text-[12px] tracking-[0.18em] uppercase rounded transition-colors ${mode === m ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A]'}`}
               >
                 {m}
@@ -896,6 +937,16 @@ export function CategorizePanel() {
           </ErrorBoundary>
         ) : (
         <div className="flex-1 overflow-y-auto p-6">
+          {(mode === 'looks' || mode === 'capsules') && tagging && (
+            <div className="mb-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded bg-[#F8E5E7] text-[12px] text-[#1A1A1A]">
+              <span>
+                {activeBrushLabel
+                  ? <>Tagging is on. Clicking a card adds it to <strong className="capitalize">{activeBrushLabel}</strong>, or takes it out if it is already there.</>
+                  : <>Tagging is on. Pick a category on the left, then click cards to tag them.</>}
+              </span>
+              <button onClick={() => { setTagging(false); setSelected(new Set()) }} className="flex-none text-[10px] tracking-[0.15em] uppercase underline">Done</button>
+            </div>
+          )}
           {mode === 'nesting' ? (
             <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
           ) : mode === 'collection' ? (
@@ -911,17 +962,20 @@ export function CategorizePanel() {
             <p className="text-[#888] text-sm">Loading…</p>
           ) : visible.length === 0 ? (
             <p className="text-[#888] text-sm">
-              {status === 'draft' ? `No ${mode} waiting in the queue — all caught up.` : `No ${mode} here.`}
+              {filtering
+                ? `No ${mode} in ${activeBrushLabel} in this view.`
+                : status === 'draft' ? `No ${mode} waiting in the queue, all caught up.` : `No ${mode} here.`}
             </p>
           ) : (mode === 'looks' || mode === 'capsules') && status === 'published' ? (
             <LookArrangeGrid
               items={visible as (TaggableLook | TaggableCapsule)[]}
               labelOf={labelOf}
-              onReorder={mode === 'looks' ? reorderLooks : reorderCapsules}
+              onReorder={reorderVisible}
               onRemove={(id) => setItemPublished(id, false)}
               onArchive={archiveItem}
               galleryName={mode === 'looks' ? 'Looks gallery' : 'Capsules'}
-              activeBrushId={activeBrush}
+              activeBrushId={tagging ? activeBrush : null}
+              tagging={tagging}
               selected={selected}
               renderActions={(item) => (
                 <>
@@ -930,26 +984,18 @@ export function CategorizePanel() {
                   {shareCardActions(item.id, shareToChat)}
                 </>
               )}
-              onCardClick={(item, shiftKey) => {
-                if (shiftKey) {
-                  setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
-                } else { onCardClick(item) }
-              }}
+              onCardClick={(item, shiftKey) => onCardClick(item, shiftKey)}
             />
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
               {visible.map((item) => {
                 const isSel = selected.has(item.id)
-                const hasBrush = activeBrush ? has(item, activeBrush) : false
+                const hasBrush = tagging && activeBrush ? has(item, activeBrush) : false
                 return (
                   <div
                     key={item.id}
-                    onClick={(e) => {
-                      if (e.shiftKey) {
-                        setSelected((prev) => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })
-                      } else { onCardClick(item) }
-                    }}
-                    className={`group relative cursor-pointer bg-white rounded-sm border-2 transition-all ${
+                    onClick={(e) => onCardClick(item, e.shiftKey)}
+                    className={`group relative ${tagging ? 'cursor-pointer' : ''} bg-white rounded-sm border-2 transition-all ${
                       isSel ? 'border-[#1A1A1A]' : hasBrush ? 'border-[#F8E5E7]' : 'border-transparent hover:border-[#E8E4DF]'
                     }`}
                   >
