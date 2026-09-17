@@ -86,3 +86,45 @@ export function mergeSubsetOrder(fullIds: string[], subsetOrderedIds: string[]):
   let next = 0
   return fullIds.map((id) => (inSubset.has(id) ? subsetOrderedIds[next++] : id))
 }
+
+/**
+ * "Select all" on the bar above the grid. It is how a whole category gets added to another
+ * one: filter to FW Business Professional, select all 14, pick Business Professional on the
+ * left, press "+ Business Professional".
+ *
+ * Cynthia Dada, on Janet Foutty, 2026-09-17: "I now need to create a Business Professional
+ * category so that I can include all FW and SS looks in there." Without this the only way to
+ * open a selection is shift-click, which does not exist on the tablet the builder is used on,
+ * and which meant clicking all 14 by hand.
+ *
+ * It adds the looks in view WITHOUT touching a selection made outside the current filter, so
+ * she can gather from two categories before applying. When everything in view is already
+ * selected it takes those back out, and only those.
+ */
+export function selectAllToggle(visibleIds: string[], selected: Iterable<string>): string[] {
+  const next = new Set(selected)
+  const allIn = visibleIds.length > 0 && visibleIds.every((id) => next.has(id))
+  for (const id of visibleIds) {
+    if (allIn) next.delete(id)
+    else next.add(id)
+  }
+  return [...next]
+}
+
+/**
+ * Whether the bar offers "Select all", and what it says. Hidden while tagging is on: tagging
+ * drops the filter (a grid of only the looks already in a category leaves nothing to add), so
+ * there "all" means her entire gallery, which is never the thing she meant.
+ */
+export function selectAllLabel(opts: {
+  mode: string
+  tagging: boolean
+  visibleCount: number
+  selectedInViewCount: number
+}): string | null {
+  if (opts.mode !== 'looks' && opts.mode !== 'capsules') return null
+  if (opts.tagging || opts.visibleCount === 0) return null
+  return opts.selectedInViewCount === opts.visibleCount
+    ? `Deselect all ${opts.visibleCount}`
+    : `Select all ${opts.visibleCount}`
+}

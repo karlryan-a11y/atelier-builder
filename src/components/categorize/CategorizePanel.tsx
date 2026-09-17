@@ -25,7 +25,7 @@ import { hasResidences, residencesFrom } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
-import { filterByCategory, cardClickAction, mergeSubsetOrder } from '@/lib/lookCategoryFilter'
+import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, selectAllLabel } from '@/lib/lookCategoryFilter'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -350,6 +350,16 @@ export function CategorizePanel() {
     [inStatus, activeBrush, categories, tagging],
   )
   const filtering = !!activeBrush && !tagging
+
+  // "Select all" acts on what is in view, which is how a whole category gets added to another
+  // one. See selectAllToggle in lib/lookCategoryFilter.ts.
+  const visibleIds = useMemo(() => visible.map((i) => i.id), [visible])
+  const selectAllText = selectAllLabel({
+    mode,
+    tagging,
+    visibleCount: visibleIds.length,
+    selectedInViewCount: visibleIds.filter((id) => selected.has(id)).length,
+  })
 
   // Per-card Edit/Rebuild + Rename actions for looks — shared between the queue grid and the
   // "On lookbook" arrange grid so GoodPix looks are editable from wherever Paige finds them.
@@ -677,9 +687,14 @@ export function CategorizePanel() {
           {/* Looks and Capsules rail (check-styled-coverage ends the Collection rail here) */}
           <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Filter by category</p>
           <p className="text-[10px] text-[#888] mb-3 leading-relaxed">
+            {/* With a selection open the rail is how she picks where those looks are going, so
+                it says so. Switching category keeps the selection, which is the whole trick and
+                is not guessable. */}
             {tagging
               ? `Tagging is on. Pick a category, then click ${mode} to add them to it or take them out.`
-              : `Click a category to see only its ${mode}. To file ${mode}, turn on Tag ${mode}.`}
+              : selected.size > 0
+                ? `${selected.size} selected. Click the category you want them in, then press the + button above. Your selection is kept.`
+                : `Click a category to see only its ${mode}. To file ${mode}, turn on Tag ${mode}.`}
           </p>
           {/* Tagging is a switch she turns on, never a side effect of browsing. Off by default. */}
           <button
@@ -891,8 +906,18 @@ export function CategorizePanel() {
           </div>
           )}
 
-          {selected.size > 0 && (
+          {(selectAllText || selected.size > 0) && (
             <div className="flex items-center gap-2 ml-auto">
+              {/* Select all: the only way to open a selection without a keyboard, and the
+                  first step of adding a whole category to another one. */}
+              {selectAllText && (
+                <button
+                  onClick={() => setSelected(new Set(selectAllToggle(visibleIds, selected)))}
+                  className="px-2.5 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#888] hover:text-[#1A1A1A]"
+                >{selectAllText}</button>
+              )}
+              {selected.size > 0 && (
+                <>
               <span className="text-[11px] text-[#888]">{selected.size} selected</span>
               {activeBrushLabel && (
                 <>
@@ -904,6 +929,8 @@ export function CategorizePanel() {
                 <Send className="w-3 h-3" /> Add to lookbook
               </button>
               <button onClick={() => setSelected(new Set())} className="text-[11px] text-[#888] hover:text-[#1A1A1A]">Clear</button>
+                </>
+              )}
             </div>
           )}
         </div>
