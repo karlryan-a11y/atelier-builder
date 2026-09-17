@@ -1,6 +1,19 @@
 import { create } from 'zustand'
 import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas'
 import { createDefaultLookCanvas } from '@/types/canvas'
+import type { OmittedPiece } from '@/lib/restyleSelection'
+
+/** The original look a rebuild stands in for, shown beside the board while she restyles it. */
+export interface RestyleReference {
+  lookId: string
+  lookName: string
+  /** The composed picture GoodPix baked. This is the only record of the arrangement we have. */
+  imageUrl: string | null
+  /** Pieces left off the board because she no longer owns them, with the reason. */
+  omitted: OmittedPiece[]
+  /** How many pulled looks this one rebuild answers (1 unless duplicates were collapsed). */
+  covers: number
+}
 
 const MAX_HISTORY = 50
 const AUTOSAVE_KEY = 'atelier-canvas-draft'
@@ -51,6 +64,24 @@ interface CanvasStoreState {
    * original can be retired and its lookbook slot handed over. See lib/lookTransitions.ts.
    */
   replacesLookId: string | null
+  /**
+   * The OTHER pulled looks this rebuild also stands in for. A GoodPix board can carry several
+   * identical pulled looks (47 of Alicia Hidalgo's 235 cards on 2026-09-17 were duplicates of
+   * each other), and the Transitions queue shows them as one card. Saving once must hand the
+   * lookbook slot over from the primary and retire the twins, or she answers the same card again
+   * tomorrow. Always empty unless replacesLookId is set. See lib/transitionQueue.ts.
+   */
+  replacesSiblingLookIds: string[]
+  /**
+   * The picture the board is a rebuild OF, plus what was deliberately left off it. GoodPix never
+   * exported the arrangement (0 of 15,065 scraped looks have a canvas_state), so a rebuild can
+   * only be a plain grid — and Paige Berndt, 2026-09-17: "all the pieces are laid out all over
+   * the screen and the brand names are removed ... there are pieces on the canvas that were not
+   * in the original look." Until the arrangement itself can be recovered, the original rides
+   * along beside the canvas so she can read the handwriting off it and see what changed.
+   * Transient: never saved, cleared by every other way of loading the board.
+   */
+  restyleReference: RestyleReference | null
   // Set when a saved capsule (gp_boards row with raw.canvas_state) is loaded onto the canvas
   // for editing via Categorize → Capsules → Edit. Mutually exclusive with currentLookId — loading
   // a look, duplicating, or starting a new look all clear this. Lets ChatPanel's "Save as Capsule"
@@ -164,7 +195,9 @@ interface CanvasStoreActions {
   loadLook: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
   loadLookAsNew: (state: LookCanvasState, imageUrls: Record<string, string>) => void
   // Same as loadLookAsNew, but remembers which transitioned look this rebuild replaces.
-  loadLookAsReplacement: (replacesLookId: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
+  loadLookAsReplacement: (replacesLookId: string, siblingLookIds: string[], state: LookCanvasState, imageUrls: Record<string, string>) => void
+  // The original picture + what was left off it, shown beside the board while she restyles.
+  setRestyleReference: (reference: RestyleReference | null) => void
   // After a save creates a row, adopt it: further saves update that row instead of forking again.
   noteSavedAs: (id: string) => void
   // Load a saved capsule's canvas_state back onto the board for editing (see currentCapsuleId).
@@ -198,6 +231,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   future: [],
   currentLookId: null,
   replacesLookId: null,
+  replacesSiblingLookIds: [],
+  restyleReference: null,
   currentCapsuleId: null,
   replacesCapsuleId: null,
   isDirty: false,
@@ -554,6 +589,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: null,
       replacesLookId: null,
+      replacesSiblingLookIds: [],
+      restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
       isDirty: false,
@@ -571,6 +608,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: id,
       replacesLookId: null,
+      replacesSiblingLookIds: [],
+      restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
       isDirty: false,
@@ -590,6 +629,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: null,
       replacesLookId: null,
+      replacesSiblingLookIds: [],
+      restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
       isDirty: true,
@@ -602,7 +643,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   // fresh row, per ADR-0076) but remembers the original so the save can hand its lookbook slot
   // over and retire it. Without this the client is left with the old look still dark and a
   // duplicate beside it.
-  loadLookAsReplacement: (replacesLookId, lookState, lookImageUrls) => {
+  loadLookAsReplacement: (replacesLookId, siblingLookIds, lookState, lookImageUrls) => {
     set({
       state: lookState,
       selectedNodeIds: [],
@@ -611,6 +652,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: null,
       replacesLookId,
+      replacesSiblingLookIds: siblingLookIds,
+      restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
       isDirty: true,
@@ -621,7 +664,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   // The board now corresponds to a saved row. Called after a replacement save so a second Save
   // updates that row rather than creating a third look and re-retiring an already-retired original.
-  noteSavedAs: (id) => set({ currentLookId: id, replacesLookId: null }),
+  noteSavedAs: (id) => set({ currentLookId: id, replacesLookId: null, replacesSiblingLookIds: [] }),
+
+  setRestyleReference: (reference) => set({ restyleReference: reference }),
 
   // Load a saved capsule (gp_boards row) back onto the board for editing. Mirrors loadLook,
   // but tracks currentCapsuleId instead so the save flow updates gp_boards, not gp_looks.
@@ -656,6 +701,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       future: [],
       currentLookId: null,
       replacesLookId: null,
+      replacesSiblingLookIds: [],
+      restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId,
       isDirty: true,

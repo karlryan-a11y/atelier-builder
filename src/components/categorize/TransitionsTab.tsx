@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
-import { RotateCcw, Wand2, Archive } from 'lucide-react'
-import type { useTransitions, TransitionedLook, TransitionedItem } from '@/hooks/useTransitions'
+import { useMemo, useRef, useState } from 'react'
+import { RotateCcw, Wand2, Archive, Copy } from 'lucide-react'
+import type { useTransitions, TransitionedItem } from '@/hooks/useTransitions'
 import { lookTitle, causeCaption } from '@/lib/transitionCaption'
+import { groupPulledLooks, orderQueue, queueSummary, queueHeadline, type QueueCard } from '@/lib/transitionQueue'
 
 // Renders the transitioned pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook as a result. Restore returns a piece and re-publishes any
@@ -9,8 +10,12 @@ import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 
 type TransitionsHook = ReturnType<typeof useTransitions>
 type Props = TransitionsHook & {
-  /** Open a pulled look on the canvas with its transitioned pieces already stripped. */
-  onRestyle: (look: TransitionedLook) => void
+  /**
+   * Open a pulled look on the canvas with everything she no longer owns already off the board.
+   * Takes the whole CARD, not the look, so a save can hand the lookbook slot over from every
+   * duplicate the card covers rather than leaving the twin dark.
+   */
+  onRestyle: (card: QueueCard) => void
   restylingId: string | null
 }
 
@@ -18,8 +23,12 @@ const REASON_LABEL: Record<string, string> = {
   donated: 'Donated', sold: 'Sold', discarded: 'Discarded', unspecified: 'Transitioned out',
 }
 
-export function TransitionsTab({ items, looks, loading, error, restoreItem, retireLook, onRestyle, restylingId }: Props) {
+export function TransitionsTab({ items, looks, loading, error, restoreItem, retireLooks, onRestyle, restylingId }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
+  // WORST FIRST, AND EACH PIECE OF WORK ONCE. Both decisions live in lib/transitionQueue.ts so
+  // scripts/check-transition-queue.mjs measures the queue the stylist actually gets.
+  const queue = useMemo(() => orderQueue(groupPulledLooks(looks)), [looks])
+  const summary = useMemo(() => queueSummary(queue), [queue])
   // WHICH PIECE PULLED THIS LOOK. Julia Driscoll, 2026-09-09: "can I find in the look which
   // piece was the transitioned piece? I wasn't present during all of the transitioning."
   // The answer was already in the row -- `transitioned_item_ids` names the exact cause -- and
@@ -32,12 +41,17 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
   // (state alone can lag a rapid double-tap / a stalled-then-retried click).
   const inFlight = useRef(false)
 
-  async function onRetire(look: TransitionedLook) {
+  async function onRetire(card: QueueCard) {
     if (inFlight.current) return
-    if (!confirm(`Retire "${lookTitle(look.name)}" for good?\n\nIt leaves the client's lookbook and this queue. The look is archived, not deleted — Restore brings it back.`)) return
+    const n = card.lookIds.length
+    const alsoNames = card.siblings.map((s) => `"${lookTitle(s.name)}"`).join(', ')
+    const twins = n > 1
+      ? `\n\nThis card covers ${n} identical looks on the same board — ${alsoNames} will be retired too.`
+      : ''
+    if (!confirm(`Retire "${lookTitle(card.look.name)}" for good?${twins}\n\nIt leaves the client's lookbook and this queue. The look is archived, not deleted — Restore brings it back.`)) return
     inFlight.current = true
-    setBusy(look.id)
-    try { await retireLook(look.id) }
+    setBusy(card.key)
+    try { await retireLooks(card.lookIds) }
     catch (e) { alert('Could not retire: ' + (e instanceof Error ? e.message : 'unknown error')) }
     finally { setBusy(null); inFlight.current = false }
   }
@@ -104,17 +118,21 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
       <section>
         <div className="flex items-center gap-2 mb-4">
           <h3 className="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]">Transitioned Looks</h3>
-          <span className="text-[11px] text-[#aaa]">{looks.length}</span>
+          <span className="text-[11px] text-[#aaa]">{queue.length}</span>
         </div>
+        <p className="text-[12px] text-[#1A1A1A] mb-1.5">{queueHeadline(summary)}</p>
         <p className="text-[12px] text-[#aaa] mb-4 max-w-xl">
-          Pulled from the lookbook because a piece they use was transitioned out. <strong>Restyle</strong> opens the look on the canvas with the missing pieces already removed — saving it returns the look to the lookbook, in its old place. <strong>Retire</strong> is for the rare look that shouldn’t come back (archived, not deleted). Restoring the piece above brings its looks back automatically.
+          Pulled from the lookbook because a piece they use was transitioned out. <strong>Worst first</strong>: the looks missing the most pieces are at the top, so you can see what you are taking on before you choose. <strong>Restyle</strong> opens the look on the canvas with everything she no longer owns already off the board, and the original picture beside it — saving returns the look to the lookbook, in its old place. <strong>Retire</strong> is for the rare look that shouldn’t come back (archived, not deleted). Restoring the piece above brings its looks back automatically.
         </p>
-        {looks.length === 0 ? (
+        {queue.length === 0 ? (
           <p className="text-[#aaa] text-[13px]">None.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {looks.map((look) => (
-              <div key={look.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
+            {queue.map((card) => {
+              const look = card.look
+              const twins = card.lookIds.length
+              return (
+              <div key={card.key} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
                 <div className="aspect-[4/5] bg-[#F8F7F5] flex items-center justify-center">
                   {look.image ? (
                     <img src={look.image} alt={look.name} className="max-w-full max-h-full object-contain opacity-70" loading="lazy" />
@@ -124,6 +142,11 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
                 </div>
                 <div className="px-3 py-2.5">
                   <p className="text-[13px] text-[#1A1A1A] truncate">{lookTitle(look.name)}</p>
+                  {twins > 1 && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-[10px] tracking-[0.14em] uppercase text-[#8a7a6a]" title={card.siblings.map((s) => lookTitle(s.name)).join(', ')}>
+                      <Copy className="h-3 w-3" /> {twins} identical looks · one job
+                    </p>
+                  )}
                   <CausePieces
                     causeItemIds={look.causeItemIds}
                     itemById={itemById}
@@ -131,25 +154,28 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
                   />
                   <div className="mt-2.5 flex items-center gap-4">
                     <button
-                      onClick={() => onRestyle(look)}
-                      disabled={restylingId === look.id || busy === look.id}
+                      onClick={() => onRestyle(card)}
+                      disabled={restylingId === look.id || busy === card.key}
                       className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.12em] uppercase text-[#8a7a6a] hover:text-[#1A1A1A] transition-colors disabled:opacity-50"
-                      title="Open on the canvas without the transitioned pieces. Saving returns it to the lookbook."
+                      title="Open on the canvas without the pieces she no longer owns. Saving returns it to the lookbook."
                     >
                       <Wand2 className="h-3 w-3" /> {restylingId === look.id ? 'Opening…' : 'Restyle'}
                     </button>
                     <button
-                      onClick={() => onRetire(look)}
-                      disabled={busy === look.id || restylingId === look.id}
+                      onClick={() => onRetire(card)}
+                      disabled={busy === card.key || restylingId === look.id}
                       className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.12em] uppercase text-[#bbb] hover:text-[#1A1A1A] transition-colors disabled:opacity-50"
-                      title="Archive this look for good. It leaves the queue and the lookbook; Restore brings it back."
+                      title={twins > 1
+                        ? `Archive all ${twins} identical looks on this board. Restore brings them back.`
+                        : 'Archive this look for good. It leaves the queue and the lookbook; Restore brings it back.'}
                     >
-                      <Archive className="h-3 w-3" /> {busy === look.id ? 'Retiring…' : 'Retire'}
+                      <Archive className="h-3 w-3" /> {busy === card.key ? 'Retiring…' : 'Retire'}
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>

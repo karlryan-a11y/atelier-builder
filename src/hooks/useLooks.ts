@@ -64,6 +64,12 @@ export function useLooks(clientId: string | null) {
      * out of the Transitions queue. See lib/lookTransitions.ts + ADR-0076.
      */
     replacesLookId?: string
+    /**
+     * The OTHER pulled looks this one rebuild also answers — duplicates of `replacesLookId` on
+     * the same GoodPix board, shown to the stylist as a single card. They retire with it, or the
+     * twin sits in her queue tomorrow asking for work she has already done.
+     */
+    replacesSiblingLookIds?: string[]
     clientId: string
     name: string
     canvasState: LookCanvasState
@@ -157,7 +163,7 @@ export function useLooks(clientId: string | null) {
     try {
       if (opts.replacesLookId) {
         // Rebuilt GoodPix look: the new row takes the original's place, the original retires.
-        await replaceTransitionedLook(opts.replacesLookId, id, opts.clientId)
+        await replaceTransitionedLook(opts.replacesLookId, id, opts.clientId, opts.replacesSiblingLookIds ?? [])
       } else if (!isNew) {
         // Restyled builder look: drop any cause it no longer contains; returns on its own
         // once the last one is gone.

@@ -21,9 +21,15 @@ export interface TransitionedLook {
   name: string
   image: string | null
   causeItemIds: string[]   // which transitioned pieces pulled this look
-  closetItemIds: string[]  // everything it is built from (the restyle starts from these minus the causes)
+  closetItemIds: string[]  // everything it is built from (the restyle starts from the ones she still owns)
   source: string | null    // builder = restyle in place; goodpix = rebuild as a replacement (ADR-0076)
   transitionedAt: string | null
+  /**
+   * The GoodPix board this look was composed on. Two pulled looks on one board are the same
+   * picture and the same work — 47 of Alicia Hidalgo's 235 cards were duplicates of each other
+   * on 2026-09-17 — so the queue collapses them into one card. See lib/transitionQueue.ts.
+   */
+  boardId: string | null
 }
 
 function itemImage(row: any): string | null {
@@ -63,7 +69,7 @@ export function useTransitions(clientId: string | null) {
         supabase.from('gp_looks')
           // canvas_state is deliberately NOT selected: it is large, and only the one look a
           // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
-          .select('id, name, thumbnail_url, raw, source, closet_item_ids, transitioned_at, transitioned_item_ids')
+          .select('id, name, thumbnail_url, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -93,6 +99,7 @@ export function useTransitions(clientId: string | null) {
           closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
           source: l.source ?? null,
           transitionedAt: l.transitioned_at ?? null,
+          boardId: l.source_board_id ?? null,
         }
       }))
       setLoading(false)
@@ -164,16 +171,33 @@ export function useTransitions(clientId: string | null) {
    * Archive, not delete: it leaves the lookbook and the Transitions queue but the row survives
    * and Restore brings it back. Clearing the transition columns is what lifts it out of the
    * queue; leaving them set would archive it and still show it as outstanding work.
+   *
+   * Takes a LIST because one card can cover several looks: a GoodPix board with two identical
+   * pulled looks on it is one decision, and retiring half of it would leave the twin sitting in
+   * the queue as a card she has already answered. See lib/transitionQueue.ts.
+   *
+   * Asks for the rows back and checks the count. An update RLS declines comes back HTTP 200 with
+   * an empty body and no error (ADR-0108), so a refused retire would otherwise read as done.
    */
-  const retireLook = useCallback(async (lookId: string) => {
-    if (!clientId) return
-    const { error } = await supabase
-      .from('gp_looks')
-      .update({ archived: true, published: false, transitioned_at: null, transitioned_item_ids: null })
-      .eq('id', lookId).eq('client_id', clientId)
-    if (error) throw error
+  const retireLooks = useCallback(async (lookIds: string[]) => {
+    if (!clientId || lookIds.length === 0) return
+    const done = new Set<string>()
+    for (let i = 0; i < lookIds.length; i += 50) {   // a big .in() write fails silently: chunk it
+      const chunk = lookIds.slice(i, i + 50)
+      const { data, error } = await supabase
+        .from('gp_looks')
+        .update({ archived: true, published: false, transitioned_at: null, transitioned_item_ids: null })
+        .in('id', chunk).eq('client_id', clientId)
+        .select('id')
+      if (error) throw error
+      for (const r of data ?? []) done.add(r.id)
+    }
+    if (done.size !== lookIds.length) {
+      const missed = lookIds.filter((id) => !done.has(id))
+      throw new Error(`retired ${done.size} of ${lookIds.length} looks; the database refused ${missed.join(', ')}`)
+    }
     refetch()
   }, [clientId, refetch])
 
-  return { items, looks, loading, error, refetch, transitionOut, restoreItem, retireLook }
+  return { items, looks, loading, error, refetch, transitionOut, restoreItem, retireLooks }
 }

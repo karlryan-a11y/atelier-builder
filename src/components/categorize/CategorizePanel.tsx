@@ -18,7 +18,8 @@ import { NestingTab } from './NestingTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
-import type { TransitionedLook } from '@/hooks/useTransitions'
+import type { QueueCard } from '@/lib/transitionQueue'
+import { selectRestylePieces, type RestylePiece } from '@/lib/restyleSelection'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { hasResidences, residencesFrom } from '@/lib/residences'
@@ -247,16 +248,44 @@ export function CategorizePanel() {
    * both filter out, so there was no way to open one, and 17 of them had been sitting dark for
    * up to five weeks.
    *
-   * Either way the transitioned pieces are stripped from the board before she sees it, so what
-   * she opens is the look with the hole in it, ready to fill — and saving is enough to bring it
-   * back. Leaving them on the canvas would let her save a look still containing a piece the
-   * client no longer owns, which stays (correctly, but confusingly) dark.
+   * WHAT COMES OFF THE BOARD is decided by lib/restyleSelection.ts, not by the cause list. A
+   * piece she no longer owns must not be laid back down whether or not it is recorded as a
+   * cause of THIS look — saving it would pull the look straight back out of the lookbook. The
+   * cause list says why the look is down; the pieces themselves say what she still has.
+   *
+   * WHAT SHE IS TOLD: anything left off is named beside the canvas, together with the original
+   * composed picture. GoodPix never exported the arrangement, so the rebuild is a plain grid and
+   * the handwriting on the original ("Reformation", "optional cardigan if needed") exists only as
+   * pixels. Paige Berndt, 2026-09-17: "the original layout stays intact, but the transitioned
+   * pieces are removed" — we cannot do that yet, so the next best thing is that she never has to
+   * work from memory.
+   *
+   * Takes the CARD so a save can retire every duplicate it covers (see lib/transitionQueue.ts).
    */
-  async function handleRestyleTransitionedLook(look: TransitionedLook) {
+  async function handleRestyleTransitionedLook(card: QueueCard) {
+    const look = card.look
     if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and open this look to restyle?')) return
-    const gone = new Set(look.causeItemIds)
     setOpeningLookId(look.id)
     try {
+      // The pieces AS THEY STAND NOW, not as the look remembers them.
+      const { data: pieceRows, error: pErr } = await supabase
+        .from('gp_closet_items')
+        .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
+        .in('id', look.closetItemIds.slice(0, 500))
+      if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return }
+      const pieces = new Map<string, RestylePiece>(
+        (pieceRows ?? []).map((r: any) => [r.id, {
+          id: r.id,
+          name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
+          brand: r.brand && r.brand !== 'None' ? r.brand : null,
+          transitionedAt: r.transitioned_at ?? null,
+          isDeleted: r.is_deleted ?? null,
+          deletedAt: r.deleted_at ?? null,
+        }]),
+      )
+      const { keep, omitted } = selectRestylePieces(look.closetItemIds, pieces)
+      const gone = new Set(omitted.map((o) => o.id))
+
       if (look.source === 'builder') {
         // Restyle IN PLACE: same row, so saving clears its transition block and the look
         // returns to the lookbook in its old slot.
@@ -277,15 +306,22 @@ export function CategorizePanel() {
         // that REPLACES this one: on save it inherits the published state, order and filing, and
         // the original retires. Without this branch a rebuild left the original dark forever and
         // put a duplicate beside it.
-        const remaining = look.closetItemIds.filter((id) => !gone.has(id))
-        if (remaining.length === 0) {
-          alert('Every piece in this look was transitioned out — retire it instead of restyling.')
+        if (keep.length === 0) {
+          alert('She no longer owns any piece in this look — retire it instead of restyling.')
           return
         }
-        const canvasState = buildCanvasFromClosetItems(remaining)
+        const canvasState = buildCanvasFromClosetItems(keep)
         const imageUrls = await resolveClosetImageUrls(canvasState)
-        useCanvasStore.getState().loadLookAsReplacement(look.id, canvasState, imageUrls)
+        useCanvasStore.getState().loadLookAsReplacement(look.id, card.siblings.map((s) => s.id), canvasState, imageUrls)
       }
+      // Set AFTER loading: every load path clears the reference, so this has to come last.
+      useCanvasStore.getState().setRestyleReference({
+        lookId: look.id,
+        lookName: look.name,
+        imageUrl: look.image,
+        omitted,
+        covers: card.lookIds.length,
+      })
       setStyleTab('canvas')
     } finally {
       setOpeningLookId(null)

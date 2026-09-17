@@ -83,6 +83,17 @@ export async function replaceTransitionedLook(
   originalId: string,
   newLookId: string,
   clientId: string,
+  /**
+   * Pulled looks that are DUPLICATES of the original: same GoodPix board, same composed image,
+   * same pieces, same causes. The Transitions queue shows them as one card (lib/transitionQueue.ts)
+   * because they are one piece of work, so one save has to answer all of them. 47 of Alicia
+   * Hidalgo's 235 cards were duplicates on 2026-09-17; without this the twin stays dark and comes
+   * back to her tomorrow.
+   *
+   * They inherit nothing — only the primary hands its lookbook slot over, so the client gets one
+   * look back where she had one look, not two.
+   */
+  alsoRetireIds: string[] = [],
 ): Promise<void> {
   const { data: original, error } = await supabase
     .from('gp_looks')
@@ -110,11 +121,28 @@ export async function replaceTransitionedLook(
     .eq('client_id', clientId)
   if (nErr) throw nErr
 
-  // Retire the original: out of the lookbook, out of the Transitions queue, still recoverable.
-  const { error: oErr } = await supabase
-    .from('gp_looks')
-    .update({ archived: true, published: false, transitioned_at: null, transitioned_item_ids: null })
-    .eq('id', originalId)
-    .eq('client_id', clientId)
-  if (oErr) throw oErr
+  // Retire the original and its duplicates: out of the lookbook, out of the Transitions queue,
+  // still recoverable. Asks for the rows back and checks the count — an update RLS declines is
+  // HTTP 200 with an empty body and no error (ADR-0108), which would read here as a success and
+  // leave a retired-looking look still live on the client's lookbook.
+  const retire = [originalId, ...alsoRetireIds.filter((id) => id && id !== originalId)]
+  const retired = new Set<string>()
+  for (let i = 0; i < retire.length; i += 50) {   // a big .in() write fails silently: chunk it
+    const chunk = retire.slice(i, i + 50)
+    const { data, error: oErr } = await supabase
+      .from('gp_looks')
+      .update({ archived: true, published: false, transitioned_at: null, transitioned_item_ids: null })
+      .in('id', chunk)
+      .eq('client_id', clientId)
+      .select('id')
+    if (oErr) throw oErr
+    for (const r of data ?? []) retired.add(r.id)
+  }
+  if (!retired.has(originalId)) {
+    throw new Error(`the original look ${originalId} was not retired — it is still in the lookbook`)
+  }
+  const missed = retire.filter((id) => !retired.has(id))
+  if (missed.length) {
+    throw new Error(`replacement saved, but ${missed.length} duplicate look(s) stayed live: ${missed.join(', ')}`)
+  }
 }
