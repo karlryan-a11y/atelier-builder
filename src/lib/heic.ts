@@ -10,6 +10,8 @@
 // Outputs are downscaled so they stay under the Edge Function's memory limit (large
 // full-res JPEGs were causing WORKER_RESOURCE_LIMIT).
 
+import { authHeader } from '@/lib/authHeader'
+
 const MAX_DIM = 1600 // long-edge cap — plenty for metadata + 1024px image gen
 const QUALITY = 0.82
 
@@ -68,7 +70,7 @@ export async function convertHeicToJpeg(file: File): Promise<File> {
     // 307s, so we post to the builder alias directly. The endpoint sets CORS for this.
     const resp = await fetch('https://atelier-builder.vercel.app/api/heic-convert', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'application/octet-stream', ...(await authHeader()) },
       body: file,
     })
     if (resp.ok) {

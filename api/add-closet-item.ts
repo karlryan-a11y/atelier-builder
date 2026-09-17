@@ -13,6 +13,8 @@
 // No filename matching anywhere, so it can never mix up; and nothing is visible on the lookbook until
 // the stylist explicitly approves what they can see.
 
+import { requireStaff } from './_staff.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || ''
@@ -159,6 +161,9 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'server not configured' })
+  const caller = await requireStaff(req, res)
+  if (!caller) return
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
     switch (body.action) {

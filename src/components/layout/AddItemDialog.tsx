@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { authHeader } from '@/lib/authHeader'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { ColorSetField } from '@/components/common/ColorSetField'
@@ -12,9 +13,12 @@ const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s
 // so a RELATIVE /api/... would hit the dashboard, not this builder's serverless function. Same
 // pattern as api/heic-convert. CORS is handled by the endpoint.
 const ADD_ITEM_API = 'https://atelier-builder.vercel.app/api/add-closet-item'
-const api = (body: any) =>
-  fetch(ADD_ITEM_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    .then(r => r.json().catch(() => ({})))
+const api = async (body: any) =>
+  fetch(ADD_ITEM_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify(body),
+  }).then(r => r.json().catch(() => ({})))
 
 // Downscale a picked photo to a small JPEG data URI for the AI prefill call (keeps the request small;
 // the FULL-resolution file is what actually gets uploaded + Photoroom-cleaned).

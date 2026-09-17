@@ -10,6 +10,8 @@
 // Called once per option from the importer, so each request stays small (well
 // under the serverless body limit, unlike one giant batch).
 
+import { requireStaff } from './_staff.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const BUCKET = 'shopping-images'
@@ -102,6 +104,9 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'server not configured' })
+
+  const caller = await requireStaff(req, res)
+  if (!caller) return
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}

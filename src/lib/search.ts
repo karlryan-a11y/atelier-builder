@@ -1,26 +1,22 @@
-import OpenAI from 'openai'
 import { supabase } from './supabase'
+import { authHeader } from './authHeader'
 
-const EMBEDDING_MODEL = 'text-embedding-3-small'
-
-let openaiClient: OpenAI | null = null
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true,
+// Embeddings are produced by our own /api/embed, never in the browser: an API key placed in browser
+// code is compiled into the public bundle (see scripts/check-no-browser-secrets.mjs). When the
+// server has no key configured, hybridSearch falls back to textSearch instead of failing.
+async function getEmbedding(text: string): Promise<number[] | null> {
+  try {
+    const resp = await fetch('/api/embed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ input: text }),
     })
+    if (!resp.ok) return null
+    const body = await resp.json()
+    return Array.isArray(body?.embedding) ? body.embedding : null
+  } catch {
+    return null
   }
-  return openaiClient
-}
-
-async function getEmbedding(text: string): Promise<number[]> {
-  const response = await getOpenAI().embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: text,
-  })
-  return response.data[0].embedding
 }
 
 export interface SearchResult {
@@ -38,6 +34,7 @@ export async function hybridSearch(
   limit = 20
 ): Promise<SearchResult[]> {
   const embedding = await getEmbedding(query)
+  if (!embedding) return textSearch(query, clientId, limit)
 
   const { data, error } = await supabase.rpc('hybrid_search', {
     query_embedding: JSON.stringify(embedding),

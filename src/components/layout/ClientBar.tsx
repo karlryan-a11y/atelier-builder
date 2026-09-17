@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Search, ChevronDown, User, Plus, Loader2 } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useClientStore } from '@/stores/clientStore'
+import { authHeader } from '@/lib/authHeader'
 import { ClientPickerLabel } from '@/components/common/ClientDuplicateNote'
 
 const TIERS = ['A-la-carte', 'Signature', 'White Glove', 'Elève']
@@ -57,7 +58,7 @@ export function ClientBar() {
     try {
       const resp = await fetch('/api/create-client', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
         body: JSON.stringify({ name, email: newEmail.trim() || undefined, phone: newPhone.trim() || undefined, membership_tier: newTier || undefined }),
       })
       const data = await resp.json()

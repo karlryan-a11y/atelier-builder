@@ -15,6 +15,8 @@
 // Output is ALWAYS downscaled to <=1600px on the long edge, matching the client invariant so the
 // downstream Edge generation step never has to decode a full-res image (which would OOM).
 
+import { requireStaff } from './_staff.js'
+
 import convert from 'heic-convert'
 import sharp from 'sharp'
 
@@ -39,6 +41,9 @@ export default async function handler(req: any, res: any) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v as string))
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+
+  const caller = await requireStaff(req, res)
+  if (!caller) return
 
   try {
     // --- Resolve the source HEIC bytes from whichever mode was used ---

@@ -9,7 +9,7 @@
  *   5. Render nodes to canvas
  */
 
-import Anthropic from '@anthropic-ai/sdk'
+import { aiText, type AiMessage } from './ai'
 import { hybridSearch, textSearch, type SearchResult } from './search'
 import { LAYOUT_RULES } from './layout-rules'
 import type { ClosetItemNode, TextNode, CanvasNode } from '@/types/canvas'
@@ -53,19 +53,11 @@ export interface ComposeMessage {
   awaitingDisambiguation?: boolean
 }
 
-// ── Anthropic Client ────────────────────────────────────────────────
-
-let anthropicClient: Anthropic | null = null
-
-function getAnthropic(): Anthropic {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({
-      apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-      dangerouslyAllowBrowser: true,
-    })
-  }
-  return anthropicClient
-}
+// ── Claude ──────────────────────────────────────────────────────────
+//
+// Calls go through our own /api/ai (see src/lib/ai.ts). The browser holds no API key: this file
+// used to build an Anthropic client with dangerouslyAllowBrowser, which compiled the key into the
+// public bundle.
 
 // ── Step 1: Entity Extraction ───────────────────────────────────────
 
@@ -100,7 +92,7 @@ export async function extractEntities(
   userMessage: string,
   conversationHistory: ComposeMessage[] = []
 ): Promise<CompositionPlan> {
-  const messages: Anthropic.MessageParam[] = []
+  const messages: AiMessage[] = []
 
   // Include relevant conversation context
   for (const msg of conversationHistory.slice(-6)) {
@@ -112,14 +104,12 @@ export async function extractEntities(
 
   messages.push({ role: 'user', content: userMessage })
 
-  const response = await getAnthropic().messages.create({
+  const text = await aiText({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 2048,
     system: EXTRACTION_PROMPT,
     messages,
   })
-
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
 
   // Parse JSON — handle markdown code blocks
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text]
