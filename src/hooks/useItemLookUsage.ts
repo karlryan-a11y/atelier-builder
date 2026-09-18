@@ -19,15 +19,20 @@ export interface LookLite { id: string; name: string; image: string | null; publ
 export function useItemLookUsage(clientId: string | null) {
   const [byItem, setByItem] = useState<Map<string, LookLite[]>>(new Map())
   const [loading, setLoading] = useState(false)
+  // Set when a page of the read FAILED. The map is then incomplete, so "styled in N looks"
+  // would undercount; callers can tell a real zero from a failed read.
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!clientId) { setByItem(new Map()); return }
+    if (!clientId) { setByItem(new Map()); setError(null); return }
     let cancelled = false
     setLoading(true)
+    setError(null)
 
     ;(async () => {
       // Paginate against PostgREST's 1000-row cap so a heavily-styled client can't silently truncate.
       const all: Record<string, unknown>[] = []
+      let failed: string | null = null
       const PAGE = 1000
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
@@ -41,7 +46,7 @@ export function useItemLookUsage(clientId: string | null) {
           // skips/duplicates rows non-deterministically for clients with >1000 looks. (id = PK)
           .order('id', { ascending: true })
           .range(from, from + PAGE - 1)
-        if (error) { console.error('useItemLookUsage:', error.message); break }
+        if (error) { console.error('useItemLookUsage:', error.message); failed = error.message || 'load failed'; break }
         all.push(...((data ?? []) as Record<string, unknown>[]))
         if (!data || data.length < PAGE) break
       }
@@ -70,11 +75,11 @@ export function useItemLookUsage(clientId: string | null) {
           map.set(itemId, arr)
         }
       }
-      if (!cancelled) { setByItem(map); setLoading(false) }
+      if (!cancelled) { setByItem(map); setError(failed); setLoading(false) }
     })()
 
     return () => { cancelled = true }
   }, [clientId])
 
-  return { byItem, loading }
+  return { byItem, loading, error }
 }

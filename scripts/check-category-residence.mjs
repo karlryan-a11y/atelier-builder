@@ -33,7 +33,8 @@ const PANEL = 'src/components/categorize/CategorizePanel.tsx'
 const LIB = 'src/lib/residences.ts'
 const DELETION = 'src/lib/categoryDeletion.ts'
 
-const hook = readFileSync(HOOK, 'utf8')
+// The hook's read lives in lib/lookCategoriesLoad.ts; its selects are the hook's selects.
+const hook = readFileSync(HOOK, 'utf8') + '\n' + readFileSync('src/lib/lookCategoriesLoad.ts', 'utf8')
 const panel = readFileSync(PANEL, 'utf8')
 const lib = readFileSync(LIB, 'utf8')
 const deletion = readFileSync(DELETION, 'utf8')

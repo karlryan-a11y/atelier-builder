@@ -42,6 +42,11 @@ for (const [key, path] of Object.entries(FILES)) {
   try { src[key] = readFileSync(path, 'utf8') }
   catch { problems.push(`${path} is missing — the guard could not inspect it`); src[key] = '' }
 }
+// The hook's read lives in lib/lookCategoriesLoad.ts; its gp_boards select is the hook's select.
+// Loader FIRST: the check below takes the first gp_boards select, and the hook's own first one
+// is now useDraftCount's head-only count.
+try { src.hook = readFileSync('src/lib/lookCategoriesLoad.ts', 'utf8') + '\n' + src.hook }
+catch { problems.push('src/lib/lookCategoriesLoad.ts is missing — the guard could not inspect it') }
 
 const inspected = Object.values(src).filter(Boolean).length
 if (inspected < Object.keys(FILES).length) {

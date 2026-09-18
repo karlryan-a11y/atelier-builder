@@ -1,10 +1,14 @@
 import { Trash2, Plus, Copy } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
 import { lookImageUrl } from '@/lib/lookImage'
+import { LoadError } from '@/components/common/LoadError'
 
 interface LookGalleryProps {
   looks: LookRow[]
   loading: boolean
+  /** Set when the read failed: show Couldn't load + Retry, never "No saved looks yet". */
+  error?: string | null
+  onRetry?: () => void
   currentLookId: string | null
   onSelect: (look: LookRow) => void
   onDuplicate: (look: LookRow) => void
@@ -12,7 +16,7 @@ interface LookGalleryProps {
   onNew: () => void
 }
 
-export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {
+export function LookGallery({ looks, loading, error, onRetry, currentLookId, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-3 gap-2 p-3">
@@ -38,7 +42,9 @@ export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplica
         </button>
       </div>
 
-      {looks.length === 0 ? (
+      {error && onRetry ? (
+        <LoadError what="the looks" onRetry={onRetry} />
+      ) : looks.length === 0 ? (
         <p className="text-[10px] tracking-[0.2em] uppercase text-text-muted/30 text-center py-4">
           No saved looks yet
         </p>

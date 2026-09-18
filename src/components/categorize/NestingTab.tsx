@@ -55,7 +55,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
   }, [itemCatSets, closet.rows])
 
   // ── LOOKS ─────────────────────────────────────────────────────────────────
-  const { categories, looks, loading: looksLoading, setCategoryParent, createCategory } = useLookCategories(clientId)
+  const { categories, looks, loading: looksLoading, error: looksError, setCategoryParent, createCategory } = useLookCategories(clientId)
 
   const lookCatSets = useMemo(() => {
     const slugById = new Map(categories.map((c) => [c.id, c.slug]))
@@ -140,6 +140,7 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
           unit="looks"
           who={who}
           loading={looksLoading}
+          error={looksError}
           totalFor={(slug, kids) => totalOver(lookCatSets, slug, kids)}
         />
       )}

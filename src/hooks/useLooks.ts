@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransitions'
 import type { LookCanvasState } from '@/types/canvas'
@@ -34,10 +34,18 @@ function generateLookId(): string {
 export function useLooks(clientId: string | null) {
   const [looks, setLooks] = useState<LookRow[]>([])
   const [loading, setLoading] = useState(false)
+  // Set when the last read FAILED, so the gallery says "Couldn't load" with a Retry instead of
+  // "No saved looks yet" (which is what a 500 used to look like).
+  const [error, setError] = useState<string | null>(null)
+  const readSeq = useRef(0)
+  const loadedFor = useRef<string | null>(null)
 
   const fetchLooks = useCallback(async () => {
+    const seq = ++readSeq.current
     if (!clientId) {
       setLooks([])
+      setError(null)
+      loadedFor.current = null
       return
     }
     setLoading(true)
@@ -51,8 +59,16 @@ export function useLooks(clientId: string | null) {
       .is('transitioned_at', null)
       .order('updated_at', { ascending: false })
 
-    if (!error && data) {
-      setLooks(data as LookRow[])
+    if (seq !== readSeq.current) return
+    if (error) {
+      console.error('useLooks:', error.message)
+      setError(error.message || 'load failed')
+      // Never leave another client's looks on screen under this client's name.
+      if (loadedFor.current !== clientId) setLooks([])
+    } else {
+      setError(null)
+      loadedFor.current = clientId
+      setLooks((data ?? []) as LookRow[])
     }
     setLoading(false)
   }, [clientId])
@@ -190,5 +206,5 @@ export function useLooks(clientId: string | null) {
     return { error }
   }, [])
 
-  return { looks, loading, fetchLooks, saveLook, deleteLook }
+  return { looks, loading, error, fetchLooks, saveLook, deleteLook }
 }

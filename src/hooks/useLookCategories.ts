@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
 import { planResidenceToggle, type ResidenceTogglePlan } from '@/lib/residenceToggle'
-import { lookImageUrl } from '@/lib/lookImage'
+import { loadLookCategories } from '@/lib/lookCategoriesLoad'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -93,81 +93,33 @@ export function useLookCategories(clientId: string | null) {
   const [capsules, setCapsules] = useState<TaggableCapsule[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Set when the last read FAILED. The grid shows "Couldn't load" + Retry instead of an empty
+  // grid that says her looks are gone (lib/lookCategoriesLoad.ts).
+  const [error, setError] = useState<string | null>(null)
+  // Only the newest read may write state: a slow read for the previous client must not land
+  // on top of this one.
+  const readSeq = useRef(0)
+  const loadedFor = useRef<string | null>(null)
+
   const fetchAll = useCallback(async () => {
-    if (!clientId) { setCategories([]); setLooks([]); setCapsules([]); return }
+    const seq = ++readSeq.current
+    if (!clientId) { setCategories([]); setLooks([]); setCapsules([]); setError(null); loadedFor.current = null; return }
     setLoading(true)
-    const [catsRes, looksRes, capsRes] = await Promise.all([
-      supabase.from('look_categories')
-        .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
-        .eq('client_id', clientId)
-        .order('sort_order').order('label'),
-      supabase.from('gp_looks')
-        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids')
-        .eq('client_id', clientId)
-        // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
-        .is('transitioned_at', null)
-        // Match the client lookbook's ordering so "On lookbook" == what she sees.
-        // NULLS FIRST: a look nobody has arranged is a new look, and a new look goes to the
-        // top. Mirrors atelier-looks/src/lib/lookOrder.ts -- change both or the stylist is
-        // arranging a list the client never sees in that order. (ADR-0121)
-        .order('sort_order', { ascending: true, nullsFirst: true })
-        .order('created_at', { ascending: false, nullsFirst: false })
-        .order('extracted_at', { ascending: false, nullsFirst: false })
-        .order('id', { ascending: true }),
-      supabase.from('gp_boards')
-        .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids')
-        .eq('client_id', clientId)
-        // Match the client lookbook's ordering so "On lookbook" == what she sees.
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-    ])
-
-    const lookIds = (looksRes.data ?? []).map((l: any) => l.id)
-    const boardIds = (capsRes.data ?? []).map((b: any) => b.id)
-    const [laRes, baRes] = await Promise.all([
-      lookIds.length
-        ? supabase.from('look_category_assignments').select('look_id, category_id').in('look_id', lookIds)
-        : Promise.resolve({ data: [] as any[] }),
-      boardIds.length
-        ? supabase.from('board_category_assignments').select('board_id, category_id').in('board_id', boardIds)
-        : Promise.resolve({ data: [] as any[] }),
-    ])
-
-    const byLook = new Map<string, string[]>()
-    for (const r of (laRes.data ?? [])) {
-      if (!byLook.has(r.look_id)) byLook.set(r.look_id, [])
-      byLook.get(r.look_id)!.push(r.category_id)
+    const res = await loadLookCategories(supabase, clientId)
+    if (seq !== readSeq.current) return
+    if (res.error !== null) {
+      console.error('useLookCategories:', res.error)
+      setError(res.error)
+      // Never leave another client's looks on screen under this client's name.
+      if (loadedFor.current !== clientId) { setCategories([]); setLooks([]); setCapsules([]) }
+      setLoading(false)
+      return
     }
-    const byBoard = new Map<string, string[]>()
-    for (const r of (baRes.data ?? [])) {
-      if (!byBoard.has(r.board_id)) byBoard.set(r.board_id, [])
-      byBoard.get(r.board_id)!.push(r.category_id)
-    }
-
-    setCategories((catsRes.data ?? []) as LookCategory[])
-    setLooks((looksRes.data ?? []).map((l: any) => ({
-      id: l.id,
-      name: l.name ?? 'Untitled Look',
-      image: lookImageUrl(l.raw),
-      categoryIds: byLook.get(l.id) ?? [],
-      published: !!l.published,
-      archived: !!l.archived,
-      sort_order: l.sort_order ?? null,
-      source: l.source ?? 'goodpix',
-      closetItemIds: (l.closet_item_ids as string[] | null) ?? [],
-    })))
-    setCapsules((capsRes.data ?? []).map((b: any) => ({
-      id: b.id,
-      name: b.name ?? 'Untitled Capsule',
-      image: b.raw?.image_url ?? b.raw?.image ?? null,
-      categoryIds: byBoard.get(b.id) ?? [],
-      published: !!b.published,
-      archived: !!b.is_deleted,
-      sort_order: b.sort_order ?? null,
-      canvasState: (b.raw?.canvas_state as LookCanvasState | undefined) ?? null,
-      source: (b.raw?.source as string | undefined) ?? 'goodpix',
-      closetItemIds: (b.closet_item_ids as string[] | null) ?? [],
-    })))
+    setError(null)
+    loadedFor.current = clientId
+    setCategories(res.data.categories)
+    setLooks(res.data.looks)
+    setCapsules(res.data.capsules)
     setLoading(false)
   }, [clientId])
 
@@ -447,7 +399,7 @@ export function useLookCategories(clientId: string | null) {
   }, [fetchAll])
 
   return {
-    loading, categories, looks, capsules, draftCount,
+    loading, error, categories, looks, capsules, draftCount,
     createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
+import { LoadError } from '@/components/common/LoadError'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
@@ -100,7 +101,7 @@ function CategoryRow({ label, count, coverage, on, onClick }: {
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
+    loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -1042,6 +1043,8 @@ export function CategorizePanel() {
             />
           ) : loading ? (
             <p className="text-[#888] text-sm">Loading…</p>
+          ) : loadError ? (
+            <LoadError what={mode === 'capsules' ? 'the capsules' : 'the looks'} onRetry={() => { void refetch() }} />
           ) : visible.length === 0 ? (
             <p className="text-[#888] text-sm">
               {filtering

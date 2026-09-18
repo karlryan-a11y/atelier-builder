@@ -27,7 +27,8 @@ const notes = []
 
 // ── 1. every look_categories SELECT in the builder names `description` ──
 const HOOK = 'src/hooks/useLookCategories.ts'
-const hook = readFileSync(HOOK, 'utf8')
+// The hook's read lives in lib/lookCategoriesLoad.ts; its selects are the hook's selects.
+const hook = readFileSync(HOOK, 'utf8') + '\n' + readFileSync('src/lib/lookCategoriesLoad.ts', 'utf8')
 
 // Column lists selected from look_categories look like: .select('id, slug, label, ...')
 const selects = [...hook.matchAll(/\.select\(\s*'([^']*\bslug\b[^']*)'\s*\)/g)].map((m) => m[1])

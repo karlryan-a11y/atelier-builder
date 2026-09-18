@@ -34,7 +34,7 @@ export function ChatPanel() {
   const { user } = useAuth()
   const { activeClient } = useClientStore()
   const { state, currentLookId, replacesLookId, replacesSiblingLookIds, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore()
-  const { looks, loading, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
+  const { looks, loading, error: looksError, fetchLooks, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
   const [showSaveAsCapsuleDialog, setShowSaveAsCapsuleDialog] = useState(false)
@@ -482,6 +482,8 @@ export function ChatPanel() {
             <LookGallery
               looks={looks}
               loading={loading}
+              error={looksError}
+              onRetry={() => { void fetchLooks() }}
               currentLookId={currentLookId}
               onSelect={handleSelectLook}
               onDuplicate={handleDuplicateLook}
