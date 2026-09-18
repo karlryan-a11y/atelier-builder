@@ -142,7 +142,9 @@ const clientName = new Map((clientRows ?? []).map((c) => [c.id, c.name]))
 
 let lookRows = await page(
   'gp_looks',
-  'id, client_id, name, source, source_board_id, raw, thumbnail_url, closet_item_ids, transitioned_at, transitioned_item_ids, archived',
+  // No thumbnail_url: it is a base64 2160x2160 JPEG per look, and useTransitions no longer
+  // reads it either (src/lib/lookImage.ts). A guard must not pull megabytes a run.
+  'id, client_id, name, source, source_board_id, raw, closet_item_ids, transitioned_at, transitioned_item_ids, archived',
   (q) => q.not('transitioned_at', 'is', null),
 )
 lookRows = lookRows.filter((l) => !l.archived)
@@ -182,7 +184,7 @@ const pieceById = new Map()
 const toQueueLook = (l) => ({
   id: l.id,
   name: l.name ?? 'Untitled Look',
-  image: l.raw?.main_image_url ?? l.thumbnail_url ?? null,
+  image: l.raw?.main_image_url ?? null,
   boardId: l.source_board_id ?? null,
   causeItemIds: Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : [],
   closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
