@@ -127,7 +127,7 @@ export function CanvasToolbar() {
   }
 
   return (
-    <div className="flex items-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+    <div data-canvas-toolbar className="flex flex-wrap items-center justify-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
       {/* Board size — Portrait (look) / Square / Landscape */}
       {(Object.keys(BOARD_PRESETS) as Array<keyof typeof BOARD_PRESETS>).map((key) => {
         const p = BOARD_PRESETS[key]
