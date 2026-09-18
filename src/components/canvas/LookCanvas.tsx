@@ -936,8 +936,11 @@ export function LookCanvas() {
       style={{ backgroundColor: 'rgba(245, 241, 234, 0.3)' }}
     >
       {/* Toolbar area — sits in the gray zone above the canvas */}
-      <div className="w-full flex items-center justify-center py-3 shrink-0 relative">
-        <div className="absolute left-3 flex items-center gap-1">
+      {/* Zoom, toolbar and grid are flex siblings, never absolutely positioned: on a narrow
+          canvas column the floating zoom covered Portrait/Square and the grid toggle sat on
+          top of the Style (sparkles) button, so it looked gone. check-canvas-toolbar-layout. */}
+      <div data-toolbar-row className="w-full flex items-center gap-2 px-3 py-3 shrink-0">
+        <div data-zoom-controls className="shrink-0 flex items-center gap-1">
           <button
             onClick={() => setZoom((z) => nextZoom(z, -1))}
             disabled={zoom <= MIN_ZOOM}
@@ -962,10 +965,13 @@ export function LookCanvas() {
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
         </div>
-        <CanvasToolbar />
+        <div className="flex-1 min-w-0 flex justify-center">
+          <CanvasToolbar />
+        </div>
         <button
+          data-grid-toggle
           onClick={() => setShowGrid(!showGrid)}
-          className={`absolute right-3 p-1.5 rounded-sm border transition-colors ${
+          className={`shrink-0 p-1.5 rounded-sm border transition-colors ${
             showGrid ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-border text-text-muted hover:bg-tile'
           }`}
           title="Toggle grid"
