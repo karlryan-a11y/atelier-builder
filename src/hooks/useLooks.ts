@@ -22,10 +22,6 @@ export interface LookRow {
   updated_at: string
 }
 
-/** Every column LookRow declares, and nothing else. Used by the list read AND the save's
- *  returned row, so the two can never disagree about what a LookRow carries. */
-const LOOK_COLUMNS = 'id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at'
-
 function generateLookId(): string {
   const hex = () => Math.floor(Math.random() * 16).toString(16)
   return Array.from({ length: 24 }, hex).join('')
@@ -53,7 +49,7 @@ export function useLooks(clientId: string | null) {
     // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
     const { data, error } = await supabase
       .from('gp_looks')
-      .select(LOOK_COLUMNS)
+      .select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
       .eq('client_id', clientId)
       .eq('source', 'builder')
       .is('transitioned_at', null)
@@ -169,8 +165,8 @@ export function useLooks(clientId: string | null) {
     }
 
     const { data, error } = isNew
-      ? await supabase.from('looks').insert(row).select(LOOK_COLUMNS).single()
-      : await supabase.from('looks').update(row).eq('id', id).select(LOOK_COLUMNS).single()
+      ? await supabase.from('looks').insert(row).select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at').single()
+      : await supabase.from('looks').update(row).eq('id', id).select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at').single()
 
     if (error) {
       console.error('Save look error:', error.message, error.code, error.details, error.hint)
