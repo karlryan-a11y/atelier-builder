@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { X, Check, Package, Loader2 } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
+import { lookImageUrl } from '@/lib/lookImage'
 // The composite grid renderer lives in @/render/capsuleGrid so the headless renderer box can
 // re-bake this exact hero when a member look's photo changes (see renderer/ service).
 import { renderCapsuleGrid } from '@/render/capsuleGrid'
@@ -35,12 +36,14 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
       // Gather look data with image URLs
       const selectedLooks = looks.filter(l => selectedLookIds.has(l.id))
 
-      // Use thumbnails directly (they're base64 data URLs, no CORS issues)
-      // Thumbnails are already rendered from the canvas with brand labels included
+      // The look's baked picture (brand labels included), from R2 via image-proxy. image-proxy
+      // answers with Access-Control-Allow-Origin: *, so the grid canvas stays untainted and
+      // autoCrop can read its pixels. It used to be the base64 thumbnail_url, which meant
+      // downloading every look's 400 KB JPEG just to open the Looks tab (see lib/lookImage.ts).
       const lookData = selectedLooks.map((look) => ({
         name: look.name,
-        imageUrl: look.thumbnail_url, // base64 data URL — always available, no CORS
-        thumbnailUrl: look.thumbnail_url,
+        imageUrl: lookImageUrl(look.raw),
+        thumbnailUrl: lookImageUrl(look.raw),
       }))
 
       // Render the composite grid image
@@ -127,8 +130,8 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
                   >
                     {/* Thumbnail */}
                     <div className="w-12 h-12 rounded-sm bg-[#F8F7F5] overflow-hidden shrink-0">
-                      {look.thumbnail_url ? (
-                        <img src={look.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      {lookImageUrl(look.raw) ? (
+                        <img src={lookImageUrl(look.raw)!} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-[8px] text-[#ccc]">—</div>
                       )}

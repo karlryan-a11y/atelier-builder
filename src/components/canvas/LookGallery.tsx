@@ -1,5 +1,6 @@
 import { Trash2, Plus, Copy } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
+import { lookImageUrl } from '@/lib/lookImage'
 
 interface LookGalleryProps {
   looks: LookRow[]
@@ -43,7 +44,9 @@ export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplica
         </p>
       ) : (
         <div className="grid grid-cols-3 gap-2">
-          {looks.map((look) => (
+          {looks.map((look) => {
+            const image = lookImageUrl(look.raw)
+            return (
             <div
               key={look.id}
               onClick={() => onSelect(look)}
@@ -54,9 +57,9 @@ export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplica
               }`}
             >
               <div className="aspect-[4/5] bg-tile rounded-t-sm overflow-hidden relative">
-                {look.thumbnail_url ? (
+                {image ? (
                   <img
-                    src={look.thumbnail_url}
+                    src={image}
                     alt={look.name}
                     className="w-full h-full object-contain"
                     loading="lazy"
@@ -97,7 +100,8 @@ export function LookGallery({ looks, loading, currentLookId, onSelect, onDuplica
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

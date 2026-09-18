@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
 import { planResidenceToggle, type ResidenceTogglePlan } from '@/lib/residenceToggle'
+import { lookImageUrl } from '@/lib/lookImage'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -101,7 +102,7 @@ export function useLookCategories(clientId: string | null) {
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       supabase.from('gp_looks')
-        .select('id, name, thumbnail_url, raw, published, archived, sort_order, source, closet_item_ids')
+        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids')
         .eq('client_id', clientId)
         // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
         .is('transitioned_at', null)
@@ -147,7 +148,7 @@ export function useLookCategories(clientId: string | null) {
     setLooks((looksRes.data ?? []).map((l: any) => ({
       id: l.id,
       name: l.name ?? 'Untitled Look',
-      image: l.raw?.main_image_url ?? l.thumbnail_url ?? null,
+      image: lookImageUrl(l.raw),
       categoryIds: byLook.get(l.id) ?? [],
       published: !!l.published,
       archived: !!l.archived,

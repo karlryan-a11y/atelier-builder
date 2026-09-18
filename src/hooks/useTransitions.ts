@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
+import { lookImageUrl } from '@/lib/lookImage'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -69,7 +70,7 @@ export function useTransitions(clientId: string | null) {
         supabase.from('gp_looks')
           // canvas_state is deliberately NOT selected: it is large, and only the one look a
           // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
-          .select('id, name, thumbnail_url, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
+          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -90,7 +91,7 @@ export function useTransitions(clientId: string | null) {
         image: itemImage(r),
       })))
       setLooks((looksRes.data ?? []).map((l: any) => {
-        const rawImg = l.raw?.main_image_url ?? l.thumbnail_url ?? null
+        const rawImg = lookImageUrl(l.raw)
         return {
           id: l.id,
           name: l.name ?? 'Untitled Look',

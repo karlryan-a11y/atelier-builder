@@ -10,7 +10,8 @@ export interface LookRow {
   client_id: string
   name: string
   canvas_state: LookCanvasState | null
-  thumbnail_url: string | null
+  // thumbnail_url is deliberately NOT here: it is a base64 2160x2160 JPEG, ~400 KB a look, and
+  // selecting it made this list ~50 MB for Danielle York. Show a look with lookImageUrl(raw).
   tags: string[] | null
   notes_internal: string | null
   notes_client: string | null
@@ -20,6 +21,10 @@ export interface LookRow {
   created_at: string
   updated_at: string
 }
+
+/** Every column LookRow declares, and nothing else. Used by the list read AND the save's
+ *  returned row, so the two can never disagree about what a LookRow carries. */
+const LOOK_COLUMNS = 'id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at'
 
 function generateLookId(): string {
   const hex = () => Math.floor(Math.random() * 16).toString(16)
@@ -40,7 +45,7 @@ export function useLooks(clientId: string | null) {
     // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
     const { data, error } = await supabase
       .from('gp_looks')
-      .select('id, client_id, name, canvas_state, thumbnail_url, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
+      .select(LOOK_COLUMNS)
       .eq('client_id', clientId)
       .eq('source', 'builder')
       .is('transitioned_at', null)
@@ -148,8 +153,8 @@ export function useLooks(clientId: string | null) {
     }
 
     const { data, error } = isNew
-      ? await supabase.from('looks').insert(row).select().single()
-      : await supabase.from('looks').update(row).eq('id', id).select().single()
+      ? await supabase.from('looks').insert(row).select(LOOK_COLUMNS).single()
+      : await supabase.from('looks').update(row).eq('id', id).select(LOOK_COLUMNS).single()
 
     if (error) {
       console.error('Save look error:', error.message, error.code, error.details, error.hint)

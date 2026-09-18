@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
+import { lookImageUrl } from '@/lib/lookImage'
 
 // A light record of a look for the "styled in" popup — just what we need to show it.
 //
@@ -33,7 +34,7 @@ export function useItemLookUsage(clientId: string | null) {
           // gp_looks base (not the `looks` view) so transitioned looks can be excluded — the view
           // doesn't expose transitioned_at. "Styled in N looks" must not count a pulled look. (014)
           .from('gp_looks')
-          .select('id, name, archived, published, thumbnail_url, raw, closet_item_ids')
+          .select('id, name, archived, published, raw, closet_item_ids')
           .eq('client_id', clientId)
           .is('transitioned_at', null)
           // Unique stable order is required for paginated .range() — without it the page boundary
@@ -50,8 +51,7 @@ export function useItemLookUsage(clientId: string | null) {
       const seen = new Map<string, Set<string>>() // itemId → set of look ids already counted
       for (const l of all) {
         if (l.archived) continue
-        const raw = (l.raw ?? {}) as Record<string, unknown>
-        const rawImg = (l.thumbnail_url as string) ?? (raw.main_image_url as string) ?? null
+        const rawImg = lookImageUrl(l.raw)
         const lite: LookLite = {
           id: l.id as string,
           name: (l.name as string) || 'Untitled look',
