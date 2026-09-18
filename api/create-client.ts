@@ -9,6 +9,8 @@
 // Mongo _id strings, and is easy to spot as builder-origin) and an 8-char
 // microsite slug (matching GoodPix's slug shape) so they show in the lookbook.
 
+import { requireStaff } from './_staff.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const WSG_TEAM_ID = '687fb860df4ad4912bc0abc5' // same team the scraper writes under
@@ -57,6 +59,9 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   if (!SUPABASE_URL || !SERVICE_KEY)
     return res.status(500).json({ error: 'server not configured' })
+
+  const caller = await requireStaff(req, res)
+  if (!caller) return
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}

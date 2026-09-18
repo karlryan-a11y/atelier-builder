@@ -3,6 +3,7 @@
 // migration-004 shopping_* tables.
 
 import { supabase } from '@/lib/supabase'
+import { authHeader } from '@/lib/authHeader'
 import type { ShoppingSession } from '@/stores/shoppingStore'
 import type { BoardSlot, BoardOption } from '@/stores/boardStore'
 import type { ParsedSlot, ParsedOption } from '@/lib/cowork-parser'
@@ -40,7 +41,7 @@ export async function storeOptionImages(
         try {
           const r = await fetch(STORE_IMAGE_URL, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', ...(await authHeader()) },
             body: JSON.stringify({ session_id: sessionId, image: o.image_url, referer: o.url }),
           })
           const j = await r.json().catch(() => ({}))
