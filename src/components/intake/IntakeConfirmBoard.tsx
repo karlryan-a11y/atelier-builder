@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { setVisibleInterval } from '@/lib/visibleInterval'
 import { proposePairing, type ProposalPhoto } from '@/lib/pairing'
 import { SignedImage } from './IntakeItemCard'
 
@@ -58,8 +59,7 @@ export function IntakeConfirmBoard({ onDone, clientId, onWaiting }: { onDone?: (
   // so without polling it wouldn't appear until a hard refresh. loadBatches only sets activeBatch
   // when none is chosen, so this never disrupts an in-progress sort.
   useEffect(() => {
-    const iv = setInterval(() => { loadBatches() }, 5000)
-    return () => clearInterval(iv)
+    return setVisibleInterval(() => { loadBatches() }, 5000)
   }, [loadBatches])
 
   // Load one batch's photos in upload order; reset the build.

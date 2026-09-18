@@ -3,6 +3,8 @@ import { Inbox, Check, X, Edit3, RefreshCw, RotateCw, Upload, Camera, Download, 
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
+import { setVisibleInterval } from '@/lib/visibleInterval'
+import { useObjectUrls } from '@/hooks/useObjectUrls'
 import { useClientStore } from '@/stores/clientStore'
 import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
 import { ClientPickerLabel } from '@/components/common/ClientDuplicateNote'
@@ -196,8 +198,7 @@ export function IntakeInbox() {
       setActiveBatchCount(count ?? 0)
     }
     check()
-    const iv = setInterval(check, 10000)
-    return () => clearInterval(iv)
+    return setVisibleInterval(check, 10000)
   }, [])
 
   // Poll how many batches are waiting on the confirm board (client-scoped) so the collapsed
@@ -210,8 +211,7 @@ export function IntakeInbox() {
       setConfirmWaiting(count ?? 0)
     }
     check()
-    const iv = setInterval(check, 12000)
-    return () => clearInterval(iv)
+    return setVisibleInterval(check, 12000)
   }, [selectedClientId])
 
   // Load AI spend for current month
@@ -235,8 +235,7 @@ export function IntakeInbox() {
       }
     }
     loadSpend()
-    const iv = setInterval(loadSpend, 30000)
-    return () => clearInterval(iv)
+    return setVisibleInterval(loadSpend, 30000)
   }, [])
 
   // Load clients that have intake items OR any batch — including batches still parked on the
@@ -271,13 +270,12 @@ export function IntakeInbox() {
       i.status === 'rerun_requested' || i.status === 'qc_failed_restyle' ||
       (i.status === 'pending_qc' && (i.reprocess_attempts ?? 0) > 0))
     if (!hasRework) return
-    const iv = setInterval(() => {
+    return setVisibleInterval(() => {
       // Don't yank the list out from under an active selection, and refresh in the BACKGROUND
       // (no spinner) so the stylist's scroll position is preserved while they review.
       if (selectedIds.size > 0) return
       refreshBackground()
     }, 15000)
-    return () => clearInterval(iv)
   }, [items, refreshBackground, selectedIds])
 
   const tabs = [
@@ -1476,8 +1474,8 @@ function InProgressPanel({ onBatchCountChange, onRefreshItems, clientId }: { onB
     setLoading(true)
     setBatches([])
     fetchBatches()
-    const iv = setInterval(fetchBatches, 5000)
-    return () => { mounted = false; clearInterval(iv) }
+    const stopPolling = setVisibleInterval(fetchBatches, 5000)
+    return () => { mounted = false; stopPolling() }
   }, [clientId])
 
   if (loading) {
@@ -1709,6 +1707,8 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
   const isAccessory = true
   const categoryLabel = category.charAt(0).toUpperCase() + category.slice(1)
   const [files, setFiles] = useState<File[]>([])
+  // One URL per photo, revoked when it leaves the list (was a new, never-freed URL per render).
+  const previewUrls = useObjectUrls(files)
   const [stage, setStage] = useState<'select' | 'uploading' | 'processing' | 'complete' | 'error'>('select')
   const [progress, setProgress] = useState('')
   const [progressPct, setProgressPct] = useState(0)
@@ -2305,7 +2305,7 @@ function UploadPanel({ onComplete }: { onComplete: () => void; onRefreshItems: (
                 {files.map((f, i) => (
                   <div key={i} className="relative group">
                     <div className="aspect-[4/5] rounded-sm overflow-hidden border border-[#1A1A1A]">
-                      <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                      {previewUrls.get(f) && <img src={previewUrls.get(f)} alt="" className="w-full h-full object-cover" />}
                     </div>
                     <span className="absolute top-0.5 left-0.5 text-[6px] md:text-[7px] tracking-[0.1em] uppercase px-0.5 md:px-1 rounded-sm bg-[#1A1A1A] text-white">
                       item
