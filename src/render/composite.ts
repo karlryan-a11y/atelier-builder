@@ -9,8 +9,8 @@
 //   • toDataURL({ x:0, y:0, width, height, pixelRatio, mimeType })  (LookCanvas.tsx:325-332)
 //   • JPEG thumbnail flattened onto white                           (ChatPanel.tsx:78-88)
 import Konva from 'konva'
-import type { LookCanvasState, ClosetItemNode, TextNode } from '@/types/canvas'
-import { toKonvaConfig } from '@/components/canvas/CanvasAdapter'
+import type { LookCanvasState, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
+import { toKonvaConfig, pictureKonvaAttrs } from '@/components/canvas/CanvasAdapter'
 import { proxyImageUrl } from '@/lib/images'
 
 // Match useCanvasImages: proxy + crossOrigin so toDataURL stays untainted; on failure fall
@@ -110,6 +110,14 @@ export async function renderCanvasComposite(
         try { loaded.set(n.id, await loadImage(url)) } catch { /* skip an item we can't fetch */ }
       }),
   )
+  // Plain pictures (ADR-0127) carry their own url. Same loader, same skip-on-failure rule.
+  await Promise.all(
+    sorted
+      .filter((n): n is PictureNode => n.type === 'picture')
+      .map(async (n) => {
+        try { loaded.set(n.id, await loadImage(n.src)) } catch { /* skip a picture we can't fetch */ }
+      }),
+  )
 
   await waitForFonts()
 
@@ -131,6 +139,11 @@ export async function renderCanvasComposite(
         scaleY: config.scaleY,
         rotation: config.rotation,
       }))
+    } else if (node.type === 'picture') {
+      const image = loaded.get(node.id)
+      if (!image) continue
+      // pictureKonvaAttrs is shared with LookCanvas, so the baked hero matches the board.
+      layer.add(new Konva.Image({ image, ...pictureKonvaAttrs(node) }))
     } else if (node.type === 'text') {
       const t = node as TextNode
       layer.add(new Konva.Text({

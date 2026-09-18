@@ -29,6 +29,8 @@
  */
 
 export type OmitReason = 'transitioned' | 'deleted' | 'missing'
+  /** GoodPix listed it for the look but it is not in the picture (a piece tried and taken out). */
+  | 'not_in_picture'
 
 export interface RestylePiece {
   id: string
@@ -57,6 +59,7 @@ export const OMIT_LABEL: Record<OmitReason, string> = {
   transitioned: 'Transitioned out',
   deleted: 'Deleted from her collection',
   missing: 'No longer in her collection',
+  not_in_picture: 'Not in the original picture',
 }
 
 /**

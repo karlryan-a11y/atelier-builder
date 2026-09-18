@@ -13,6 +13,7 @@ export type CanvasNode =
   | TextNode
   | StickerNode
   | ShapeNode
+  | PictureNode
 
 export interface ClosetItemNode {
   id: string
@@ -51,6 +52,34 @@ export interface TextNode {
   align?: 'left' | 'center' | 'right'
   /** Fixed text-box width; when set, Konva wraps text to it (enables stacked/centered lines). */
   width?: number
+}
+
+/**
+ * A plain picture that is NOT one of the client's pieces — today, the shop products and pasted
+ * images on a GoodPix look, carried across so a rebuilt look still looks the way it was styled
+ * (ADR-0127; Karl, 2026-09-18: "bring plain pictures"). About a third of the pictures on a
+ * GoodPix look are these. It never counts as a piece: it is not in `closet_item_ids`, it does not
+ * appear under In this look, and a transition can never pull a look because of it.
+ *
+ * Geometry is the unflipped, unrotated box: (x, y) is its top-left corner, `width`/`height` its
+ * size on the board. A flip mirrors inside that box (the render sets offset = size), so flipping
+ * never moves it — unlike a closet piece, whose flip is anchored on its right edge.
+ */
+export interface PictureNode {
+  id: string
+  type: 'picture'
+  src: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  flipped: boolean
+  flipped_y?: boolean
+  z_index: number
+  locked: boolean
+  /** The GoodPix shop product it came from, when there was one. */
+  product_id?: string | null
 }
 
 export interface StickerNode {

@@ -10,6 +10,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
+import { buildGoodPixBoard } from '@/lib/goodpixBoard'
 import type { LookCanvasState } from '@/types/canvas'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
@@ -283,7 +284,7 @@ export function CategorizePanel() {
           deletedAt: r.deleted_at ?? null,
         }]),
       )
-      const { keep, omitted } = selectRestylePieces(look.closetItemIds, pieces)
+      const { omitted } = selectRestylePieces(look.closetItemIds, pieces)
       const gone = new Set(omitted.map((o) => o.id))
 
       if (look.source === 'builder') {
@@ -306,13 +307,23 @@ export function CategorizePanel() {
         // that REPLACES this one: on save it inherits the published state, order and filing, and
         // the original retires. Without this branch a rebuild left the original dark forever and
         // put a duplicate beside it.
-        if (keep.length === 0) {
+        //
+        // The board is the look AS IT WAS when GoodPix holds the arrangement (ADR-0127): only
+        // what she no longer owns is missing. Otherwise it is the grid, as before.
+        const board = await buildGoodPixBoard(look.id, look.closetItemIds)
+        if (!board.canvas.nodes.some((n) => n.type === 'closet_item')) {
           alert('She no longer owns any piece in this look — retire it instead of restyling.')
           return
         }
-        const canvasState = buildCanvasFromClosetItems(keep)
-        const imageUrls = await resolveClosetImageUrls(canvasState)
-        useCanvasStore.getState().loadLookAsReplacement(look.id, card.siblings.map((s) => s.id), canvasState, imageUrls)
+        const imageUrls = await resolveClosetImageUrls(board.canvas)
+        useCanvasStore.getState().loadLookAsReplacement(look.id, card.siblings.map((s) => s.id), board.canvas, imageUrls)
+        useCanvasStore.getState().setRestyleReference({
+          lookId: look.id, lookName: look.name, imageUrl: look.image,
+          omitted: board.omitted, notInPicture: board.notInPicture, fromLayout: board.fromLayout,
+          covers: card.lookIds.length,
+        })
+        setStyleTab('canvas')
+        return
       }
       // Set AFTER loading: every load path clears the reference, so this has to come last.
       useCanvasStore.getState().setRestyleReference({
@@ -337,9 +348,17 @@ export function CategorizePanel() {
     if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and rebuild this look?')) return
     setOpeningLookId(look.id)
     try {
-      const canvasState = buildCanvasFromClosetItems(look.closetItemIds)
-      const imageUrls = await resolveClosetImageUrls(canvasState)
-      useCanvasStore.getState().loadLookAsNew(canvasState, imageUrls)
+      // Same board Restyle builds (lib/goodpixBoard.ts): the arrangement GoodPix kept when there
+      // is one — Cynthia Dada, 2026-09-17: "I clicked rebuild in canvas for a look created on
+      // good pix and this is what showed up" — and the grid only when there is not.
+      const board = await buildGoodPixBoard(look.id, look.closetItemIds)
+      const imageUrls = await resolveClosetImageUrls(board.canvas)
+      useCanvasStore.getState().loadLookAsNew(board.canvas, imageUrls)
+      useCanvasStore.getState().setRestyleReference({
+        lookId: look.id, lookName: look.name, imageUrl: look.image ?? null,
+        omitted: board.omitted, notInPicture: board.notInPicture, fromLayout: board.fromLayout,
+        covers: 1,
+      })
       setStyleTab('canvas')
     } finally {
       setOpeningLookId(null)

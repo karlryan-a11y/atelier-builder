@@ -11,6 +11,10 @@ export interface RestyleReference {
   imageUrl: string | null
   /** Pieces left off the board because she no longer owns them, with the reason. */
   omitted: OmittedPiece[]
+  /** GoodPix listed these for the look but they are not in its picture; not placed. */
+  notInPicture?: OmittedPiece[]
+  /** True when the board is the stored GoodPix arrangement, false for the plain grid. */
+  fromLayout?: boolean
   /** How many pulled looks this one rebuild answers (1 unless duplicates were collapsed). */
   covers: number
 }
@@ -73,12 +77,10 @@ interface CanvasStoreState {
    */
   replacesSiblingLookIds: string[]
   /**
-   * The picture the board is a rebuild OF, plus what was deliberately left off it. GoodPix never
-   * exported the arrangement (0 of 15,065 scraped looks have a canvas_state), so a rebuild can
-   * only be a plain grid — and Paige Berndt, 2026-09-17: "all the pieces are laid out all over
-   * the screen and the brand names are removed ... there are pieces on the canvas that were not
-   * in the original look." Until the arrangement itself can be recovered, the original rides
-   * along beside the canvas so she can read the handwriting off it and see what changed.
+   * The picture the board is a rebuild OF, plus what was deliberately left off it. Shown beside
+   * the canvas while she restyles (ADR-0126). Since ADR-0127 the board itself is GoodPix's own
+   * arrangement when we hold it, and this is the check against it; without one the board is a
+   * grid and this picture is the only record of the layout and the handwriting.
    * Transient: never saved, cleared by every other way of loading the board.
    */
   restyleReference: RestyleReference | null

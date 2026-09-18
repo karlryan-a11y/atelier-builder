@@ -1,4 +1,4 @@
-import type { CanvasNode, ClosetItemNode } from '@/types/canvas'
+import type { CanvasNode, ClosetItemNode, PictureNode } from '@/types/canvas'
 
 export interface KonvaNodeConfig {
   id: string
@@ -65,6 +65,52 @@ export function toKonvaConfig(node: CanvasNode): KonvaNodeConfig {
         draggable: true,
         zIndex: node.z_index,
       }
+    case 'picture':
+      return {
+        id: node.id,
+        type: 'picture',
+        x: node.x,
+        y: node.y,
+        scaleX: node.flipped ? -1 : 1,
+        scaleY: node.flipped_y ? -1 : 1,
+        rotation: node.rotation,
+        draggable: !node.locked,
+        zIndex: node.z_index,
+      }
+  }
+}
+
+/**
+ * The Konva attributes of a plain picture — the ONE definition both draw paths use (the on-screen
+ * board in LookCanvas.tsx and the headless renderer in render/composite.ts), so a saved look and
+ * its baked hero cannot disagree about where a picture sits. A flip mirrors inside the picture's
+ * own box: offset by the size, then scale -1, so (x, y) stays the box's top-left corner.
+ */
+export function pictureKonvaAttrs(node: PictureNode) {
+  return {
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    rotation: node.rotation,
+    scaleX: node.flipped ? -1 : 1,
+    scaleY: node.flipped_y ? -1 : 1,
+    offsetX: node.flipped ? node.width : 0,
+    offsetY: node.flipped_y ? node.height : 0,
+  }
+}
+
+/**
+ * Write a Transformer's result back onto a picture: settle any scale into width/height so the
+ * saved geometry is the geometry on screen (the same lesson as text, ADR-0093), keep the flip.
+ */
+export function pictureFromKonva(node: PictureNode, n: { x: number; y: number; scaleX: number; scaleY: number; rotation: number }): Partial<PictureNode> {
+  return {
+    x: n.x,
+    y: n.y,
+    width: Math.max(8, node.width * Math.abs(n.scaleX)),
+    height: Math.max(8, node.height * Math.abs(n.scaleY)),
+    rotation: n.rotation,
   }
 }
 

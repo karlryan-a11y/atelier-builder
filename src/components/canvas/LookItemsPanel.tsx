@@ -99,18 +99,11 @@ export function LookItemsPanel() {
 /**
  * THE ORIGINAL, BESIDE THE REBUILD.
  *
- * GoodPix gave us one flat picture per look and a list of item ids. It never gave us the
- * arrangement: 0 of 15,065 scraped looks have a saved canvas, so "Restyle" and "Rebuild in
- * canvas" can only lay the pieces out in a plain grid. Paige Berndt, 2026-09-17: "all the pieces
- * are laid out all over the screen and the brand names are removed. Can we implement something
- * where the original layout stays intact, but the transitioned pieces are removed?" We cannot do
- * that yet — the arrangement is not data we hold — but working from memory was never the job.
- *
- * So the original sits here while she rebuilds. It carries everything the grid loses: where each
- * piece went, and the handwriting GoodPix baked into the image ("Reformation", "Ulla Johnson",
- * "optional cardigan if needed"). That handwriting is the only record of the brand for most of
- * these pieces — 184 of the 305 pieces in Alicia Hidalgo's pulled looks have no brand in the
- * database at all, so there is nothing to print even if we wanted to.
+ * Paige Berndt, 2026-09-17: "Can we implement something where the original layout stays intact,
+ * but the transitioned pieces are removed?" Since ADR-0127 that is what the board IS, whenever
+ * GoodPix's arrangement has been copied (lib/goodpixBoard.ts). The original still sits here: to
+ * check the rebuild against, and for the looks whose arrangement is not copied yet, where the
+ * board falls back to a grid and this picture is the only record of the layout and the notes.
  *
  * Under it: every piece deliberately left OFF the board and why. A piece that simply vanishes is
  * what sent Paige looking for a second transitioned garment the card had not named.
@@ -153,7 +146,9 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
               loading="lazy"
             />
             <p className="mt-1 text-[9px] tracking-[0.12em] uppercase text-[#bbb]">
-              The original · layout and brand notes live only in this picture
+              {reference.fromLayout
+                ? 'The original · the board opened as it was, with the notes'
+                : 'The original · no saved layout for this look, so the board is a grid'}
             </p>
           </a>
         ) : (
@@ -165,6 +160,21 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
 
       <div className="px-3 pb-2.5">
         <p className="text-[10px] text-[#8a7a6a] leading-relaxed">{omittedHeadline(omitted)}</p>
+        {(reference.notInPicture?.length ?? 0) > 0 && (
+          <details className="mt-1.5">
+            <summary className="cursor-pointer text-[10px] text-[#aaa] leading-relaxed">
+              {reference.notInPicture!.length} more {reference.notInPicture!.length === 1 ? 'piece was' : 'pieces were'} listed in GoodPix but not in the picture, so {reference.notInPicture!.length === 1 ? 'it is' : 'they are'} not on the board
+            </summary>
+            <ul className="mt-1 space-y-1">
+              {reference.notInPicture!.map((o) => (
+                <li key={o.id} className="leading-tight">
+                  {o.brand && <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{o.brand}</span>}
+                  <span className="block text-[11px] text-[#888] truncate" title={o.name}>{o.name}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {omitted.length > 0 && (
           <ul className="mt-1.5 space-y-1">
             {omitted.map((o) => (

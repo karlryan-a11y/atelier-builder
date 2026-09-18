@@ -4,12 +4,12 @@ import type Konva from 'konva'
 import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
-import { toKonvaConfig, fromKonvaTransform } from './CanvasAdapter'
+import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
 import { selectionOnPress, shouldClearSelection, ringOffsets } from '@/lib/canvasSelection'
 import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM } from '@/lib/canvasView'
-import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
+import type { CanvasNode, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
 // on-screen budget, preserving aspect, so Portrait / Square / Landscape all fit.
@@ -154,6 +154,62 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
             if (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20) return oldBox
             return newBox
           }}
+        />
+      )}
+    </>
+  )
+}
+
+interface PictureNodeProps {
+  node: PictureNode
+  image?: HTMLImageElement
+  isSelected: boolean
+  solo: boolean
+  onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart?: () => void
+  onDragMove?: (x: number, y: number) => void
+  onDragEnd: (x: number, y: number) => void
+  onTransformCommit: (patch: Partial<PictureNode>) => void
+}
+
+/**
+ * A plain picture on the board — a shop product or pasted image carried across from a GoodPix
+ * look (ADR-0127). Moves, resizes and rotates like a piece; its geometry comes from
+ * pictureKonvaAttrs, the same function the headless renderer uses.
+ */
+function PictureNodeElement({ node, image, isSelected, solo, onSelect, onDragStart, onDragMove, onDragEnd, onTransformCommit }: PictureNodeProps) {
+  const ref = useRef<Konva.Image>(null)
+  if (!image) return null
+  const a = pictureKonvaAttrs(node)
+  return (
+    <>
+      <KonvaImage
+        ref={ref}
+        id={node.id}
+        image={image}
+        {...a}
+        draggable={!node.locked}
+        onMouseDown={onSelect}
+        onTouchStart={onSelect}
+        onDragStart={() => onDragStart?.()}
+        onDragMove={(e) => onDragMove?.(e.target.x(), e.target.y())}
+        onDragEnd={(e) => onDragEnd(e.target.x(), e.target.y())}
+        onTransformEnd={() => {
+          const n = ref.current
+          if (!n) return
+          const patch = pictureFromKonva(node, { x: n.x(), y: n.y(), scaleX: n.scaleX(), scaleY: n.scaleY(), rotation: n.rotation() })
+          // Settle the scale into width/height now, so what is saved is what is on screen.
+          n.scaleX(node.flipped ? -1 : 1); n.scaleY(node.flipped_y ? -1 : 1)
+          onTransformCommit(patch)
+        }}
+      />
+      {isSelected && solo && (
+        <Transformer
+          ref={(tr) => { if (tr && ref.current) { tr.nodes([ref.current]); tr.getLayer()?.batchDraw() } }}
+          rotateEnabled
+          keepRatio
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          boundBoxFunc={(oldBox, newBox) => (Math.abs(newBox.width) < 12 || Math.abs(newBox.height) < 12 ? oldBox : newBox)}
         />
       )}
     </>
@@ -366,6 +422,18 @@ export function LookCanvas() {
         }
       }
 
+      // A picture carries its size as width/height, like text carries a box width. Fold any
+      // residual Transformer scale back in (its sign is the flip, which the node already holds).
+      if (node.type === 'picture') {
+        const sx = Math.abs(kn.scaleX()) || 1
+        const sy = Math.abs(kn.scaleY()) || 1
+        if (Math.abs(sx - 1) > EPS || Math.abs(sy - 1) > EPS) {
+          updates.width = Math.max(8, node.width * sx)
+          updates.height = Math.max(8, node.height * sy)
+          kn.scaleX(node.flipped ? -1 : 1); kn.scaleY(node.flipped_y ? -1 : 1)
+        }
+      }
+
       if (Object.keys(updates).length) patches.push({ id: node.id, updates: updates as Partial<CanvasNode> })
     }
 
@@ -476,6 +544,8 @@ export function LookCanvas() {
     for (const node of state.nodes) {
       if (node.type === 'closet_item') {
         m.set(node.id, storeImageUrls[node.id] ?? null)
+      } else if (node.type === 'picture') {
+        m.set(node.id, node.src)   // a picture carries its own url
       }
     }
     return m
@@ -741,6 +811,10 @@ export function LookCanvas() {
           ...(tn.width ? { width: Math.max(20, tn.width * (Math.abs(kn.scaleX()) || 1)) } : {}),
         } as Partial<CanvasNode> })
         kn.scaleX(1); kn.scaleY(1)
+      } else if (n.type === 'picture') {
+        const pn = n as PictureNode
+        patches.push({ id, updates: pictureFromKonva(pn, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() }) as Partial<CanvasNode> })
+        kn.scaleX(pn.flipped ? -1 : 1); kn.scaleY(pn.flipped_y ? -1 : 1)
       } else {
         patches.push({ id, updates: { ...fromKonvaTransform(n as ClosetItemNode, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() }), target_height: undefined } as Partial<CanvasNode> })
       }
@@ -956,6 +1030,23 @@ export function LookCanvas() {
                       // Clear target_height so user's manual resize sticks
                       updateNode(node.id, { ...updates, target_height: undefined })
                     }}
+                  />
+                )
+              }
+              if (node.type === 'picture') {
+                const pNode = node as PictureNode
+                return (
+                  <PictureNodeElement
+                    key={node.id}
+                    node={pNode}
+                    image={images.get(node.id)}
+                    isSelected={selectedNodeIds.includes(node.id)}
+                    solo={selectedNodeIds.length === 1}
+                    onSelect={(e) => handleNodeSelect(node.id, e)}
+                    onDragStart={() => handleGroupDragStart(node.id)}
+                    onDragMove={(x, y) => handleGroupDragMove(node.id, x, y)}
+                    onDragEnd={(x, y) => handleGroupDragEnd(node.id, x, y)}
+                    onTransformCommit={(patch) => updateNode(node.id, patch)}
                   />
                 )
               }
