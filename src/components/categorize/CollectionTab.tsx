@@ -13,6 +13,8 @@ import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { useClientStore } from '@/stores/clientStore'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -614,7 +616,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                 </button>
                 <div className="aspect-square bg-[#F8F7F5] flex items-center justify-center">
                   {img ? (
-                    <img src={img} alt={displayName(item)} className="max-w-full max-h-full object-contain p-2.5" loading="lazy" />
+                    <TileImage src={img} width={PIECE_TILE_WIDTH} alt={displayName(item)} className="max-w-full max-h-full object-contain p-2.5" loading="lazy" />
                   ) : (
                     <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No image</span>
                   )}
@@ -742,7 +744,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                   <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
                     <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
                       {lk.image
-                        ? <img src={lk.image} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                        ? <TileImage src={lk.image} width={LOOK_TILE_WIDTH} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
                         : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
                     </div>
                     <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2">

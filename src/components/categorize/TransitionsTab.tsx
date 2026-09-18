@@ -3,6 +3,8 @@ import { RotateCcw, Wand2, Archive, Copy } from 'lucide-react'
 import type { useTransitions, TransitionedItem } from '@/hooks/useTransitions'
 import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 import { groupPulledLooks, orderQueue, queueSummary, queueHeadline, type QueueCard } from '@/lib/transitionQueue'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 // Renders the transitioned pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook as a result. Restore returns a piece and re-publishes any
@@ -87,7 +89,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
               <div key={item.id} className="group relative border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
                 <div className="aspect-square bg-[#F8F7F5] flex items-center justify-center">
                   {item.image ? (
-                    <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain p-2.5 opacity-70" loading="lazy" />
+                    <TileImage src={item.image} width={PIECE_TILE_WIDTH} alt={item.name} className="max-w-full max-h-full object-contain p-2.5 opacity-70" loading="lazy" />
                   ) : (
                     <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No image</span>
                   )}
@@ -135,7 +137,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
               <div key={card.key} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
                 <div className="aspect-[4/5] bg-[#F8F7F5] flex items-center justify-center">
                   {look.image ? (
-                    <img src={look.image} alt={look.name} className="max-w-full max-h-full object-contain opacity-70" loading="lazy" />
+                    <TileImage src={look.image} width={LOOK_TILE_WIDTH} alt={look.name} className="max-w-full max-h-full object-contain opacity-70" loading="lazy" />
                   ) : (
                     <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">Look</span>
                   )}
@@ -214,7 +216,7 @@ function CausePieces({ causeItemIds, itemById, transitionedAt }: {
             <li key={piece.id} className="flex items-center gap-2">
               <span className="h-7 w-7 shrink-0 bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm overflow-hidden flex items-center justify-center">
                 {full?.image
-                  ? <img src={full.image} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
+                  ? <TileImage src={full.image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
                   : <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>}
               </span>
               <span className="min-w-0">

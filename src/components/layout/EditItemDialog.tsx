@@ -146,6 +146,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {imageUrl && (
             <div className="relative bg-tile rounded-sm aspect-square flex items-center justify-center overflow-hidden">
+              {/* full-size: the editor shows the one piece being edited, not a grid tile */}
               <img src={imageUrl} alt="" className="max-w-full max-h-full object-contain p-3" />
               {rotating && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-[10px] tracking-[0.2em] uppercase text-text-muted">

@@ -7,6 +7,8 @@ import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@
 import { labelForCategory, customCategoriesFromItems, primaryCategoryOf } from '@/lib/garmentCategory'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { ColorAuditPanel } from './ColorAuditPanel'
+import { TileImage } from '@/components/common/TileImage'
+import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 // The "Review" tab — one home for a client's data cleanup: HIDDEN pieces (recover ones hidden by
 // mistake), MISSING INFO (fill blanks so search works), and COLORS (the existing color audit, folded
@@ -97,7 +99,7 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
               {hidden.items.map((item) => (
                 <div key={item.id} className="group relative border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
                   <div className="aspect-square bg-[#F8F7F5] flex items-center justify-center">
-                    {item.image ? <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain p-2.5 opacity-80" loading="lazy" />
+                    {item.image ? <TileImage src={item.image} width={PIECE_TILE_WIDTH} alt={item.name} className="max-w-full max-h-full object-contain p-2.5 opacity-80" loading="lazy" />
                       : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No image</span>}
                   </div>
                   <div className="px-3 py-2.5">
@@ -137,7 +139,7 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <div className="aspect-square bg-[#F8F7F5] flex items-center justify-center">
-                      {img ? <img src={img} alt={displayName(item)} className="max-w-full max-h-full object-contain p-2.5" loading="lazy" />
+                      {img ? <TileImage src={img} width={PIECE_TILE_WIDTH} alt={displayName(item)} className="max-w-full max-h-full object-contain p-2.5" loading="lazy" />
                         : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No image</span>}
                     </div>
                     <div className="px-3 py-2.5">

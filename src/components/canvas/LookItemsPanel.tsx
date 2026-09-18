@@ -3,6 +3,8 @@ import { ChevronRight, ChevronLeft, Layers, Image as ImageIcon, Copy } from 'luc
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
 import { OMIT_LABEL, omittedHeadline } from '@/lib/restyleSelection'
+import { TileImage } from '@/components/common/TileImage'
+import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -82,7 +84,7 @@ export function LookItemsPanel() {
           <div key={it.id} className="flex items-center gap-2 p-1.5 rounded-sm hover:bg-[#F8F7F5]">
             <div className="w-9 h-11 flex-none bg-[#F8F7F5] rounded-sm overflow-hidden flex items-center justify-center">
               {it.image
-                ? <img src={it.image} alt={it.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                ? <TileImage src={it.image} width={PIECE_TILE_WIDTH} alt={it.name} className="max-w-full max-h-full object-contain" loading="lazy" />
                 : <Layers className="h-3.5 w-3.5 text-[#ccc]" />}
             </div>
             <div className="min-w-0">
@@ -139,6 +141,7 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
       {showOriginal && (
         reference.imageUrl ? (
           <a href={reference.imageUrl} target="_blank" rel="noreferrer" className="block px-3 pb-2" title="Open the original full size">
+            {/* full-size: the original, opened on request as a reference, not a grid tile */}
             <img
               src={reference.imageUrl}
               alt={`Original ${reference.lookName || 'look'}`}

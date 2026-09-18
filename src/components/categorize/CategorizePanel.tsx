@@ -29,6 +29,8 @@ import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationP
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, selectAllLabel } from '@/lib/lookCategoryFilter'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -1101,7 +1103,7 @@ export function CategorizePanel() {
 
                     <div className="aspect-square flex items-center justify-center p-2 overflow-hidden">
                       {item.image ? (
-                        <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                        <TileImage src={item.image} width={LOOK_TILE_WIDTH} alt={item.name} className="max-w-full max-h-full object-contain" loading="lazy" />
                       ) : (
                         <Tag className="w-6 h-6 text-[#E8E4DF]" />
                       )}

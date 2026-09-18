@@ -2,6 +2,8 @@ import { Trash2, Plus, Copy } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
 import { lookImageUrl } from '@/lib/lookImage'
 import { LoadError } from '@/components/common/LoadError'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 interface LookGalleryProps {
   looks: LookRow[]
@@ -64,8 +66,9 @@ export function LookGallery({ looks, loading, error, onRetry, currentLookId, onS
             >
               <div className="aspect-[4/5] bg-tile rounded-t-sm overflow-hidden relative">
                 {image ? (
-                  <img
+                  <TileImage
                     src={image}
+                    width={LOOK_TILE_WIDTH}
                     alt={look.name}
                     className="w-full h-full object-contain"
                     loading="lazy"

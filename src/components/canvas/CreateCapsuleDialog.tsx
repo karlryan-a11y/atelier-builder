@@ -5,6 +5,8 @@ import { lookImageUrl } from '@/lib/lookImage'
 // The composite grid renderer lives in @/render/capsuleGrid so the headless renderer box can
 // re-bake this exact hero when a member look's photo changes (see renderer/ service).
 import { renderCapsuleGrid } from '@/render/capsuleGrid'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 interface CreateCapsuleDialogProps {
   looks: LookRow[]
@@ -131,7 +133,7 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
                     {/* Thumbnail */}
                     <div className="w-12 h-12 rounded-sm bg-[#F8F7F5] overflow-hidden shrink-0">
                       {lookImageUrl(look.raw) ? (
-                        <img src={lookImageUrl(look.raw)!} alt="" className="w-full h-full object-cover" />
+                        <TileImage src={lookImageUrl(look.raw)!} width={LOOK_TILE_WIDTH} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-[8px] text-[#ccc]">—</div>
                       )}

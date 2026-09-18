@@ -4,6 +4,8 @@ import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
 import { supabase } from '@/lib/supabase'
 import { COLOR_ORDER, COLOR_SWATCH, MULTI_SWATCH, CUSTOM_SWATCH, colorsOf, normalizeColorName } from '@/lib/colorFamily'
+import { TileImage } from '@/components/common/TileImage'
+import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 // Colors audit tab (Categorize → Colors). Surfaces items where the vision color audit disagrees
 // with the stored primary color (color_audit.flag). The stylist builds the item's color SET —
@@ -132,7 +134,7 @@ export function ColorAuditPanel({ clientId }: { clientId: string | null }) {
               return (
                 <div key={it.id} className="flex gap-3 border border-[#EEE] rounded-lg p-3 bg-white">
                   <div className="w-20 h-24 flex-none bg-[#FAF9F7] rounded flex items-center justify-center overflow-hidden">
-                    {img ? <img src={img} alt="" className="max-w-full max-h-full object-contain" loading="lazy" /> : null}
+                    {img ? <TileImage src={img} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain" loading="lazy" /> : null}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px] text-[#1A1A1A] truncate">{displayName(it)}</p>

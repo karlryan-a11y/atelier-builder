@@ -8,6 +8,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ChevronLeft, ChevronRight, GripVertical, Tag, X } from 'lucide-react'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 /**
  * "On lookbook" arrange view. The card order here IS the order the client sees
@@ -189,7 +191,7 @@ function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive,
 
       <div className="aspect-square flex items-center justify-center p-2 overflow-hidden">
         {look.image ? (
-          <img src={look.image} alt={look.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+          <TileImage src={look.image} width={LOOK_TILE_WIDTH} alt={look.name} className="max-w-full max-h-full object-contain" loading="lazy" />
         ) : (
           <Tag className="w-6 h-6 text-[#E8E4DF]" />
         )}

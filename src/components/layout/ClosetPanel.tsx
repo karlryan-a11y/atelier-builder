@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabase'
 import { useDraggable } from '@dnd-kit/core'
 import type { ClosetItemNode } from '@/types/canvas'
 import { EditItemDialog } from './EditItemDialog'
+import { TileImage } from '@/components/common/TileImage'
+import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
 function DraggableItem({
   item,
@@ -78,8 +80,9 @@ function DraggableItem({
           </div>
         )}
         {item.imageUrl ? (
-          <img
+          <TileImage
             src={item.imageUrl}
+            width={PIECE_TILE_WIDTH}
             alt={item.name}
             className="max-w-full max-h-full object-contain group-hover:scale-[1.02] transition-transform duration-200"
             loading="lazy"
@@ -153,7 +156,7 @@ function ClosetLightbox({
 
         {/* Image */}
         <div className="flex-1 min-h-0 bg-tile flex items-center justify-center p-6">
-          {imageUrl ? (
+          {imageUrl ? ( // full-size: the one-piece zoom preview, not a grid tile
             <img src={imageUrl} alt={displayName(item)} className="max-w-full max-h-[62vh] object-contain" />
           ) : (
             <span className="text-[10px] tracking-[0.2em] uppercase text-text-muted/40">No image</span>

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { Check, Home, Sparkles, Tag, X } from 'lucide-react'
 import type { LookCategory, TaggableLook } from '@/hooks/useLookCategories'
 import { useResidenceReview, type Provenance } from '@/hooks/useResidenceReview'
+import { TileImage } from '@/components/common/TileImage'
+import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 /**
  * Residence review — file the back-catalogue of looks by which home they belong to.
@@ -130,7 +132,7 @@ export function ResidencesTab({ looks, categories, review, assignLook }: Props) 
               <div key={look.id} className="bg-white rounded-sm border border-[#E8E4DF] flex flex-col">
                 <div className="aspect-square flex items-center justify-center p-2 overflow-hidden border-b border-[#F0EDE9]">
                   {look.image
-                    ? <img src={look.image} alt={look.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                    ? <TileImage src={look.image} width={LOOK_TILE_WIDTH} alt={look.name} className="max-w-full max-h-full object-contain" loading="lazy" />
                     : <Tag className="w-6 h-6 text-[#E8E4DF]" />}
                 </div>
 
