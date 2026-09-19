@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
-import { styleCanvas } from '@/lib/style'
+import { styleFromPastLooks } from '@/lib/style'
+import { useClientStore } from '@/stores/clientStore'
 import type { ClosetItemNode, TextNode } from '@/types/canvas'
 import { BOARD_PRESETS } from '@/types/canvas'
 
@@ -44,6 +45,9 @@ export function CanvasToolbar() {
     isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit, rememberTextStyle,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
+  // ✨ steps through real looks with the same mix: the same pieces pressed again = the next look.
+  const [styleRun, setStyleRun] = useState<{ key: string; attempt: number; note: string; short: string } | null>(null)
+  const activeClientId = useClientStore((st) => st.activeClient?.id ?? null)
   const [removingBg, setRemovingBg] = useState(false)
 
   // Remove a canvas item's background → transparent (Photoroom via intake-remove-bg-item),
@@ -80,23 +84,34 @@ export function CanvasToolbar() {
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
   const selectedClosetItems = selectedNodes.filter((n): n is ClosetItemNode => !!n && n.type === 'closet_item')
 
+  // ✨ (ADR-0128). Arranges the pieces like a real look the team styled with the same mix of
+  // pieces, her own looks first, and labels only brands saved on the pieces. It never deletes:
+  // text and pictures stay, notes travel with their piece, and the whole change is ONE undo step.
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
     setStyling(true)
     try {
       const store = useCanvasStore.getState()
-      const result = await styleCanvas(store.state.nodes, store.imageUrls, store.state.canvas)
-
-      // Clear canvas and re-add all nodes with their image URLs.
-      // This ensures each new node ID gets the correct image URL mapping.
-      store.setCanvasState({
-        ...store.state,
-        nodes: [],
-      })
-      for (const node of result.nodes) {
-        const url = result.imageUrls[node.id] ?? undefined
-        store.addNode(node, url)
+      const pieceKey = store.state.nodes.filter((n) => n.type === 'closet_item')
+        .map((n) => (n as ClosetItemNode).closet_item_id).sort().join(',')
+      const attempt = styleRun && styleRun.key === pieceKey ? styleRun.attempt + 1 : 0
+      const displayOf = (id: string) => {
+        const n = store.state.nodes.find((x) => x.id === id) as ClosetItemNode | undefined
+        const d = store.nodeDims[id]
+        if (!n || !d || !d.h) return null
+        const h = n.target_height ?? d.h * Math.abs(n.scale_y ?? n.scale)
+        return { w: (d.w / d.h) * h, h }
       }
+      const r = await styleFromPastLooks({
+        nodes: store.state.nodes, board: store.state.canvas, clientId: activeClientId,
+        attempt, displayOf, imageUrls: store.imageUrls,
+      })
+      store.setCanvasState({ ...store.state, nodes: r.nodes })
+      const note = r.template
+        ? `Arranged like ${r.template.look_name ?? 'a past look'}${r.sameClient ? ' (hers)' : ''}, option ${r.option + 1} of ${r.of}. Press again for another.`
+        : 'No past look has these pieces, so the standard arrangement was used.'
+      const short = r.template ? `${r.option + 1}/${r.of}` : 'standard'
+      setStyleRun({ key: pieceKey, attempt, note, short })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       alert(`Style failed: ${message}`)
@@ -187,7 +202,7 @@ export function CanvasToolbar() {
         onClick={handleStyle}
         disabled={styling || !hasClosetItems}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
-        title="Style — auto-arrange items to fit the current board"
+        title={styleRun?.note ?? 'Style: arrange the pieces and brand labels like a past look. Nothing is deleted.'}
       >
         {styling ? (
           <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />
@@ -195,6 +210,9 @@ export function CanvasToolbar() {
           <Sparkles className="h-3.5 w-3.5 text-text-muted" />
         )}
       </button>
+      {styleRun && (
+        <span className="text-[10px] tabular-nums text-text-muted whitespace-nowrap" title={styleRun.note}>{styleRun.short}</span>
+      )}
 
       {singleNode?.type === 'text' && (() => {
         const tn = singleNode as TextNode

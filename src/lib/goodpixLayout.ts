@@ -205,6 +205,12 @@ export interface LayoutConversion {
   texts: number
   /** Objects we could not carry (shapes, lines, invisible objects, a picture with no source). */
   skipped: number
+  /**
+   * Each placed piece's box on the board as GoodPix drew it: centre, size (unrotated), angle.
+   * The Style button learns arrangements from these (lib/styleFromTemplates.ts); the node itself
+   * cannot say its width, because that depends on which photo of the piece Atelier loads.
+   */
+  boxes: { nodeId: string; pieceId: string; cx: number; cy: number; w: number; h: number; rotation: number; flipped: boolean }[]
 }
 
 export interface ConvertOptions {
@@ -236,6 +242,7 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
   const leftOff: string[] = []
   let pictures = 0, texts = 0, skipped = 0
   const nodes: CanvasNode[] = []
+  const boxes: LayoutConversion['boxes'] = []
 
   ;(layout.objects ?? []).forEach((o, i) => {
     if (o.visible === false) { skipped++; return }
@@ -266,6 +273,8 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
           locked: false,
         }
         nodes.push(node)
+        const [ccx, ccy] = at(b, b.w / 2, b.h / 2)
+        boxes.push({ nodeId: node.id, pieceId: piece, cx: ccx * k, cy: ccy * k, w: b.w * k, h: b.h * k, rotation: b.angle, flipped: !!o.flipX })
         if (!placed.includes(piece)) placed.push(piece)
         return
       }
@@ -319,5 +328,5 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
   })
 
   canvas.nodes = nodes
-  return { canvas, placed, leftOff, pictures, texts, skipped }
+  return { canvas, placed, leftOff, pictures, texts, skipped, boxes }
 }
