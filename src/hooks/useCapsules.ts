@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { styleKeys } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
 import { replaceGoodPixCapsule } from '@/lib/capsuleReplace'
 
@@ -21,35 +23,44 @@ function generateBoardId(): string {
   return Array.from({ length: 24 }, hex).join('')
 }
 
+const NO_CAPSULES: CapsuleRow[] = []
+
 export function useCapsules(clientId: string | null) {
-  const [capsules, setCapsules] = useState<CapsuleRow[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const fetchCapsules = useCallback(async () => {
-    if (!clientId) {
-      setCapsules([])
-      return
-    }
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('gp_boards')
-      .select('id, client_id, name, description, closet_item_ids, raw, created_at')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false })
-
-    if (!error && data) {
-      setCapsules(data.map((b: any) => ({
+  // The canvas's capsule list, from the shared Style cache (lib/queryClient.ts).
+  const qc = useQueryClient()
+  const query = useQuery({
+    queryKey: styleKeys.capsules(clientId),
+    enabled: !!clientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('gp_boards')
+        .select('id, client_id, name, description, closet_item_ids, raw, created_at')
+        .eq('client_id', clientId!)
+        .order('created_at', { ascending: false })
+      // The old hook kept the previous list on a failed read and said nothing; throwing keeps
+      // the cached list for this client just the same.
+      if (error) throw new Error(error.message)
+      return (data ?? []).map((b: any) => ({
         ...b,
         look_ids: b.raw?.look_ids ?? [],
         source: b.raw?.source ?? 'unknown',
-      })))
-    }
-    setLoading(false)
-  }, [clientId])
+      })) as CapsuleRow[]
+    },
+  })
+  const capsules = clientId ? query.data ?? NO_CAPSULES : NO_CAPSULES
+  const loading = !!clientId && query.isLoading
 
-  useEffect(() => {
-    fetchCapsules()
-  }, [fetchCapsules])
+  const setCapsules = useCallback((update: (prev: CapsuleRow[]) => CapsuleRow[]) => {
+    qc.setQueryData<CapsuleRow[]>(styleKeys.capsules(clientId), (old) => (old ? update(old) : old))
+  }, [qc, clientId])
+
+  const fetchCapsules = useCallback(async () => {
+    if (!clientId) return
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: styleKeys.capsules(clientId) }),
+      qc.invalidateQueries({ queryKey: styleKeys.lookCategories(clientId) }),
+    ])
+  }, [qc, clientId])
 
   const saveCapsule = useCallback(async (opts: {
     /** Pass the existing capsule's id to UPDATE that gp_boards row instead of inserting a new
@@ -151,7 +162,7 @@ export function useCapsules(clientId: string | null) {
       setCapsules(prev => prev.filter(c => c.id !== id))
     }
     return { error }
-  }, [])
+  }, [setCapsules])
 
   return { capsules, loading, fetchCapsules, saveCapsule, deleteCapsule }
 }

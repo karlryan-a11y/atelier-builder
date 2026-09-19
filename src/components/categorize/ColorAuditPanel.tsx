@@ -36,7 +36,7 @@ function Swatch({ c }: { c: string }) {
 }
 
 export function ColorAuditPanel({ clientId }: { clientId: string | null }) {
-  const { items, loading, refetch } = useClosetItems(clientId)
+  const { items, loading, refetch, patchItems } = useClosetItems(clientId)
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<Set<string>>(new Set())
   // Working color set per item, primary first. Undefined = not yet touched (seed on first render).
@@ -92,6 +92,7 @@ export function ColorAuditPanel({ clientId }: { clientId: string | null }) {
     setBusy(null)
     if (error) { alert('Save failed — ' + error.message); return }
     setDone((p) => new Set(p).add(it.id))
+    patchItems([it.id], patch as Partial<ClosetItem>)
     refetch()
   }
 

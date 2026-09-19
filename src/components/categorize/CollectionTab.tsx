@@ -42,7 +42,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   /** Called after a stylist transitions a piece out, so the Transitions tab + badge refresh live. */
   onTransitioned?: () => void
 }) {
-  const { items, tagNameById, loading, error, refetch } = useClosetItems(clientId)
+  const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(clientId)
   const { activeClient } = useClientStore()
   const clientFirst = (activeClient?.name ?? 'the client').split(' ')[0]
   const [adding, setAdding] = useState(false)
@@ -229,6 +229,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     const { error: e } = await supabase.from('gp_closet_items').update(patch).eq('id', editing.id)
     setSaving(false)
     if (e) { console.error('Failed to save item edits:', e); return }
+    // Into the shared cache at once (every screen showing this piece), then a background re-read.
+    patchItems([editing.id], patch as Partial<ClosetItem>)
     setEditing(null)
     refetch()
   }
@@ -247,8 +249,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
       .eq('id', item.id)
     setVerifyBusy((p) => { const n = new Set(p); n.delete(item.id); return n })
     if (error) { alert('Could not update — ' + error.message); return }
-    // Mutate in place + light refetch so the count updates without scrolling to top.
-    item.drive_verified_at = nowOn ? new Date().toISOString() : null
+    // Patch the shared cache + light refetch so the count updates without scrolling to top.
+    patchItems([item.id], { drive_verified_at: nowOn ? new Date().toISOString() : null })
     refetch()
   }
 

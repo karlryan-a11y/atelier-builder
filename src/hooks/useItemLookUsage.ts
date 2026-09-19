@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
+import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 
 // A light record of a look for the "styled in" popup — just what we need to show it.
 //
@@ -22,6 +23,10 @@ export function useItemLookUsage(clientId: string | null) {
   // Set when a page of the read FAILED. The map is then incomplete, so "styled in N looks"
   // would undercount; callers can tell a real zero from a failed read.
   const [error, setError] = useState<string | null>(null)
+  // Re-read in the background when Categorize comes back into view: a look saved on the canvas
+  // changes which pieces are styled (hooks/useStyleTabRefresh.ts). The map on screen stays until
+  // the new one replaces it.
+  const epoch = useStyleRefreshStore((s) => s.categorizeEpoch)
 
   useEffect(() => {
     if (!clientId) { setByItem(new Map()); setError(null); return }
@@ -79,7 +84,7 @@ export function useItemLookUsage(clientId: string | null) {
     })()
 
     return () => { cancelled = true }
-  }, [clientId])
+  }, [clientId, epoch])
 
   return { byItem, loading, error }
 }

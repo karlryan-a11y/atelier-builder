@@ -233,9 +233,17 @@ if ((rowFn.match(/tabular-nums/g) ?? []).length < 2) {
       failures.push(`${PANEL}: CollectionTab looks like it is kept mounted and hidden, which stops the styled numbers being re-read`)
     }
   }
+  // Since styling wave 3 the whole Categorize panel also stays mounted behind the Canvas tab, so
+  // a look saved on the canvas no longer crosses a remount on the way back. The effect is keyed on
+  // the client AND on categorizeEpoch (bumped each time Categorize comes back into view,
+  // hooks/useStyleTabRefresh.ts), which is that re-read.
   checked++
-  if (!/\}, \[clientId\]\)/.test(hookSrc)) {
+  if (!/\}, \[clientId(, epoch)?\]\)/.test(hookSrc)) {
     failures.push(`${HOOK}: the look read is no longer an effect keyed on the client, so remounting may not refresh the styled numbers`)
+  }
+  checked++
+  if (/\}, \[clientId, epoch\]\)/.test(hookSrc) && !/useStyleRefreshStore\(\(s\) => s\.categorizeEpoch\)/.test(hookSrc)) {
+    failures.push(`${HOOK}: keyed on an epoch that is not the Categorize show counter, so returning from the canvas may not refresh the styled numbers`)
   }
 }
 

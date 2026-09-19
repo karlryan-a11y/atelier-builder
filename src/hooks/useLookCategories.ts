@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { styleKeys } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
 import { planResidenceToggle, type ResidenceTogglePlan } from '@/lib/residenceToggle'
-import { loadLookCategories } from '@/lib/lookCategoriesLoad'
+import { loadLookCategories, type LookCategoriesData } from '@/lib/lookCategoriesLoad'
 
 /**
  * Categorize + publish queue, on the ID-BASED taxonomy (migration 008):
@@ -87,43 +89,51 @@ export interface TaggableCapsule {
 
 const slugify = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
 
+const NO_CATEGORIES: LookCategory[] = []
+const NO_LOOKS: TaggableLook[] = []
+const NO_CAPSULES: TaggableCapsule[] = []
+
 export function useLookCategories(clientId: string | null) {
-  const [categories, setCategories] = useState<LookCategory[]>([])
-  const [looks, setLooks] = useState<TaggableLook[]>([])
-  const [capsules, setCapsules] = useState<TaggableCapsule[]>([])
-  const [loading, setLoading] = useState(false)
+  // From the shared Style cache (lib/queryClient.ts): CategorizePanel and the Nesting tab read the
+  // SAME copy, and it survives Canvas <-> Categorize switches. The mutations below still update
+  // it optimistically through setCategories / setLooks / setCapsules, which now write the cache,
+  // so every screen holding this client's taxonomy sees the change at once.
+  const qc = useQueryClient()
+  const queryKey = styleKeys.lookCategories(clientId)
+  const query = useQuery({
+    queryKey,
+    enabled: !!clientId,
+    queryFn: async () => {
+      const res = await loadLookCategories(supabase, clientId!)
+      // A FAILED read throws, so the grid says "Couldn't load" + Retry instead of an empty grid
+      // that says her looks are gone (lib/lookCategoriesLoad.ts). The cache is per client, so
+      // another client's looks can never be left on screen under this client's name.
+      if (res.error !== null) {
+        console.error('useLookCategories:', res.error)
+        throw new Error(res.error)
+      }
+      return res.data
+    },
+  })
+  const categories = (clientId && query.data?.categories) || NO_CATEGORIES
+  const looks = (clientId && query.data?.looks) || NO_LOOKS
+  const capsules = (clientId && query.data?.capsules) || NO_CAPSULES
+  // Only the FIRST read for a client shows the spinner; a refresh keeps the grid on screen.
+  const loading = !!clientId && query.isLoading
+  const error = clientId && query.isError ? (query.error instanceof Error ? query.error.message : 'load failed') : null
 
-  // Set when the last read FAILED. The grid shows "Couldn't load" + Retry instead of an empty
-  // grid that says her looks are gone (lib/lookCategoriesLoad.ts).
-  const [error, setError] = useState<string | null>(null)
-  // Only the newest read may write state: a slow read for the previous client must not land
-  // on top of this one.
-  const readSeq = useRef(0)
-  const loadedFor = useRef<string | null>(null)
+  const patch = useCallback(<K extends keyof LookCategoriesData>(key: K, update: (prev: LookCategoriesData[K]) => LookCategoriesData[K]) => {
+    qc.setQueryData<LookCategoriesData>(styleKeys.lookCategories(clientId), (old) => (old ? { ...old, [key]: update(old[key]) } : old))
+  }, [qc, clientId])
+  const setCategories = useCallback((u: (prev: LookCategory[]) => LookCategory[]) => patch('categories', u), [patch])
+  const setLooks = useCallback((u: (prev: TaggableLook[]) => TaggableLook[]) => patch('looks', u), [patch])
+  const setCapsules = useCallback((u: (prev: TaggableCapsule[]) => TaggableCapsule[]) => patch('capsules', u), [patch])
 
+  // Re-read (background) and resolve when the fresh copy is in.
   const fetchAll = useCallback(async () => {
-    const seq = ++readSeq.current
-    if (!clientId) { setCategories([]); setLooks([]); setCapsules([]); setError(null); loadedFor.current = null; return }
-    setLoading(true)
-    const res = await loadLookCategories(supabase, clientId)
-    if (seq !== readSeq.current) return
-    if (res.error !== null) {
-      console.error('useLookCategories:', res.error)
-      setError(res.error)
-      // Never leave another client's looks on screen under this client's name.
-      if (loadedFor.current !== clientId) { setCategories([]); setLooks([]); setCapsules([]) }
-      setLoading(false)
-      return
-    }
-    setError(null)
-    loadedFor.current = clientId
-    setCategories(res.data.categories)
-    setLooks(res.data.looks)
-    setCapsules(res.data.capsules)
-    setLoading(false)
-  }, [clientId])
-
-  useEffect(() => { fetchAll() }, [fetchAll])
+    if (!clientId) return
+    await qc.invalidateQueries({ queryKey: styleKeys.lookCategories(clientId) })
+  }, [qc, clientId])
 
   const draftCount = useMemo(
     () => looks.filter((l) => !l.published && !l.archived).length
@@ -145,7 +155,7 @@ export function useLookCategories(clientId: string | null) {
     if (error || !data) { console.error('createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
-  }, [clientId, categories])
+  }, [clientId, categories, setCategories])
 
   /**
    * Delete a category, per planCategoryDeletion: refuse on a residence, hard-delete when
@@ -189,14 +199,14 @@ export function useLookCategories(clientId: string | null) {
       if (error) { console.error('hideCategory:', error.message); await fetchAll() }
     }
     return plan
-  }, [categories, looks, capsules, fetchAll])
+  }, [categories, looks, capsules, fetchAll, setCategories])
 
   /** Put a hidden category back on the client's site. */
   const restoreCategory = useCallback(async (id: string) => {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_hidden: false } : c)))
     const { error } = await supabase.from('look_categories').update({ is_hidden: false }).eq('id', id)
     if (error) { console.error('restoreCategory:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCategories])
 
   /**
    * Put a category inside another one, or pass null to take it back out. (ADR-0113)
@@ -221,7 +231,7 @@ export function useLookCategories(clientId: string | null) {
       return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
     }
     return { ok: true as const }
-  }, [fetchAll])
+  }, [fetchAll, setCategories])
 
   const renameCategory = useCallback(async (id: string, label: string) => {
     const l = label.trim()
@@ -229,7 +239,7 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: l } : c)))
     const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id)
     if (error) { console.error('renameCategory:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCategories])
 
   /**
    * Mark a category as one of the client's homes, or stop it being one (ADR-0111).
@@ -265,7 +275,7 @@ export function useLookCategories(clientId: string | null) {
     const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id)
     if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
     return plan
-  }, [categories, looks, fetchAll])
+  }, [categories, looks, fetchAll, setCategories])
 
   /**
    * Write the stylist note on a category. Deliberately SEPARATE from renameCategory rather
@@ -283,7 +293,7 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, description: value } : c)))
     const { error } = await supabase.from('look_categories').update({ description: value }).eq('id', id)
     if (error) { console.error('setCategoryDescription:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCategories])
 
   // ── assignment (junction insert/delete) ──
   const assignLook = useCallback(async (lookId: string, categoryId: string, on: boolean) => {
@@ -295,7 +305,7 @@ export function useLookCategories(clientId: string | null) {
       : supabase.from('look_category_assignments').delete().eq('look_id', lookId).eq('category_id', categoryId)
     const { error } = await q
     if (error) { console.error('assignLook:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
 
   const assignCapsule = useCallback(async (boardId: string, categoryId: string, on: boolean) => {
     setCapsules((prev) => prev.map((c) => c.id !== boardId ? c : {
@@ -306,34 +316,34 @@ export function useLookCategories(clientId: string | null) {
       : supabase.from('board_category_assignments').delete().eq('board_id', boardId).eq('category_id', categoryId)
     const { error } = await q
     if (error) { console.error('assignCapsule:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
 
   // ── publish / archive (unchanged columns) ──
   const setLookPublished = useCallback(async (id: string, published: boolean) => {
     setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, published } : l)))
     const { error } = await supabase.from('gp_looks').update({ published }).eq('id', id)
     if (error) { console.error('setLookPublished:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
   const setCapsulePublished = useCallback(async (id: string, published: boolean) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, published } : c)))
     const { error } = await supabase.from('gp_boards').update({ published }).eq('id', id)
     if (error) { console.error('setCapsulePublished:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
   const archiveLook = useCallback(async (id: string) => {
     setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, archived: true, published: false } : l)))
     const { error } = await supabase.from('gp_looks').update({ archived: true, published: false }).eq('id', id)
     if (error) { console.error('archiveLook:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
   const archiveCapsule = useCallback(async (id: string) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, archived: true, published: false } : c)))
     const { error } = await supabase.from('gp_boards').update({ is_deleted: true, published: false }).eq('id', id)
     if (error) { console.error('archiveCapsule:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
   const restoreLook = useCallback(async (id: string) => {
     setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, archived: false, published: false } : l)))
     const { error } = await supabase.from('gp_looks').update({ archived: false, published: false }).eq('id', id)
     if (error) { console.error('restoreLook:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
   // ── manual display order (drives the client lookbook's Looks gallery) ──
   // orderedIds is the full published set in the stylist's desired order; we
   // persist each look's index as gp_looks.sort_order. Optimistic + reconciling.
@@ -349,7 +359,7 @@ export function useLookCategories(clientId: string | null) {
     )
     const failed = results.find((r) => r.error)
     if (failed) { console.error('reorderLooks:', failed.error?.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
 
   // Same as reorderLooks but for capsules → gp_boards.sort_order (the lookbook's
   // getBoards already orders by it, so this drives the client's Capsules gallery).
@@ -365,13 +375,13 @@ export function useLookCategories(clientId: string | null) {
     )
     const failed = results.find((r) => r.error)
     if (failed) { console.error('reorderCapsules:', failed.error?.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
 
   const restoreCapsule = useCallback(async (id: string) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, archived: false, published: false } : c)))
     const { error } = await supabase.from('gp_boards').update({ is_deleted: false, published: false }).eq('id', id)
     if (error) { console.error('restoreCapsule:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
 
   // Rename a look (any source — the client lookbook renders gp_looks.name directly, so the
   // new name shows everywhere immediately). Optimistic, like the other mutators here.
@@ -381,7 +391,7 @@ export function useLookCategories(clientId: string | null) {
     setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, name: trimmed } : l)))
     const { error } = await supabase.from('gp_looks').update({ name: trimmed }).eq('id', id)
     if (error) { console.error('renameLook:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setLooks])
 
   // Rename a capsule. The twin of renameLook — gp_boards.name is what the client's Capsules
   // page renders, so the new name is live the moment this returns.
@@ -396,7 +406,7 @@ export function useLookCategories(clientId: string | null) {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, name: trimmed } : c)))
     const { error } = await supabase.from('gp_boards').update({ name: trimmed }).eq('id', id)
     if (error) { console.error('renameCapsule:', error.message); await fetchAll() }
-  }, [fetchAll])
+  }, [fetchAll, setCapsules])
 
   return {
     loading, error, categories, looks, capsules, draftCount,
@@ -444,7 +454,7 @@ export function useLookCategoryVocab(clientId: string | null) {
       .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
       .eq('client_id', clientId).order('sort_order').order('label')
     setCategories((data ?? []) as LookCategory[])
-  }, [clientId])
+  }, [clientId, setCategories])
   useEffect(() => { refetch() }, [refetch])
 
   const createCategory = useCallback(async (label: string): Promise<LookCategory | null> => {
@@ -459,7 +469,7 @@ export function useLookCategoryVocab(clientId: string | null) {
     if (error || !data) { console.error('vocab createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
-  }, [clientId, categories])
+  }, [clientId, categories, setCategories])
 
   return { categories, createCategory, refetch }
 }

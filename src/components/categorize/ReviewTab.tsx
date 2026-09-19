@@ -21,7 +21,7 @@ type Pill = 'hidden' | 'missing' | 'colors'
 export function ReviewTab({ clientId, clientName }: { clientId: string | null; clientName?: string }) {
   const [pill, setPill] = useState<Pill>('hidden')
   const hidden = useHiddenItems(clientId)
-  const { items: visible, tagNameById, refetch } = useClosetItems(clientId)
+  const { items: visible, tagNameById, refetch, patchItems } = useClosetItems(clientId)
   const customCats = useMemo(() => customCategoriesFromItems(visible), [visible])
 
   const [restoring, setRestoring] = useState<string | null>(null)
@@ -65,6 +65,7 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
     const { error } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)
     setSaving(false)
     if (error) { alert('Could not save — ' + error.message); return }
+    patchItems([editing.id], data as Partial<ClosetItem>)
     setEditing(null)
     refetch()
   }

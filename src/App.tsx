@@ -19,7 +19,40 @@ import { useViewStore } from '@/stores/viewStore'
 import { useClientStore } from '@/stores/clientStore'
 import { useDraftCount } from '@/hooks/useLookCategories'
 import { resumeSession } from '@/lib/shopping-resume'
+import { useRefreshStyleListsOnShow } from '@/hooks/useStyleTabRefresh'
 import type { ClosetItemNode } from '@/types/canvas'
+
+// Module constants, NOT inline objects: useSensor memoises on the options object, so an inline
+// literal made a new sensor list on every App render, which changed dnd-kit's context and
+// re-rendered every draggable closet tile (all ~1,300) whenever App rendered, e.g. on a tab switch.
+const MOUSE_SENSOR = { activationConstraint: { distance: 8 } }
+const TOUCH_SENSOR = { activationConstraint: { delay: 200, tolerance: 5 } }
+
+/**
+ * One Style tab's panels, kept mounted while the other tab shows.
+ *
+ * The CANVAS pane is the base layer and is never restyled on a switch: Categorize opens as an
+ * opaque layer ON TOP of it. Measured in WebKit at iPad size, flipping `visibility` (or inert,
+ * transform or content-visibility) on the canvas pane costs ~200 ms of style work per switch,
+ * because the closet grid beside the board is ~20,000 elements; flipping the Categorize layer
+ * costs a fraction of that. So only Categorize is ever shown and hidden, and the canvas under it
+ * simply goes unseen. Its window-level keyboard shortcuts check the tab (LookCanvas.tsx), and the
+ * covering layer takes every tap.
+ */
+function StylePane({ active, layer, children }: { active: boolean; layer: 'base' | 'over'; children: React.ReactNode }) {
+  if (layer === 'base') {
+    return <div className="absolute inset-0 flex overflow-hidden">{children}</div>
+  }
+  return (
+    <div
+      className={`absolute inset-0 z-10 flex overflow-hidden bg-[#F8F7F5] ${active ? '' : 'invisible pointer-events-none'}`}
+      aria-hidden={active ? undefined : true}
+      inert={!active}
+    >
+      {children}
+    </div>
+  )
+}
 
 function App() {
   const { user, loading, signOut } = useAuth()
@@ -29,9 +62,18 @@ function App() {
   const setStyleTab = useViewStore((s) => s.setStyleTab)
   const activeClient = useClientStore((s) => s.activeClient)
   const draftCount = useDraftCount(activeClient?.id ?? null, styleTab)
-  const { addNode, state } = useCanvasStore()
+  // Only the action: reading the whole canvas store here re-rendered the entire app (and the
+  // closet grid inside it) on every tap on the board. handleDragEnd reads the board with getState.
+  const addNode = useCanvasStore((s) => s.addNode)
   const activeView = useViewStore((s) => s.activeView)
   const setActiveView = useViewStore((s) => s.setActiveView)
+  // Categorize mounts the first time it is opened in this Style session, then stays mounted.
+  // (Adjusted during render, React's pattern for state derived from props, so the first frame
+  // of Categorize already has it mounted.)
+  const [categorizeMounted, setCategorizeMounted] = useState(false)
+  const wantCategorize = activeView === 'style' && (categorizeMounted || styleTab === 'categorize')
+  if (wantCategorize !== categorizeMounted) setCategorizeMounted(wantCategorize)
+  useRefreshStyleListsOnShow(activeView === 'style' ? styleTab : null, activeClient?.id ?? null)
 
   // Dismiss the "Watson W" preloader (index.html) only once auth has resolved — so the W
   // shows continuously through the auth check, never the app's loading screen or a login flash.
@@ -67,8 +109,8 @@ function App() {
   const [dragImage, setDragImage] = useState<string | null>(null)
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+    useSensor(MouseSensor, MOUSE_SENSOR),
+    useSensor(TouchSensor, TOUCH_SENSOR)
   )
 
   const handleDragStart = useCallback((event: { active: { data: { current?: { imageUrl?: string } } } }) => {
@@ -84,6 +126,7 @@ function App() {
       const data = active.data.current as { type?: string; closetItemId?: string; imageUrl?: string } | undefined
       if (data?.type !== 'closet_item' || !data.closetItemId) return
 
+      const { state } = useCanvasStore.getState()
       const off = (state.nodes.length % 6) * 30
       const node: ClosetItemNode = {
         id: `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -101,7 +144,7 @@ function App() {
 
       addNode(node, data.imageUrl ?? undefined)
     },
-    [addNode, state.nodes.length, state.canvas.width, state.canvas.height]
+    [addNode]
   )
 
   // While auth is resolving, render nothing — the "Watson W" preloader (index.html) stays
@@ -152,16 +195,27 @@ function App() {
                 </button>
               ))}
             </div>
-            {styleTab === 'canvas' ? (
-              <div className="flex flex-1 overflow-hidden">
+            {/* BOTH Style tabs stay mounted; the inactive one is hidden, not unmounted. Unmounting
+                threw away the closet, the looks and the capsules on every Canvas <-> Categorize
+                switch and read them all again. The canvas is the base layer at its real size (the
+                board measures its box); Categorize is a layer over it, hidden with invisible +
+                inert when the canvas is showing (see StylePane for why it is that way round).
+                Categorize mounts on first visit, then stays.
+                scripts/check-style-tabs-mounted.mjs fails if either panel goes back to being
+                mounted by a styleTab conditional. */}
+            <div className="relative flex flex-1 overflow-hidden">
+              <StylePane active={styleTab === 'canvas'} layer="base">
                 <ClosetPanel />
                 <LookCanvas />
                 <LookItemsPanel />
                 <ChatPanel />
-              </div>
-            ) : (
-              <CategorizePanel />
-            )}
+              </StylePane>
+              {categorizeMounted && (
+                <StylePane active={styleTab === 'categorize'} layer="over">
+                  <CategorizePanel />
+                </StylePane>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">

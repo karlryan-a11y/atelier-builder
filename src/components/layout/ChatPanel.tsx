@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStore, exportCanvasImage, settleCanvasTransforms } from '@/stores/canvasStore'
 import { useClientStore } from '@/stores/clientStore'
 import { useAuth } from '@/hooks/useAuth'
@@ -33,7 +34,16 @@ export function ChatPanel() {
   const [saving, setSaving] = useState(false)
   const { user } = useAuth()
   const { activeClient } = useClientStore()
-  const { state, currentLookId, replacesLookId, replacesSiblingLookIds, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore()
+  // Narrow, shallow-compared subscription: a tap or drag on the board changes neither of these,
+  // so it no longer re-renders this panel and its looks gallery. `nodes` changes only when a
+  // piece is added, removed or moved.
+  const { currentLookId, replacesLookId, replacesSiblingLookIds, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
+    currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds,
+    currentCapsuleId: s.currentCapsuleId, replacesCapsuleId: s.replacesCapsuleId, isDirty: s.isDirty,
+    loadLook: s.loadLook, loadLookAsNew: s.loadLookAsNew, reset: s.reset, markClean: s.markClean,
+    noteSavedAs: s.noteSavedAs, noteSavedCapsuleAs: s.noteSavedCapsuleAs, addNode: s.addNode,
+  })))
+  const nodes = useCanvasStore((s) => s.state.nodes)
   const { looks, loading, error: looksError, fetchLooks, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
@@ -126,7 +136,7 @@ export function ChatPanel() {
     markClean()
     setSaving(false)
     setShowSaveDialog(false)
-  }, [activeClient, currentLookId, replacesLookId, replacesSiblingLookIds, state, saveLook, markClean, noteSavedAs, user])
+  }, [activeClient, currentLookId, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
@@ -398,7 +408,7 @@ export function ChatPanel() {
           <div className="px-3 py-2 border-b border-border flex items-center gap-2">
             <button
               onClick={() => setShowSaveDialog(true)}
-              disabled={state.nodes.length === 0}
+              disabled={nodes.length === 0}
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-30"
             >
               <Save className="h-3 w-3" />
@@ -415,7 +425,7 @@ export function ChatPanel() {
         )}
 
         {/* Save the current board directly as a capsule (e.g. a Landscape packing capsule) */}
-        {activeClient && state.nodes.length > 0 && (
+        {activeClient && nodes.length > 0 && (
           <div className="px-3 py-1.5 border-b border-border">
             <button
               onClick={() => setShowSaveAsCapsuleDialog(true)}
@@ -648,7 +658,7 @@ export function ChatPanel() {
 
       {showSaveAsCapsuleDialog && (
         <SaveAsCapsuleDialog
-          itemCount={state.nodes.filter((n: any) => n.type === 'closet_item').length}
+          itemCount={nodes.filter((n: any) => n.type === 'closet_item').length}
           saving={savingCapsule}
           isEditing={!!currentCapsuleId}
           initialName={currentCapsule?.name ?? replacedCapsule?.name ?? ''}

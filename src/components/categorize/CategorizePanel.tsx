@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { LoadError } from '@/components/common/LoadError'
@@ -20,6 +20,7 @@ import { NestingTab } from './NestingTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
+import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
 import { selectRestylePieces, type RestylePiece } from '@/lib/restyleSelection'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
@@ -116,10 +117,22 @@ export function CategorizePanel() {
   // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
   const transitions = useTransitions(activeClient?.id ?? null)
   const transitionCount = transitions.items.length + transitions.looks.length
+  // This panel stays mounted behind the canvas now (App.tsx), so it no longer re-reads everything
+  // by being remounted. When it comes back into view, refresh in the background the lists the
+  // canvas can change (hooks/useStyleTabRefresh.ts): a rebuilt look leaves the Transitions queue.
+  const categorizeEpoch = useStyleRefreshStore((s) => s.categorizeEpoch)
 
   // Residence review queue — only meaningful for clients with homes configured, so the
   // tab itself is gated below on the taxonomy rather than shown empty to everyone.
   const residenceReview = useResidenceReview(activeClient?.id ?? null, categories)
+  // Once per showing (the epoch), never because a callback changed identity.
+  const handledEpoch = useRef(categorizeEpoch)
+  const refreshOnShow = useEffectEvent(() => { transitions.refetch(); void residenceReview.refetch() })
+  useEffect(() => {
+    if (categorizeEpoch === handledEpoch.current) return
+    handledEpoch.current = categorizeEpoch
+    refreshOnShow()
+  }, [categorizeEpoch])
   const showResidences = hasResidences(categories)
   // slug -> her label, for every surface that has to know a home from a garment type.
   const residenceSlugs = useMemo(

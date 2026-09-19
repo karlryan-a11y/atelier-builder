@@ -72,6 +72,11 @@ for (const s of SURFACES) {
   checked++
   const src = read(s.data)
   const selects = [...src.matchAll(/\.select\(\s*(['"`])([\s\S]*?)\1/g)].map((m) => m[2])
+  // The shared closet read keeps its column list in a named constant (CLOSET_SELECT, a few string
+  // literals joined with +) so every screen and every check reads the same list.
+  for (const m of src.matchAll(/const\s+\w*SELECT\w*\s*=\s*((?:\s*(['"`])[\s\S]*?\2\s*\+?)+)/g)) {
+    selects.push([...m[1].matchAll(/(['"`])([\s\S]*?)\1/g)].map((x) => x[2]).join(''))
+  }
   const feeds = selects.filter((c) => /\bcustom_categories\b/.test(c) || /\bcolor\b/.test(c))
   if (!feeds.length) {
     failures.push(`${s.name}: no closet-item SELECT found in ${s.data}`)
