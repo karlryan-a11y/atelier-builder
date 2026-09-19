@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback, memo } from 'react'
 import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
@@ -13,19 +13,35 @@ import { EditItemDialog } from './EditItemDialog'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 
-function DraggableItem({
-  item,
+/**
+ * One closet tile. MEMOISED, and every prop is either the cached item object (same identity
+ * until that piece changes), a primitive, or a callback that never changes identity. Up to
+ * ~1,300 of these sit beside the canvas, and a tap on the board used to re-render every one of
+ * them: App and this panel read the whole canvas store, so a selection re-rendered the panel and
+ * the panel re-rendered the grid. scripts/perf/style-harness.mjs counts tile renders per board
+ * tap; the answer must be 0.
+ */
+const DraggableItem = memo(function DraggableItem({
+  item: piece,
+  index,
   onAdd,
   onEdit,
   onZoom,
-  hasNote,
 }: {
-  item: { id: string; name: string; brand: string; color: string | null; imageUrl: string | null }
-  onAdd: () => void
-  onEdit: () => void
-  onZoom: () => void
-  hasNote: boolean
+  item: ClosetItem
+  index: number
+  onAdd: (item: ClosetItem) => void
+  onEdit: (item: ClosetItem) => void
+  onZoom: (index: number) => void
 }) {
+  const item = useMemo(() => ({
+    id: piece.id,
+    name: displayName(piece),
+    brand: piece.brand,
+    color: piece.color,
+    imageUrl: resolveItemImage(piece),
+  }), [piece])
+  const hasNote = !!piece.style_note?.trim()
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     data: { type: 'closet_item', closetItemId: item.id, imageUrl: item.imageUrl },
@@ -48,7 +64,7 @@ function DraggableItem({
       onClick={(e) => {
         if (!transform) {
           e.stopPropagation()
-          onAdd()
+          onAdd(piece)
         }
       }}
     >
@@ -56,7 +72,7 @@ function DraggableItem({
         <button
           type="button"
           title="View larger"
-          onClick={(e) => { e.stopPropagation(); onZoom() }}
+          onClick={(e) => { e.stopPropagation(); onZoom(index) }}
           onPointerDown={(e) => e.stopPropagation()}
           className="absolute top-1 right-7 z-10 p-1 rounded-sm bg-white/90 text-text-muted opacity-0 group-hover:opacity-100 hover:text-text transition-opacity shadow-sm"
         >
@@ -65,7 +81,7 @@ function DraggableItem({
         <button
           type="button"
           title="Edit item"
-          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          onClick={(e) => { e.stopPropagation(); onEdit(piece) }}
           onPointerDown={(e) => e.stopPropagation()}
           className="absolute top-1 right-1 z-10 p-1 rounded-sm bg-white/90 text-text-muted opacity-0 group-hover:opacity-100 hover:text-text transition-opacity shadow-sm"
         >
@@ -101,7 +117,7 @@ function DraggableItem({
       </p>
     </div>
   )
-}
+})
 
 // Click the magnifier on a tile → an enlarged view of the garment with its details, and
 // prev/next stepping through the CURRENT filtered list (Cynthia: telling apart "so many
@@ -214,9 +230,11 @@ function ClosetLightbox({
 }
 
 export function ClosetPanel() {
-  const { activeClient } = useClientStore()
-  const { items, tagNameById, loading, error, refetch } = useClosetItems(activeClient?.id ?? null)
-  const { addNode, state } = useCanvasStore()
+  // NARROW subscriptions only. Reading the whole canvas store here re-rendered this panel, and
+  // with it the whole closet grid, on every tap, drag and nudge on the board.
+  const activeClient = useClientStore((s) => s.activeClient)
+  const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(activeClient?.id ?? null)
+  const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
@@ -245,6 +263,13 @@ export function ClosetPanel() {
       console.error('Failed to save item edits:', error)
       return
     }
+    // Show the edit at once in every screen that shows this piece, then re-read in the background.
+    patchItems([editingItem.id], {
+      name_override: data.name_override, brand: data.brand as string, color: data.color,
+      style_note: data.style_note, category: data.category,
+      ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
+      ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
+    })
     setEditingItem(null)
     refetch()
   }
@@ -306,9 +331,12 @@ export function ClosetPanel() {
     return result
   }, [items, search, activeCategories, categoriesByItem])
 
-  function addItemToCanvas(itemId: string, imageUrl: string | null) {
+  // Stable identity (reads the board with getState at the moment of the add), so the memoised
+  // tiles never re-render because this function was re-created.
+  const addItemToCanvas = useCallback((itemId: string, imageUrl: string | null) => {
     // Drop near the board center at a readable height (target_height) so it's easy to grab and
     // resize — not full source resolution. Cascade a little so repeated adds don't stack exactly.
+    const { state } = useCanvasStore.getState()
     const off = (state.nodes.length % 6) * 30
     const node: ClosetItemNode = {
       id: `ci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -324,7 +352,8 @@ export function ClosetPanel() {
       locked: false,
     }
     addNode(node, imageUrl ?? undefined)
-  }
+  }, [addNode])
+  const addPiece = useCallback((item: ClosetItem) => addItemToCanvas(item.id, resolveItemImage(item)), [addItemToCanvas])
 
   return (
     <div className="w-72 border-r border-border bg-white flex flex-col overflow-hidden">
@@ -446,25 +475,16 @@ export function ClosetPanel() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {filtered.map((item, idx) => {
-                  const imageUrl = resolveItemImage(item)
-                  return (
-                    <DraggableItem
-                      key={item.id}
-                      item={{
-                        id: item.id,
-                        name: displayName(item),
-                        brand: item.brand,
-                        color: item.color,
-                        imageUrl,
-                      }}
-                      hasNote={!!item.style_note?.trim()}
-                      onAdd={() => addItemToCanvas(item.id, imageUrl)}
-                      onEdit={() => setEditingItem(item)}
-                      onZoom={() => setZoomIndex(idx)}
-                    />
-                  )
-                })}
+                {filtered.map((item, idx) => (
+                  <DraggableItem
+                    key={item.id}
+                    item={item}
+                    index={idx}
+                    onAdd={addPiece}
+                    onEdit={setEditingItem}
+                    onZoom={setZoomIndex}
+                  />
+                ))}
               </div>
             )}
             {!loading && filtered.length > 0 && (
@@ -501,7 +521,7 @@ export function ClosetPanel() {
           index={zoomIndex}
           onIndexChange={setZoomIndex}
           onClose={() => setZoomIndex(null)}
-          onAdd={(item) => addItemToCanvas(item.id, resolveItemImage(item))}
+          onAdd={addPiece}
         />
       )}
     </div>

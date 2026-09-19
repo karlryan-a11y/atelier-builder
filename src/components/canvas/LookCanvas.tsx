@@ -1,6 +1,7 @@
 import { useRef, useMemo, useCallback, useEffect, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text as KonvaText, Line } from 'react-konva'
 import type Konva from 'konva'
+import { useViewStore } from '@/stores/viewStore'
 import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
@@ -561,6 +562,9 @@ export function LookCanvas() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // The canvas stays mounted (hidden) while Categorize is showing (App.tsx). This listens on
+      // window, so without this a Backspace in Categorize would delete the selected board pieces.
+      if (useViewStore.getState().styleTab !== 'canvas') return
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
       if (target.isContentEditable) return

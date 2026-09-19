@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { styleKeys } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
 import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransitions'
 import type { LookCanvasState } from '@/types/canvas'
@@ -27,51 +29,53 @@ function generateLookId(): string {
   return Array.from({ length: 24 }, hex).join('')
 }
 
+const NO_LOOKS: LookRow[] = []
+
 export function useLooks(clientId: string | null) {
-  const [looks, setLooks] = useState<LookRow[]>([])
-  const [loading, setLoading] = useState(false)
-  // Set when the last read FAILED, so the gallery says "Couldn't load" with a Retry instead of
-  // "No saved looks yet" (which is what a 500 used to look like).
-  const [error, setError] = useState<string | null>(null)
-  const readSeq = useRef(0)
-  const loadedFor = useRef<string | null>(null)
+  // The canvas looks gallery, from the shared Style cache (lib/queryClient.ts). It survives
+  // Canvas <-> Categorize switches instead of being re-read on each one. `loading` is only the
+  // FIRST read for a client: a refresh after a save keeps the gallery on screen.
+  const qc = useQueryClient()
+  const query = useQuery({
+    queryKey: styleKeys.looks(clientId),
+    enabled: !!clientId,
+    queryFn: async () => {
+      // Read gp_looks base (not the `looks` view) so we can exclude transitioned looks — the view
+      // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
+      const { data, error } = await supabase
+        .from('gp_looks')
+        .select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
+        .eq('client_id', clientId!)
+        .eq('source', 'builder')
+        .is('transitioned_at', null)
+        .order('updated_at', { ascending: false })
+      if (error) {
+        console.error('useLooks:', error.message)
+        throw new Error(error.message || 'load failed')
+      }
+      return (data ?? []) as LookRow[]
+    },
+  })
+  // A failed read keeps the looks already on screen for THIS client (the cache is per client, so
+  // another client's looks can never show under this name) and reports the error, so the gallery
+  // says "Couldn't load" with a Retry instead of "No saved looks yet".
+  const looks = clientId ? query.data ?? NO_LOOKS : NO_LOOKS
+  const loading = !!clientId && query.isLoading
+  const error = clientId && query.isError ? (query.error instanceof Error ? query.error.message : 'load failed') : null
 
+  const setLooks = useCallback((update: (prev: LookRow[]) => LookRow[]) => {
+    qc.setQueryData<LookRow[]>(styleKeys.looks(clientId), (old) => (old ? update(old) : old))
+  }, [qc, clientId])
+
+  // Re-read this client's looks (and Categorize's copy, which lists the same looks) and resolve
+  // once the gallery has the fresh list.
   const fetchLooks = useCallback(async () => {
-    const seq = ++readSeq.current
-    if (!clientId) {
-      setLooks([])
-      setError(null)
-      loadedFor.current = null
-      return
-    }
-    setLoading(true)
-    // Read gp_looks base (not the `looks` view) so we can exclude transitioned looks — the view
-    // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
-    const { data, error } = await supabase
-      .from('gp_looks')
-      .select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
-      .eq('client_id', clientId)
-      .eq('source', 'builder')
-      .is('transitioned_at', null)
-      .order('updated_at', { ascending: false })
-
-    if (seq !== readSeq.current) return
-    if (error) {
-      console.error('useLooks:', error.message)
-      setError(error.message || 'load failed')
-      // Never leave another client's looks on screen under this client's name.
-      if (loadedFor.current !== clientId) setLooks([])
-    } else {
-      setError(null)
-      loadedFor.current = clientId
-      setLooks((data ?? []) as LookRow[])
-    }
-    setLoading(false)
-  }, [clientId])
-
-  useEffect(() => {
-    fetchLooks()
-  }, [fetchLooks])
+    if (!clientId) return
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: styleKeys.looks(clientId) }),
+      qc.invalidateQueries({ queryKey: styleKeys.lookCategories(clientId) }),
+    ])
+  }, [qc, clientId])
 
   const saveLook = useCallback(async (opts: {
     id?: string
@@ -200,7 +204,7 @@ export function useLooks(clientId: string | null) {
       setLooks((prev) => prev.filter((l) => l.id !== id))
     }
     return { error }
-  }, [])
+  }, [setLooks])
 
   return { looks, loading, error, fetchLooks, saveLook, deleteLook }
 }

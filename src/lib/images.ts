@@ -1,3 +1,10 @@
+/** The part of gp_closet_items.raw a closet item carries. See ClosetItem.raw. */
+export interface ClosetItemRaw {
+  image?: string
+  processed_image?: string
+  images?: string[]
+}
+
 export interface ClosetItem {
   id: string
   client_id: string
@@ -36,13 +43,15 @@ export interface ClosetItem {
   /** Set when a stylist confirmed this piece against the Google Drive folder (verification sweep). */
   drive_verified_at?: string | null
   drive_verified_by?: string | null
-  raw: {
-    image?: string
-    processed_image?: string
-    images?: string[]
-    description?: string
-    [key: string]: unknown
-  }
+  /**
+   * ONLY the picture fields. The closet read selects these three out of the raw JSON and nothing
+   * else (hooks/useClosetItems.ts CLOSET_SELECT), because the rest of raw is ~75% of the bytes.
+   * Deliberately no index signature: reading any other raw field on a closet item is a compile
+   * error, not a silent `undefined` for every client (ADR-0103). If a screen truly needs another
+   * raw field, add it HERE and to CLOSET_SELECT; scripts/check-closet-raw-fields.mjs holds the
+   * two together.
+   */
+  raw: ClosetItemRaw
   primary_image_hash: string | null
   processed_image_hash: string | null
   source: string | null

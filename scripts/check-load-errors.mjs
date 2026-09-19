@@ -91,13 +91,19 @@ if (typeof load === 'function') {
 
 // ── 2. the hooks carry it to the screen ──────────────────────────────────────────────────
 const cats = read('src/hooks/useLookCategories.ts') ?? ''
-ok('useLookCategories reads through the tested loader', /loadLookCategories\(supabase, clientId\)/.test(cats),
+ok('useLookCategories reads through the tested loader', /loadLookCategories\(supabase, clientId!?\)/.test(cats),
   'fetchAll does not call loadLookCategories, so the test above does not cover what the grid shows')
-ok('useLookCategories keeps the error', /setError\(res\.error\)/.test(cats), 'the hook never stores the failure')
+// Either the old local state (setError) or the shared cache (styling wave 3): the query function
+// THROWS on a failed read, and the hook reports `error` from the query's error state.
+ok('useLookCategories keeps the error',
+  /setError\(res\.error\)/.test(cats) || (/if \(res\.error !== null\) \{[\s\S]{0,200}throw new Error\(res\.error\)/.test(cats) && /const error = [^\n]*query\.isError/.test(cats)),
+  'the hook never stores the failure')
 ok('useLookCategories returns the error', /return \{\s*loading, error,/.test(cats), 'the hook does not return `error`')
 
 const looks = read('src/hooks/useLooks.ts') ?? ''
-ok('useLooks keeps the error', /if \(error\) \{[\s\S]{0,200}setError\(/.test(looks), 'useLooks drops a failed read on the floor')
+ok('useLooks keeps the error',
+  /if \(error\) \{[\s\S]{0,200}setError\(/.test(looks) || (/if \(error\) \{[\s\S]{0,200}throw new Error\(/.test(looks) && /const error = [^\n]*query\.isError/.test(looks)),
+  'useLooks drops a failed read on the floor')
 ok('useLooks returns the error', /return \{ looks, loading, error,/.test(looks), 'useLooks does not return `error`')
 
 const usage = read('src/hooks/useItemLookUsage.ts') ?? ''
