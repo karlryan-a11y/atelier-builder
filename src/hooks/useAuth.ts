@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { BRIDGE_REFRESH_TOKEN, fetchDashboardAccess } from '@/lib/dashboardBridge'
 
 interface AuthUser {
   id: string
@@ -73,21 +74,18 @@ export function useAuth() {
   }, [])
 
   // Bridge: when the builder has no session of its own (e.g. opened from the dashboard at
-  // atelierbywatson.com/style), pull the dashboard's session from the shared same-origin endpoint
-  // and adopt it — so one login carries across. Returns null if nobody is logged in there.
+  // atelierbywatson.com/style), adopt the dashboard's login so one sign-in carries across.
+  // ACCESS TOKEN ONLY. The dashboard's refresh token is never requested, stored or sent (sharing it
+  // made both apps refresh one session family and Supabase revoked it: the surprise logouts). The
+  // placeholder BRIDGE_REFRESH_TOKEN makes supabase-js re-ask the dashboard near expiry instead of
+  // refreshing on its own (see src/lib/dashboardBridge.ts). Returns null if nobody is logged in there.
   async function adoptDashboardSession(): Promise<Session | null> {
     try {
-      // Bound the wait so a stalled endpoint can't leave the preloader (and loading) hung forever.
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 4000)
-      const resp = await fetch('/api/auth/session', { credentials: 'include', signal: ctrl.signal })
-      clearTimeout(t)
-      if (!resp.ok) return null
-      const body = await resp.json().catch(() => null)
-      if (!body?.access_token || !body?.refresh_token) return null
+      const access = await fetchDashboardAccess(fetch)
+      if (!access) return null
       const { data, error } = await supabase.auth.setSession({
-        access_token: body.access_token,
-        refresh_token: body.refresh_token,
+        access_token: access.access_token,
+        refresh_token: BRIDGE_REFRESH_TOKEN,
       })
       if (error) return null
       return data.session
@@ -126,7 +124,9 @@ export function useAuth() {
 
   async function signOut() {
     explicitSignOutRef.current = true
-    await supabase.auth.signOut()
+    // Local scope: sign out THIS device only. The default (global) also ended every other device's
+    // session: signing out on the phone logged the iPad out.
+    await supabase.auth.signOut({ scope: 'local' })
     setUser(null)
     setSession(null)
   }
