@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { ReconRow } from '@/lib/reconcile'
 import type { UploadedFingerprint } from '@/lib/driveReconcile'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
-const proxy = (key: string) =>
-  `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+const proxy = (key: string) => r2ImageUrl(key)
 
 export interface IngestedPhoto {
   r2_key: string

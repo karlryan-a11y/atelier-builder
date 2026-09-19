@@ -17,6 +17,7 @@ import {
   computeStatuses, effectiveName, isMissingName, isMissingBrand,
   canRecover, FLAG_META, type ReconRow, type ReconFlag, type FilterKey,
 } from '@/lib/reconcile'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -599,7 +600,7 @@ export function ReconciliationPanel() {
     setPixelBusy(true); setPixelPhase('Loading the record…'); setPixelProgress({ done: 0, total: 0 })
     try {
       const ingested = ingestedRef.current.length ? ingestedRef.current : await fetchIngestedPhotos(clientId)
-      const px = (k: string) => `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(k)}`
+      const px = (k: string) => r2ImageUrl(k)
 
       // 1) Fingerprint the collection's uploaded photos (cached). Each carries status + itemId
       //    so a visual match lands in the right bucket. Hash only what isn't cached yet.

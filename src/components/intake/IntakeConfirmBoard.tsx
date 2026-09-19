@@ -3,9 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { setVisibleInterval } from '@/lib/visibleInterval'
 import { proposePairing, type ProposalPhoto } from '@/lib/pairing'
 import { SignedImage } from './IntakeItemCard'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const proxy = (k: string) => `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(k)}`
+const proxy = (k: string) => r2ImageUrl(k)
 
 interface BoardPhoto { id: string; r2_key: string; classified_as: string | null; original_filename: string | null; rotation: number }
 interface BoardBatch { id: string; batch_label: string | null; category: string | null }

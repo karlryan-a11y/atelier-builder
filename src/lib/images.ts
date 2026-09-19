@@ -1,3 +1,5 @@
+import { cdnUrl } from './imageUrls.ts'
+
 export interface ClosetItem {
   id: string
   client_id: string
@@ -66,5 +68,6 @@ export function proxyImageUrl(url: string): string {
   if (url.startsWith(S3_HOST)) {
     return '/img-proxy/' + url.slice(S3_HOST.length)
   }
-  return url
+  // Our own R2, in any stored spelling: through the cached photo path (lib/imageUrls.ts).
+  return cdnUrl(url)
 }

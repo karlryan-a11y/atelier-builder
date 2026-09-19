@@ -76,7 +76,8 @@ if (typeof load === 'function') {
     `expected 2 looks and no error, got ${JSON.stringify({ error: good.error, n: good.data?.looks?.length })}`)
   ok('healthy read files look one under Office', JSON.stringify(good.data?.looks?.[0]?.categoryIds) === '["c1"]',
     `got ${JSON.stringify(good.data?.looks?.[0]?.categoryIds)}`)
-  ok('picture comes from raw.main_image_url', good.data?.looks?.[0]?.image === healthy.gp_looks.data[0].raw.main_image_url,
+  // The row's image-proxy URL, served from the cached photo path (same R2 key; lib/imageUrls.ts).
+  ok('picture comes from raw.main_image_url (via the photo path)', good.data?.looks?.[0]?.image === 'https://atelierbywatson.com/img/looks/l1.png',
     `got ${good.data?.looks?.[0]?.image}`)
 
   for (const table of ['gp_looks', 'look_categories', 'gp_boards', 'look_category_assignments']) {

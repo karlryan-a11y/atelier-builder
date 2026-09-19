@@ -55,19 +55,26 @@ if (existsSync(lib)) { try { mod = await import(pathToFileURL(lib).href) } catch
 ok('derivative helper exists', typeof mod?.derivedImageUrl === 'function', 'src/lib/derivedImage.ts#derivedImageUrl not found')
 if (mod?.derivedImageUrl) {
   const B = 'https://lejwzpwntjaleqgrcakq.supabase.co'
+  // Rows hold the image-proxy spelling; a tile must load the variant from the CACHED photo path
+  // (atelierbywatson.com/img/<key>, lib/imageUrls.ts). The Supabase function answered every
+  // tile uncached at 400-580 ms (measured 2026-09-19).
   const px = (k) => `${B}/functions/v1/image-proxy?key=${encodeURIComponent(k)}`
+  const cdn = (k) => `https://atelierbywatson.com/img/${k.split('/').map(encodeURIComponent).join('/')}`
   const cases = [
-    ['our R2 look', px('looks/abc/image-1.png'), 760, px('derived/w760q82/looks/abc/image-1.png.jpg')],
-    ['GoodPix look', 'https://goodpix-co.s3.amazonaws.com/ab12cd.jpg', 760, px('derived/w760q82/goodpix/ab12cd.jpg.jpg')],
-    ['builder /img-proxy/ form', '/img-proxy/ab12cd.jpg', 400, px('derived/w400q82/goodpix/ab12cd.jpg.jpg')],
-    ['intake piece', px('intake/c1/p1-processed.png'), 400, px('derived/w400q82/intake/c1/p1-processed.png.jpg')],
+    ['our R2 look', px('looks/abc/image-1.png'), 760, cdn('derived/w760q82/looks/abc/image-1.png.jpg')],
+    ['our R2 look, photo-path spelling', cdn('looks/abc/image-1.png'), 760, cdn('derived/w760q82/looks/abc/image-1.png.jpg')],
+    ['dead R2 host spelling', 'https://images.atelierbywatson.com/intake/ai/i1/p-1.png', 400, cdn('derived/w400q82/intake/ai/i1/p-1.png.jpg')],
+    ['GoodPix look', 'https://goodpix-co.s3.amazonaws.com/ab12cd.jpg', 760, cdn('derived/w760q82/goodpix/ab12cd.jpg.jpg')],
+    ['builder /img-proxy/ form', '/img-proxy/ab12cd.jpg', 400, cdn('derived/w400q82/goodpix/ab12cd.jpg.jpg')],
+    ['intake piece', px('intake/c1/p1-processed.png'), 400, cdn('derived/w400q82/intake/c1/p1-processed.png.jpg')],
     ['already a variant', px('derived/w760q82/looks/abc/image-1.png.jpg'), 760, null],
+    ['already a variant, photo path', cdn('derived/w760q82/looks/abc/image-1.png.jpg'), 760, null],
     ['foreign URL', 'https://example.com/x.jpg', 760, null],
     ['data URL', 'data:image/jpeg;base64,AAAA', 760, null],
     ['blank', '', 760, null],
   ]
   for (const [name, url, w, want] of cases) {
-    const got = mod.derivedImageUrl(url, w, B)
+    const got = mod.derivedImageUrl(url, w)
     ok(`derived URL: ${name}`, got === want, `expected ${want}, got ${got}`)
   }
 }

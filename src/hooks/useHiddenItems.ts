@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 // The hidden pool: items with is_deleted=true. Nothing else in the app surfaces these, so a piece
 // archived (or removed as a "duplicate", or by a one-off SQL command) simply vanishes with no way to
@@ -21,7 +22,7 @@ export interface HiddenItem {
 function itemImage(row: any): string | null {
   if (row.source === 'intake_pipeline') {
     const key = row.processed_image_hash ?? row.primary_image_hash
-    if (key) return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+    if (key) return r2ImageUrl(key)
   }
   const raw = row.raw ?? {}
   return raw.processed_image ?? raw.image ?? raw.images?.[0] ?? null

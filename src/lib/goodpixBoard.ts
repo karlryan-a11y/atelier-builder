@@ -3,6 +3,7 @@ import type { LookCanvasState } from '@/types/canvas'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
 import { convertGoodPixLayout, piecesInLayout, type GpLayout } from '@/lib/goodpixLayout'
 import { selectRestylePieces, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
+import { storedProxyUrl } from '@/lib/imageUrls'
 
 /**
  * THE BOARD A GOODPIX LOOK OPENS ON — for Restyle (a pulled look) and Rebuild in canvas alike, so
@@ -30,8 +31,7 @@ export interface GoodPixBoard {
   texts: number
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const mirrorUrl = (key: string) => `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+const mirrorUrl = (key: string) => storedProxyUrl(key)
 
 async function readPieces(ids: string[]) {
   const out = new Map<string, RestylePiece & { urls: string[] }>()

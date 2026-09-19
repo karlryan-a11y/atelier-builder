@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransitions'
 import type { LookCanvasState } from '@/types/canvas'
+import { storedProxyUrl } from '@/lib/imageUrls'
+import { requestDerivatives } from '@/lib/requestDerivatives'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -93,7 +95,6 @@ export function useLooks(clientId: string | null) {
     tags?: string[]
     notesInternal?: string
     notesClient?: string
-    thumbnailUrl?: string
     imageBase64?: string  // High-res canvas render (PNG base64, no data: prefix)
     createdBy?: string
   }) => {
@@ -134,7 +135,8 @@ export function useLooks(clientId: string | null) {
       tags: opts.tags ?? [],
       notes_internal: opts.notesInternal ?? null,
       notes_client: opts.notesClient ?? null,
-      thumbnail_url: opts.thumbnailUrl ?? null,
+      // thumbnail_url is no longer written (it held a 2160px base64 JPEG no screen reads). An
+      // UPDATE leaves the old value in place; scripts/copy-look-thumbnails.mjs copies those to R2.
       source: 'builder',
       updated_at: new Date().toISOString(),
       closet_item_ids: closetItemIds,
@@ -145,7 +147,7 @@ export function useLooks(clientId: string | null) {
     if (r2ImageKey) {
       row.raw = {
         main_image_r2_key: r2ImageKey,
-        main_image_url: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2ImageKey)}`,
+        main_image_url: storedProxyUrl(r2ImageKey),
       }
     }
 
@@ -189,6 +191,9 @@ export function useLooks(clientId: string | null) {
     } catch (e) {
       console.error('Transition republish failed (look saved):', e)
     }
+
+    // Make the small tile copy now (drafts included), not at the next backfill. Fire-and-forget.
+    if (r2ImageKey) void requestDerivatives({ look_ids: [id] })
 
     await fetchLooks()
     return { error: null, data: data as LookRow }

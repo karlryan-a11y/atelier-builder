@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState, ClosetItemNode } from '@/types/canvas'
 import type { ClosetItem } from '@/lib/images'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 /**
  * Resolve node-id → image URL for a canvas state (a Look's or a Capsule's) the SAME way the
@@ -24,13 +25,12 @@ export async function resolveClosetImageUrls(canvasState: LookCanvasState): Prom
     .in('id', closetItemIds)
 
   if (items) {
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
     const urlMap = new Map<string, string>()
     for (const item of items as Array<{ id: string; raw: ClosetItem['raw']; source?: string; processed_image_hash?: string | null; primary_image_hash?: string | null }>) {
       let url: string | null = null
       if (item.source === 'intake_pipeline') {
         const key = item.processed_image_hash ?? item.primary_image_hash
-        if (key) url = `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+        if (key) url = r2ImageUrl(key)
       }
       if (!url) url = item.raw?.processed_image ?? item.raw?.image ?? item.raw?.images?.[0] ?? null
       if (url) urlMap.set(item.id, url)

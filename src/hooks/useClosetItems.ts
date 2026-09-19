@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { ClosetItem } from '@/lib/images'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 export function useClosetItems(clientId: string | null) {
   const [items, setItems] = useState<ClosetItem[]>([])
@@ -82,14 +83,13 @@ export function useClosetItems(clientId: string | null) {
       // bytes with Access-Control-Allow-Origin:* so the canvas stays clean.
       const intakeItems = allItems.filter(i => i.source === 'intake_pipeline')
       if (intakeItems.length > 0) {
-        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
         for (const item of allItems) {
           if (item.source === 'intake_pipeline') {
             const key = item.processed_image_hash ?? item.primary_image_hash
             if (key) {
               item.raw = {
                 ...item.raw,
-                processed_image: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`,
+                processed_image: r2ImageUrl(key),
               }
             }
           }

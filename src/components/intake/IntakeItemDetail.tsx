@@ -4,6 +4,7 @@ import type { IntakeItem } from '@/hooks/useIntakeItems'
 import { SignedImage } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
+import { requestDerivatives } from '@/lib/requestDerivatives'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -77,6 +78,7 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
         const err = await resp.json().catch(() => ({ error: 'Approve failed' }))
         throw new Error(err.error || 'Approve failed')
       }
+      void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
 
       onAction()
     } catch (err) {
