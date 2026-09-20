@@ -6,6 +6,7 @@ import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransit
 import type { LookCanvasState } from '@/types/canvas'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
+import { authHeader } from '@/lib/authHeader'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -112,7 +113,10 @@ export function useLooks(clientId: string | null) {
         const key = `looks/${id}/image-${Date.now()}.png`
         const resp = await fetch(`${SUPABASE_URL}/functions/v1/upload-image`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // Signed in, always: upload-image writes any key it is given with the service-role
+          // key. It answered anonymous callers until 2026-09-20, so anyone could overwrite any
+          // client's photo. The function now refuses a caller it cannot identify.
+          headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
           body: JSON.stringify({
             base64: opts.imageBase64,
             content_type: 'image/png',
