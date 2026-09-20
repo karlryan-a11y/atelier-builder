@@ -6,6 +6,7 @@
 // Best-effort and non-blocking: the stylist's replace succeeds regardless. If VITE_RENDERER_URL is
 // unset (local dev / box not provisioned yet) this is a no-op, so nothing breaks without the box.
 import { supabase } from '@/lib/supabase'
+import { requestDerivatives } from '@/lib/requestDerivatives'
 
 const RENDERER_URL = import.meta.env.VITE_RENDERER_URL as string | undefined
 
@@ -14,9 +15,12 @@ const RENDERER_URL = import.meta.env.VITE_RENDERER_URL as string | undefined
  * Fire-and-forget — callers should NOT await this in a way that blocks the UI.
  */
 export async function requestHeroRefresh(itemIds: string | string[]): Promise<void> {
-  if (!RENDERER_URL) return
   const ids = [...new Set((Array.isArray(itemIds) ? itemIds : [itemIds]).filter(Boolean))]
   if (ids.length === 0) return
+  // Every piece-photo change (replace, rotate, remove background) comes through here: make the
+  // piece's new small tile copy now. Independent of the renderer box.
+  void requestDerivatives({ item_ids: ids })
+  if (!RENDERER_URL) return
   try {
     const { data: { session } } = await supabase.auth.getSession()
     await fetch(`${RENDERER_URL.replace(/\/$/, '')}/regenerate`, {

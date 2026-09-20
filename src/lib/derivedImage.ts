@@ -16,6 +16,8 @@
  * looks and live pieces only, so a draft look has none: callers must fall back to the original
  * (components/common/TileImage.tsx does). Full size stays for the canvas, editor and zoom.
  */
+import { r2ImageUrl, r2KeyOf } from './imageUrls.ts'
+
 export type DerivedWidth = 400 | 760
 export const LOOK_TILE_WIDTH: DerivedWidth = 760
 export const PIECE_TILE_WIDTH: DerivedWidth = 400
@@ -23,17 +25,11 @@ const DERIVED_QUALITY = 82
 const GOODPIX_HOST = 'goodpix-co.s3.amazonaws.com'
 
 export function derivedKeyFor(url: string, width: DerivedWidth): string | null {
-  // Our own R2, addressed through the proxy.
-  if (url.includes('/functions/v1/image-proxy')) {
-    try {
-      const key = new URL(url).searchParams.get('key')
-      if (!key) return null
-      const original = decodeURIComponent(key)
-      if (original.startsWith('derived/')) return null // already a variant
-      return `derived/w${width}q${DERIVED_QUALITY}/${original}.jpg`
-    } catch {
-      return null
-    }
+  // Our own R2, in any spelling: image-proxy (?key=), the /img/ photo path, the dead R2 host.
+  const original = r2KeyOf(url)
+  if (original) {
+    if (original.startsWith('derived/')) return null // already a variant
+    return `derived/w${width}q${DERIVED_QUALITY}/${original}.jpg`
   }
   // GoodPix-hosted. The filename is a content hash, so it keys the variant directly.
   if (url.includes(GOODPIX_HOST)) {
@@ -53,16 +49,13 @@ export function derivedKeyFor(url: string, width: DerivedWidth): string | null {
   return null
 }
 
-const envBase = (): string | undefined =>
-  (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL
-
-/** The variant's URL, or null when there is none to point at (callers use the original). */
-export function derivedImageUrl(
-  url: string | null | undefined,
-  width: DerivedWidth,
-  supabaseUrl: string | undefined = envBase(),
-): string | null {
-  if (!url || !supabaseUrl) return null
+/**
+ * The variant's URL, or null when there is none to point at (callers use the original).
+ * Served from the cached photo path. A variant the backfill has not built yet answers with a
+ * short-lived redirect to its original there, so the tile loads either way.
+ */
+export function derivedImageUrl(url: string | null | undefined, width: DerivedWidth): string | null {
+  if (!url) return null
   const key = derivedKeyFor(url, width)
-  return key ? `${supabaseUrl}/functions/v1/image-proxy?key=${encodeURIComponent(key)}` : null
+  return key ? r2ImageUrl(key) : null
 }

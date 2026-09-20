@@ -11,8 +11,8 @@
 
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase'
+import { storedProxyUrl } from '@/lib/imageUrls'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 interface ApprovedItem {
   id: string
@@ -28,7 +28,7 @@ interface ApprovedItem {
  * Build a public, permanent URL that streams an R2 object via the image-proxy Edge Function.
  */
 function imageProxyUrl(r2Key: string): string {
-  return `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2Key)}`
+  return storedProxyUrl(r2Key)
 }
 
 /**

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -38,7 +39,7 @@ function itemImage(row: any): string | null {
   // GoodPix items carry a direct URL in raw. Mirrors useClosetItems' resolution.
   if (row.source === 'intake_pipeline') {
     const key = row.processed_image_hash ?? row.primary_image_hash
-    if (key) return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+    if (key) return r2ImageUrl(key)
   }
   const raw = row.raw ?? {}
   return raw.processed_image ?? raw.image ?? raw.images?.[0] ?? null

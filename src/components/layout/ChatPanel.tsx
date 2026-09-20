@@ -73,7 +73,9 @@ export function ChatPanel() {
     if (!activeClient) return
     setSaving(true)
 
-    let thumbnailUrl: string | undefined
+    // No thumbnailUrl any more: Save used to also write a 2160px base64 JPEG into
+    // gp_looks.thumbnail_url (641 rows, 199 MB) that no screen reads. The look's picture is the
+    // R2 PNG below; its small copy is made on Save (useLooks -> api/derive-image).
     let imageBase64: string | undefined
     // Settle FIRST, then read. This copies what is actually on the board (angles, positions,
     // text box widths) into the state, so the state we save and the picture we export cannot
@@ -87,23 +89,6 @@ export function ChatPanel() {
       // Export the current canvas via Konva native API
       const pngDataUrl = exportCanvasImage({ pixelRatio: 2 })
       if (pngDataUrl) {
-        // JPEG thumbnail for gallery + capsule composites
-        const img = new window.Image()
-        await new Promise<void>((resolve) => {
-          img.onload = () => resolve()
-          img.onerror = () => resolve()
-          img.src = pngDataUrl
-        })
-        if (img.width > 0) {
-          const thumbCanvas = document.createElement('canvas')
-          thumbCanvas.width = img.width
-          thumbCanvas.height = img.height
-          const tCtx = thumbCanvas.getContext('2d')!
-          tCtx.fillStyle = '#FFFFFF'
-          tCtx.fillRect(0, 0, img.width, img.height)
-          tCtx.drawImage(img, 0, 0)
-          thumbnailUrl = thumbCanvas.toDataURL('image/jpeg', 0.85)
-        }
         imageBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, '')
       }
     } catch (err) {
@@ -124,7 +109,6 @@ export function ChatPanel() {
       canvasState: styledState,
       tags: data.tags,
       notesInternal: data.notes,
-      thumbnailUrl,
       imageBase64,
       createdBy: authUserId ?? undefined,
     })

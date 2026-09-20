@@ -1,8 +1,8 @@
 import { useState, createContext, useContext } from 'react'
 import { Clock, Check, X, ZoomIn } from 'lucide-react'
 import type { IntakeItem } from '@/hooks/useIntakeItems'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 // ── Lightbox Context ──────────────────────────────────────────────────
 // Global lightbox state so any image in the inbox can open it
@@ -121,7 +121,7 @@ export function IntakeItemCard({ item, onClick }: IntakeItemCardProps) {
  * Same function the canvas export + GoodPix export already rely on.
  */
 function imageProxyUrl(r2Key: string): string {
-  return `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(r2Key)}`
+  return r2ImageUrl(r2Key)
 }
 
 export function SignedImage({ r2Key, alt, className }: { r2Key: string; alt: string; className?: string }) {

@@ -5,6 +5,8 @@ import { db, uploadImage } from './supabase.js'
 import { render, type CanvasRenderResult, type GridRenderResult } from './browser.js'
 import { imageProxyUrl } from './env.js'
 
+type GridMember = { id: string; name: string | null; raw: { main_image_url?: unknown } | null; thumbnail_url: string | null }
+
 // ── Loose row shapes (service-role reads; we only touch a few fields) ──────────────────────────
 interface ClosetItemRow {
   id: string
@@ -139,17 +141,20 @@ async function regenerateCapsules(clientIds: string[], itemIds: Set<string>, aff
       try {
         const { data: members } = await db
           .from('gp_looks')
-          .select('id, name, thumbnail_url')
+          .select('id, name, raw, thumbnail_url')
           .in('id', lookIds)
           .is('transitioned_at', null)
         // Preserve the capsule's look order (members come back unordered).
         const byId = new Map((members ?? []).map((m: { id: string }) => [m.id, m]))
         const ordered = lookIds
-          .map((id) => byId.get(id) as { id: string; name: string | null; thumbnail_url: string | null } | undefined)
-          .filter((m): m is { id: string; name: string | null; thumbnail_url: string | null } => !!m)
+          .map((id) => byId.get(id) as GridMember | undefined)
+          .filter((m): m is GridMember => !!m)
+        // The look's own picture (raw.main_image_url, the R2 PNG every surface shows). Builder Save
+        // stopped writing the base64 thumbnail_url on 2026-09-19, so a look saved since has none;
+        // thumbnail_url stays only as the fallback for an old row with no main_image_url.
         const gridLooks = ordered.map((m) => ({
           name: m.name ?? 'Untitled Look',
-          imageUrl: m.thumbnail_url,
+          imageUrl: (typeof m.raw?.main_image_url === 'string' && m.raw.main_image_url) || m.thumbnail_url,
           thumbnailUrl: m.thumbnail_url,
         }))
         const { pngBase64 } = await render<GridRenderResult>({ kind: 'capsuleGrid', looks: gridLooks })

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { ClosetItem } from '@/lib/images'
 import { styleKeys } from '@/lib/queryClient'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
 /**
  * The columns the client's closet is read with, for EVERY screen that shows it.
@@ -131,15 +132,13 @@ async function readCloset(clientId: string): Promise<ClosetData> {
   // Edge Function. R2 serves no CORS headers, so signed R2 URLs taint the
   // Konva canvas and break look export/thumbnails. The proxy returns the
   // bytes with Access-Control-Allow-Origin:* so the canvas stays clean.
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+  // Through the cached /img/ path (r2ImageUrl), not a raw image-proxy URL: same CORS-clean bytes
+  // for Konva, but served from the edge cache instead of the function on every board open.
   for (const item of items) {
     if (item.source === 'intake_pipeline') {
       const key = item.processed_image_hash ?? item.primary_image_hash
       if (key) {
-        item.raw = {
-          ...item.raw,
-          processed_image: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`,
-        }
+        item.raw = { ...item.raw, processed_image: r2ImageUrl(key) }
       }
     }
   }

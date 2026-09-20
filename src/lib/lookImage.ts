@@ -13,8 +13,10 @@
  * scripts/check-no-thumbnail-select.mjs. The Save path still WRITES thumbnail_url; moving that
  * storage to R2 only is a separate job.
  */
+import { cdnUrl } from './imageUrls.ts'
 export function lookImageUrl(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object') return null
   const url = (raw as Record<string, unknown>).main_image_url
-  return typeof url === 'string' && url.length > 0 ? url : null
+  // Rows store the image-proxy spelling; screens load the cached photo path (lib/imageUrls.ts).
+  return typeof url === 'string' && url.length > 0 ? cdnUrl(url) : null
 }

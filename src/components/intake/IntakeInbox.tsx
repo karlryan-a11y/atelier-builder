@@ -23,6 +23,8 @@ import { ensureJpegFiles, readCaptureTimes } from '@/lib/heic'
 import { IntakeConfirmBoard } from './IntakeConfirmBoard'
 import { slugifyCategory, labelForCategory, isFixedCategory } from '@/lib/garmentCategory'
 import { CATEGORY_LABELS } from '@/lib/categorize'
+import { r2ImageUrl } from '@/lib/imageUrls'
+import { requestDerivatives } from '@/lib/requestDerivatives'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -78,7 +80,12 @@ export function IntakeInbox() {
       const res = await Promise.allSettled(ids.slice(i, i + BATCH).map(id =>
         fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: id }),
-        }).then(r => { if (!r.ok) throw new Error(); return r })))
+        }).then(r => {
+          if (!r.ok) throw new Error()
+          // Approved: make the piece's small tile copy now (api/derive-image), not at the next backfill.
+          if (action === 'approve') void requestDerivatives({ intake_item_ids: [id] })
+          return r
+        })))
       done += res.filter(r => r.status === 'fulfilled').length
     }
     setSelectedIds(new Set()); setBulkActing(''); refresh()
@@ -302,7 +309,11 @@ export function IntakeInbox() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ item_id: item.id }),
-          }).then(r => { if (!r.ok) throw new Error(); return r })
+          }).then(r => {
+            if (!r.ok) throw new Error()
+            void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
+            return r
+          })
         )
       )
       approved += results.filter(r => r.status === 'fulfilled').length
@@ -764,7 +775,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
     if (!key) { alert('No photo to download.'); return }
     setDownloading(true)
     try {
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`)
+      const resp = await fetch(r2ImageUrl(key))
       if (!resp.ok) throw new Error('Could not fetch the photo')
       const blob = await resp.blob()
       const stem = (item.extracted_name || item.extracted_brand || 'item')
@@ -860,6 +871,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
         const err = await resp.json().catch(() => ({ error: 'Approve failed' }))
         throw new Error(err.error || 'Approve failed')
       }
+      void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
 
       setActionResult('approved')
       setTimeout(() => onAction(), 1200)

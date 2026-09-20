@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { styleKeys } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
 import { replaceGoodPixCapsule } from '@/lib/capsuleReplace'
+import { storedProxyUrl } from '@/lib/imageUrls'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -120,7 +121,7 @@ export function useCapsules(clientId: string | null) {
         ...(opts.canvasState ? { canvas_state: opts.canvasState } : {}),
         ...(imageR2Key ? {
           image_r2_key: imageR2Key,
-          image_url: `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(imageR2Key)}`,
+          image_url: storedProxyUrl(imageR2Key),
         } : {}),
       },
     }

@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { OMIT_LABEL, omittedHeadline } from '@/lib/restyleSelection'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
+import { r2ImageUrl } from '@/lib/imageUrls'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 interface LookItem { id: string; name: string; brand: string | null; image: string | null }
 
@@ -42,7 +42,7 @@ export function LookItemsPanel() {
         let image: string | null = null
         if (it.source === 'intake_pipeline') {
           const key = it.processed_image_hash ?? it.primary_image_hash
-          if (key) image = `${SUPABASE_URL}/functions/v1/image-proxy?key=${encodeURIComponent(key)}`
+          if (key) image = r2ImageUrl(key)
         }
         if (!image) image = it.raw?.processed_image ?? it.raw?.image ?? it.raw?.images?.[0] ?? null
         const brand = it.brand && it.brand !== 'None' && it.brand !== '' ? it.brand : null
