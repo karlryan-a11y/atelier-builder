@@ -34,6 +34,7 @@ const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const REPO = path.resolve(arg('--repo', '.'))
 const ASSERT = args.includes('--assert')
 const JSON_OUT = arg('--json', null)
+const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet rail and exit
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -90,7 +91,10 @@ const looks = Array.from({ length: 40 }, (_, i) => ({
   notes_internal: null, notes_client: null, created_by: null, source: 'builder',
   raw: { main_image_url: `${SUPA}/functions/v1/image-proxy?key=looks/${i}.png` },
   created_at: '2026-09-01T00:00:00Z', updated_at: new Date(Date.UTC(2026, 8, 1) - i * 60_000).toISOString(),
-  published: false, archived: false, sort_order: null, closet_item_ids: boardNodes.map((n) => n.closet_item_id),
+  // Half published: a real client has both, and the canvas rail's styled marks (ADR-0134) have
+  // three states to show. Does not affect any render count this harness asserts on.
+  published: i % 2 === 0, archived: false, sort_order: null,
+  closet_item_ids: boardNodes.slice(0, 6 + (i % 7)).map((n) => n.closet_item_id),
   transitioned_at: null, is_deleted: false, extracted_at: null,
 }))
 const boards = Array.from({ length: 8 }, (_, i) => ({
@@ -246,6 +250,44 @@ await page.route('**/*', async (route) => {
 
 await page.goto(`http://localhost:${PORT}/`)
 await page.waitForFunction(() => !!globalThis.__stores && !!document.querySelector('button') && [...document.querySelectorAll('button')].some((b) => b.textContent?.trim().toLowerCase() === 'categorize'), null, { timeout: 30000 })
+
+// A picture of the rail, for a change that is meant to be LOOKED at (ADR-0134). Real WebKit at
+// the iPad size the stylists work on, so what lands here is what Paige would see.
+if (SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.waitForTimeout(3000)   // let the look-usage read land so the marks are on screen
+  const rail = await page.$('.w-72')
+  await (rail ?? page).screenshot({ path: SHOT })
+  const marks = await page.evaluate(() => {
+    const rail = document.querySelector('.w-72')
+    const dots = [...(rail?.querySelectorAll('[title]') ?? [])].map((e) => e.getAttribute('title'))
+    return {
+      styled: dots.filter((t) => t?.startsWith('Styled')).length,
+      draft: dots.filter((t) => t?.startsWith('In a draft')).length,
+      tiles: rail?.querySelectorAll('[aria-roledescription="draggable"]').length ?? 0,
+    }
+  })
+  console.log(`\nshot: ${SHOT} — ${marks.tiles} tiles on screen, ${marks.styled} marked styled, ${marks.draft} marked draft`)
+
+  // And the filter she will actually press: "Still to style" must remove exactly the marked ones.
+  const before = marks.tiles
+  await page.click('button[aria-pressed="false"]:has-text("Still to style")')
+  await page.waitForTimeout(600)
+  const after = await page.evaluate(() => document.querySelector('.w-72')?.querySelectorAll('[aria-roledescription="draggable"]').length ?? 0)
+  const stillMarked = await page.evaluate(() => {
+    const rail = document.querySelector('.w-72')
+    return [...(rail?.querySelectorAll('[title]') ?? [])].filter((e) => /^(Styled|In a draft)/.test(e.getAttribute('title') ?? '')).length
+  })
+  console.log(`      still to style: ${before} tiles -> ${after}, and ${stillMarked} of them carry a styled mark (must be 0)`)
+  if (stillMarked !== 0 || after !== before - marks.styled - marks.draft) {
+    console.error('FAIL — the Still to style filter did not leave exactly the unstyled pieces')
+    await browser.close(); server.kill(); process.exit(1)
+  }
+  await browser.close()
+  server.kill()
+  process.exit(0)
+}
 
 // cold closet load for the client
 const t0 = Date.now(); net = { requests: 0, bytes: 0, closetReads: 0 }

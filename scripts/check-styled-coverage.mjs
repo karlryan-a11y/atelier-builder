@@ -23,7 +23,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { styledCoverage, coverageByCategory, LABEL_MAX_CHARS, TOTAL_SLUG } from '../src/lib/styledCoverage.ts'
+import { styledCoverage, coverageByCategory, styledStateOf, STYLED_STATE_LABEL, LABEL_MAX_CHARS, TOTAL_SLUG } from '../src/lib/styledCoverage.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let checked = 0
@@ -300,11 +300,70 @@ cat('uncategorized piece', [{ id: 'a', categories: [] }], [], { [TOTAL_SLUG]: { 
   if (got.get(TOTAL_SLUG).total !== 1) failures.push(`${TOTAL_SLUG} was treated as a category`)
 }
 
-console.log(`styled-coverage: exercised ${checked} cases against styledCoverage + the ${HOOK} SELECT contract`)
+// ── 3. The canvas rail's marks (ADR-0134) ───────────────────────────────────
+//
+// Paige Berndt, 2026-09-21: "Can we add a way to see if pieces in her closet have been styled yet
+// while we are on the canvas page building the outfit?" The rail marks each tile. Two ways that
+// can go wrong: the rail invents its own idea of "styled", or the mark is passed to the memoised
+// tile as an object and 1,300 tiles re-render on every tap of the board.
+const RAIL = 'src/components/layout/ClosetPanel.tsx'
+const railSrc = fs.readFileSync(path.join(root, RAIL), 'utf8')
+
+checked++
+if (!/styledStateOf/.test(railSrc)) {
+  failures.push(`${RAIL}: the rail no longer uses styledStateOf. "Styled" has ONE definition (ADR-0134); a second one on this screen would disagree with the Collection header.`)
+}
+checked++
+if (/\.published\b/.test(railSrc.replace(/^import .*$/gm, ''))) {
+  failures.push(`${RAIL}: reads look.published directly instead of going through styledStateOf.`)
+}
+checked++
+if (!/styled=\{styledStateOf\(/.test(railSrc)) {
+  failures.push(`${RAIL}: the tile is not handed a computed primitive. A Map or an object prop breaks the memo and re-renders every tile on each board tap (see the note above DraggableItem).`)
+}
+checked++
+if (!/styled: PieceStyledState/.test(railSrc)) {
+  failures.push(`${RAIL}: DraggableItem's styled prop is no longer typed as the shared primitive.`)
+}
+checked++
+if (!/usageError \?/.test(railSrc)) {
+  failures.push(`${RAIL}: a failed usage read is not reported. Every piece would read as unstyled and the rail would quietly lie (HARD-RULES: a check that measured nothing fails).`)
+}
+
+// The three states are exhaustive, and the one she is hunting for is the one that shows nothing.
+{
+  checked++
+  if (styledStateOf(undefined) !== 'none') failures.push('styledStateOf(undefined) must be "none"')
+  if (styledStateOf([]) !== 'none') failures.push('styledStateOf([]) must be "none"')
+  if (styledStateOf([D]) !== 'draft') failures.push('a draft-only piece must be "draft"')
+  if (styledStateOf([D, P]) !== 'styled') failures.push('one published look is enough to be "styled"')
+  if (styledStateOf([{}]) !== 'draft') failures.push('published === undefined must NOT read as styled')
+  for (const k of ['styled', 'draft', 'none']) {
+    if (!STYLED_STATE_LABEL[k]) failures.push(`no wording for the "${k}" mark`)
+  }
+}
+
+// The marks and the count are the same arithmetic: over a mixed collection, the number of tiles
+// carrying each mark has to equal what styledCoverage reports for the same pieces.
+{
+  checked++
+  const ids = Array.from({ length: 200 }, (_, i) => `x${i}`)
+  const usage = new Map()
+  for (let i = 0; i < 80; i++) usage.set(`x${i}`, [P])
+  for (let i = 80; i < 110; i++) usage.set(`x${i}`, [D])
+  const marks = { styled: 0, draft: 0, none: 0 }
+  for (const id of ids) marks[styledStateOf(usage.get(id))]++
+  const cov = styledCoverage(ids, usage)
+  if (marks.styled !== cov.styled) failures.push(`marks say ${marks.styled} styled, the count says ${cov.styled}`)
+  if (marks.draft !== cov.draftOnly) failures.push(`marks say ${marks.draft} draft, the count says ${cov.draftOnly}`)
+  if (marks.none !== cov.unstyled) failures.push(`marks say ${marks.none} unstyled, the count says ${cov.unstyled}`)
+}
+
+console.log(`styled-coverage: exercised ${checked} cases against styledCoverage + the ${HOOK} SELECT contract + the ${RAIL} marks`)
 if (checked === 0) { console.error('FAIL — the guard inspected nothing'); process.exit(1) }
 if (failures.length) {
   console.error('\nFAIL')
   for (const f of failures) console.error(`  - ${f}`)
   process.exit(1)
 }
-console.log('PASS — published decides styled, drafts are named separately, every rail list shows it, and the SELECT still carries the column.')
+console.log('PASS — published decides styled, drafts are named separately, the canvas rail marks the same three states, and the SELECT still carries the column.')

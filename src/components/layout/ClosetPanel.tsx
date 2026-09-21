@@ -12,6 +12,8 @@ import type { ClosetItemNode } from '@/types/canvas'
 import { EditItemDialog } from './EditItemDialog'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
+import { useItemLookUsage } from '@/hooks/useItemLookUsage'
+import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 
 /**
  * One closet tile. MEMOISED, and every prop is either the cached item object (same identity
@@ -24,12 +26,15 @@ import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 const DraggableItem = memo(function DraggableItem({
   item: piece,
   index,
+  styled,
   onAdd,
   onEdit,
   onZoom,
 }: {
   item: ClosetItem
   index: number
+  /** Where this piece stands: styled / draft / none. A PRIMITIVE, see the note above. */
+  styled: PieceStyledState
   onAdd: (item: ClosetItem) => void
   onEdit: (item: ClosetItem) => void
   onZoom: (index: number) => void
@@ -94,6 +99,25 @@ const DraggableItem = memo(function DraggableItem({
           >
             <StickyNote className="h-2.5 w-2.5 text-text" />
           </div>
+        )}
+        {/*
+          HAS THIS PIECE BEEN STYLED YET. Paige Berndt, 2026-09-21: "I have to pop back and fourth
+          between her collection and the canvas to see what still needs to be styled, for a large
+          project like Danielle's it would save me a lot of time." ADR-0134.
+
+          Bottom-left, so it never sits under the note dot or the two hover buttons. A filled mark
+          is a piece the client can see; a hollow one is in drafts only; nothing at all means it
+          has never been in a look, which is the state she is hunting for, so it is the one that
+          reads as empty.
+        */}
+        {styled !== 'none' && (
+          <div
+            title={STYLED_STATE_LABEL[styled]}
+            aria-label={STYLED_STATE_LABEL[styled]}
+            className={`absolute bottom-1 left-1 z-10 h-3 w-3 rounded-full shadow-sm ${
+              styled === 'styled' ? 'bg-[#1A1A1A]' : 'bg-white border-2 border-[#1A1A1A]'
+            }`}
+          />
         )}
         {item.imageUrl ? (
           <TileImage
@@ -237,6 +261,11 @@ export function ClosetPanel() {
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
+  // Which looks each piece is in, published and draft alike. The SAME hook the Collection tab
+  // uses, so the mark on a tile here and the number over there cannot disagree (ADR-0134). It is
+  // one read per client, shared through the Style cache, and it is read-only.
+  const { byItem: lookUsage, error: usageError } = useItemLookUsage(activeClient?.id ?? null)
+  const [unstyledOnly, setUnstyledOnly] = useState(false)
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
   const [savingItem, setSavingItem] = useState(false)
   const [zoomIndex, setZoomIndex] = useState<number | null>(null)
@@ -328,8 +357,19 @@ export function ClosetPanel() {
       // Multi-select unions: show an item if ANY of its categories is selected.
       result = result.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c)))
     }
+    // "Still to style" is the whole point of the marks: it narrows the rail to the pieces that
+    // have never been in a look. A piece in a draft look is NOT still to style — it is styled and
+    // unpublished, which is a different job, so it stays out of this list (ADR-0134).
+    if (unstyledOnly) result = result.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none')
     return result
-  }, [items, search, activeCategories, categoriesByItem])
+  }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage])
+
+  // The line under the grid, over whatever she has filtered to.
+  const coverage = useMemo(() => styledCoverage(filtered.map((i) => i.id), lookUsage), [filtered, lookUsage])
+  const unstyledInScope = useMemo(
+    () => (unstyledOnly ? filtered.length : filtered.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none').length),
+    [filtered, lookUsage, unstyledOnly],
+  )
 
   // Stable identity (reads the board with getState at the moment of the add), so the memoised
   // tiles never re-render because this function was re-created.
@@ -372,6 +412,32 @@ export function ClosetPanel() {
               />
             </div>
           </div>
+
+          {/*
+            STILL TO STYLE. The marks answer "has this one been styled"; this answers "show me the
+            ones that have not", which is what Paige was tabbing between two screens to find. It
+            sits above the garment chips because it narrows across all of them. ADR-0134.
+          */}
+          {!usageError && (
+            <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
+              <button
+                onClick={() => setUnstyledOnly((v) => !v)}
+                aria-pressed={unstyledOnly}
+                className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
+                  unstyledOnly
+                    ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
+                    : 'border-border text-text-muted hover:border-blush'
+                }`}
+              >
+                Still to style
+                <span className={`ml-1 ${unstyledOnly ? 'text-white/60' : 'text-text-muted/50'}`}>{unstyledInScope}</span>
+              </button>
+              <span className="flex items-center gap-2 text-[8px] tracking-[0.2em] uppercase text-text-muted/40">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#1A1A1A]" />Styled</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-white border border-[#1A1A1A]" />Draft</span>
+              </span>
+            </div>
+          )}
 
           {/* Garment-category filters (Clothing / Shoes / Handbags / Jewelry / Accessories) */}
           {categoryCounts.size > 0 && (
@@ -480,6 +546,7 @@ export function ClosetPanel() {
                     key={item.id}
                     item={item}
                     index={idx}
+                    styled={styledStateOf(lookUsage.get(item.id))}
                     onAdd={addPiece}
                     onEdit={setEditingItem}
                     onZoom={setZoomIndex}
@@ -490,6 +557,8 @@ export function ClosetPanel() {
             {!loading && filtered.length > 0 && (
               <p className="text-[10px] tracking-[0.2em] uppercase text-text-muted/30 text-center mt-4 pb-2">
                 {filtered.length} piece{filtered.length !== 1 ? 's' : ''}
+                {/* A failed usage read would make every piece look unstyled, so say so instead. */}
+                {usageError ? ' · styling unknown' : ` · ${coverage.styled} styled`}
               </p>
             )}
           </div>

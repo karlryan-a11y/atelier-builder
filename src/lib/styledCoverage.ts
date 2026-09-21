@@ -42,6 +42,29 @@ export interface StyledCoverage {
 }
 
 /**
+ * Where ONE piece stands. The canvas rail marks each tile with this while Paige builds an outfit
+ * (ADR-0134) and the Collection header counts the same three buckets, so a tile and the number
+ * above it can never tell her different things.
+ *
+ *   'styled'  in at least one PUBLISHED look — the client can see it
+ *   'draft'   only in looks that were never published — invisible to the client
+ *   'none'    in no look at all
+ */
+export type PieceStyledState = 'styled' | 'draft' | 'none'
+
+export function styledStateOf(looks: readonly LookPublishState[] | undefined): PieceStyledState {
+  if (!looks || looks.length === 0) return 'none'
+  return looks.some((l) => l.published) ? 'styled' : 'draft'
+}
+
+/** What each state is called on screen. One wording, so the tile and its tooltip agree. */
+export const STYLED_STATE_LABEL: Record<PieceStyledState, string> = {
+  styled: 'Styled — in a look the client can see',
+  draft: 'In a draft look only — the client cannot see it yet',
+  none: 'Not styled yet',
+}
+
+/**
  * @param itemIds  the pieces on screen, in whatever scope the stylist has filtered to
  * @param usage    piece id to the looks it appears in (published and draft alike)
  */
@@ -62,9 +85,10 @@ export function styledCoverage(
 
   for (const id of itemIds) {
     total++
-    const looks = usage.get(id) ?? []
-    if (looks.length === 0) { unstyled++; continue }
-    if (looks.some((l) => l.published)) styled++
+    // One definition of "styled", shared with the canvas rail's tile marks (ADR-0134).
+    const state = styledStateOf(usage.get(id))
+    if (state === 'none') { unstyled++; continue }
+    if (state === 'styled') styled++
     else draftOnly++
   }
 
