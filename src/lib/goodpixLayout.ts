@@ -116,11 +116,35 @@ function isText(o: GpLayoutObject) {
   return t === 'textbox' || t === 'i-text' || t === 'text'
 }
 
-/** Which of her pieces does this object show? null = it is not one of hers (a picture). */
+/**
+ * Which of her pieces does this object show? null = it is not one of hers (a picture).
+ *
+ * `productId` IS A PIECE ID ON MOST BOARDS. ADR-0132. Note 3 above reads "255 of 698 sampled
+ * images were shop products (they carry `productId`)", and that sentence was doing a job it could
+ * not do: on the boards behind the Transitions queue, GoodPix puts HER OWN piece id in
+ * `productId` and leaves `closetItemId` null. Measured over every pulled look that has a stored
+ * arrangement, 2026-09-21: 824 of 1,729 board pictures are her own clothes carrying only a
+ * `productId`, and Alicia Hidalgo's Nashville Capsule is all ten of them.
+ *
+ * The cost of reading it as "not hers" was not cosmetic. Those pictures become anonymous, so the
+ * transition filter cannot see them: 101 of her 228 pulled looks answered Restyle with "She no
+ * longer owns any piece in this look" while every piece sat in her closet (1 after this change),
+ * and 146 looks drew a garment she had transitioned out as an untracked picture — Paige Berndt,
+ * 2026-09-21: "these pants that showed up on the canvas ... are not in her closet".
+ *
+ * A REAL shop product is still a picture, because the id has to be one the CALLER vouched for.
+ * `known` holds the board's own pool plus the rows the caller read for THIS CLIENT
+ * (lib/goodpixBoard.ts filters by client_id), so an id that is not one of her pieces never
+ * resolves here. The order is deliberate: an explicit `closetItemId` wins, then the photo hash,
+ * and `productId` is consulted only when neither answered.
+ */
 function pieceFor(o: GpLayoutObject, byHash: Map<string, string>, known: Set<string>): string | null {
   if (o.closetItemId && known.has(o.closetItemId)) return o.closetItemId
   const h = goodPixPhotoHash(o.src ? unwrapGoodPixUrl(o.src) : null)
-  return (h && byHash.get(h)) || (o.closetItemId ?? null)
+  const byPhoto = h ? byHash.get(h) : undefined
+  if (byPhoto) return byPhoto
+  if (o.productId && known.has(o.productId)) return o.productId
+  return o.closetItemId ?? null
 }
 
 /**

@@ -328,7 +328,12 @@ export function CategorizePanel() {
         // what she no longer owns is missing. Otherwise it is the grid, as before.
         const board = await buildGoodPixBoard(look.id, look.closetItemIds)
         if (!board.canvas.nodes.some((n) => n.type === 'closet_item')) {
-          alert('She no longer owns any piece in this look — retire it instead of restyling.')
+          // Say which of the two it is. Until ADR-0132 this always claimed she owned nothing,
+          // and on 101 of Alicia Hidalgo's 228 pulled looks that was simply untrue — we had not
+          // recognised her pieces. Paige Berndt looked in the closet and found them there.
+          alert(board.omitted.length > 0
+            ? 'Every piece in this look has been transitioned out or deleted — retire it instead of restyling.'
+            : 'We could not match any piece on this board to her collection, so there is nothing to restyle yet. Tell Karl which look this is.')
           return
         }
         const imageUrls = await resolveClosetImageUrls(board.canvas)

@@ -33,13 +33,17 @@ export interface GoodPixBoard {
 
 const mirrorUrl = (key: string) => storedProxyUrl(key)
 
-async function readPieces(ids: string[]) {
+async function readPieces(ids: string[], clientId: string | null) {
   const out = new Map<string, RestylePiece & { urls: string[] }>()
   for (let i = 0; i < ids.length; i += 200) {   // a big .in() fails silently: chunk it
-    const { data, error } = await supabase
+    // client_id is load-bearing since ADR-0132: `productId` is now read as a piece id, so this
+    // filter is what keeps a genuine shop product from ever resolving to somebody's garment.
+    let q = supabase
       .from('gp_closet_items')
       .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at, raw')
       .in('id', ids.slice(i, i + 200))
+    if (clientId) q = q.eq('client_id', clientId)
+    const { data, error } = await q
     if (error) throw error
     for (const r of (data ?? []) as any[]) {
       const raw = r.raw ?? {}
@@ -58,23 +62,28 @@ async function readPieces(ids: string[]) {
 }
 
 export async function buildGoodPixBoard(lookId: string, closetItemIds: string[]): Promise<GoodPixBoard> {
-  const { data: row, error } = await supabase.from('gp_looks').select('gp_layout').eq('id', lookId).maybeSingle()
+  // client_id comes back with the layout so the piece read can be scoped to her (ADR-0132).
+  const { data: row, error } = await supabase.from('gp_looks').select('gp_layout, client_id').eq('id', lookId).maybeSingle()
   if (error) throw error
   const layout = (row?.gp_layout ?? null) as GpLayout | null
+  const clientId = (row?.client_id ?? null) as string | null
 
   if (!layout || !(layout.objects ?? []).length) {
-    const pieces = await readPieces(closetItemIds)
+    const pieces = await readPieces(closetItemIds, clientId)
     const { keep, omitted } = selectRestylePieces(closetItemIds, pieces)
     return { canvas: buildCanvasFromClosetItems(keep), omitted, notInPicture: [], fromLayout: false, pictures: 0, texts: 0 }
   }
 
-  // Everything the layout could be showing: the look's list, GoodPix's pool, explicit ids.
+  // Everything the layout could be showing: the look's list, GoodPix's pool, explicit ids, and
+  // the `productId`s — which are her own piece ids on most boards (ADR-0132). They are only
+  // CANDIDATES: readPieces answers for this client alone, so a real shop product finds no row and
+  // stays a picture.
   const candidates = [...new Set([
     ...closetItemIds,
     ...(layout.pool ?? []).map((p) => p.id),
-    ...(layout.objects ?? []).map((o) => o.closetItemId).filter((x): x is string => !!x),
+    ...(layout.objects ?? []).flatMap((o) => [o.closetItemId, o.productId]).filter((x): x is string => !!x),
   ])]
-  const pieces = await readPieces(candidates)
+  const pieces = await readPieces(candidates, clientId)
   const extraUrls = new Map([...pieces].map(([id, p]) => [id, p.urls]))
 
   const inPicture = piecesInLayout(layout, extraUrls)

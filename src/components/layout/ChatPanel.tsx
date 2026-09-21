@@ -37,8 +37,8 @@ export function ChatPanel() {
   // Narrow, shallow-compared subscription: a tap or drag on the board changes neither of these,
   // so it no longer re-renders this panel and its looks gallery. `nodes` changes only when a
   // piece is added, removed or moved.
-  const { currentLookId, replacesLookId, replacesSiblingLookIds, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
-    currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds,
+  const { currentLookId, replacesLookId, replacesSiblingLookIds, restyleReference, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
+    currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds, restyleReference: s.restyleReference,
     currentCapsuleId: s.currentCapsuleId, replacesCapsuleId: s.replacesCapsuleId, isDirty: s.isDirty,
     loadLook: s.loadLook, loadLookAsNew: s.loadLookAsNew, reset: s.reset, markClean: s.markClean,
     noteSavedAs: s.noteSavedAs, noteSavedCapsuleAs: s.noteSavedCapsuleAs, addNode: s.addNode,
@@ -63,6 +63,14 @@ export function ChatPanel() {
   // The GoodPix capsule this board is a rebuild OF (not a capsule being edited) — used for the
   // header, the button label and the name the Save dialog opens with.
   const replacedCapsule = capsules.find((c) => c.id === replacesCapsuleId) ?? null
+  // The look this board is a RESTYLE of. A GoodPix look is never edited in place (ADR-0076), so
+  // the save inserts a new row and `currentLookId` is null — which left the name box empty and
+  // made Paige Berndt retype the name from a second tab: "I have to go back and fourth between
+  // tabs to see what the original name was" (2026-09-21). Capsules already did this two blocks
+  // below; looks never got it. ADR-0132.
+  // `looks` is builder-only and excludes pulled looks, so the original cannot be found there.
+  // The canvas store already carries its name for the panel beside the board; that is the name.
+  const restyledLookName = replacesLookId ? restyleReference?.lookName ?? '' : ''
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -622,7 +630,7 @@ export function ChatPanel() {
 
       {showSaveDialog && (
         <SaveLookDialog
-          initialName={currentLook?.name ?? ''}
+          initialName={currentLook?.name || restyledLookName}
           initialNotes={currentLook?.notes_internal ?? ''}
           initialTags={currentLook?.tags ?? []}
           saving={saving}
