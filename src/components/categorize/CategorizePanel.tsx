@@ -32,6 +32,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, selectAllLabel } from '@/lib/lookCategoryFilter'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
+import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -1104,8 +1105,16 @@ export function CategorizePanel() {
                       isSel ? 'border-[#1A1A1A]' : hasBrush ? 'border-[#F8E5E7]' : 'border-transparent hover:border-[#E8E4DF]'
                     }`}
                   >
-                    {/* status pill */}
-                    <span className={`absolute top-1.5 left-1.5 z-10 text-[8px] tracking-[0.12em] uppercase px-1.5 py-0.5 rounded ${
+                    {/* Pick this one. ADR-0137: shift-click still works, this is the visible way in. */}
+                    <SelectCheckbox
+                      checked={isSel}
+                      anySelected={selected.size > 0}
+                      label={item.name}
+                      onToggle={() => onCardClick(item, true)}
+                    />
+
+                    {/* status pill — shifted across to make room for the checkbox */}
+                    <span className={`absolute top-1.5 ${BADGE_OFFSET_WHEN_SELECTABLE} z-10 text-[8px] tracking-[0.12em] uppercase px-1.5 py-0.5 rounded ${
                       item.archived ? 'bg-[#E8E4DF] text-[#6b6b6b]' : item.published ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A]'
                     }`}>{item.archived ? 'Archived' : item.published ? 'Live' : 'Draft'}</span>
 

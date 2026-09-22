@@ -35,6 +35,7 @@ const REPO = path.resolve(arg('--repo', '.'))
 const ASSERT = args.includes('--assert')
 const JSON_OUT = arg('--json', null)
 const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet rail and exit
+const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card checkbox and exit
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -286,6 +287,73 @@ if (SHOT) {
   }
   await browser.close()
   server.kill()
+  process.exit(0)
+}
+
+// ADR-0137: picking ONE look must be a plain click on its checkbox, with no shift key, on the
+// card grid she actually uses. Driven in real WebKit rather than asserted about the source.
+if (SELECT_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  const cat = [...(await page.$$('button'))]
+  for (const b of cat) {
+    const t = (await b.textContent())?.trim().toLowerCase()
+    if (t === 'categorize') { await b.click(); break }
+  }
+  await page.waitForSelector('img[alt="Harness Look 1"]', { timeout: 60000 })
+  await page.waitForTimeout(1500)
+
+  const selectedCount = () => page.evaluate(() =>
+    [...document.querySelectorAll('[role="checkbox"]')].filter((e) => e.getAttribute('aria-checked') === 'true').length)
+  const boxes = await page.$$('[role="checkbox"]')
+  console.log(`\n  checkboxes on screen: ${boxes.length}`)
+  if (boxes.length === 0) { console.error('FAIL - no card checkbox rendered'); await browser.close(); server.kill(); process.exit(1) }
+
+  const before = await selectedCount()
+  await boxes[0].click()          // a PLAIN click, no shift
+  await page.waitForTimeout(400)
+  const afterOne = await selectedCount()
+  await boxes[1].click()
+  await page.waitForTimeout(400)
+  const afterTwo = await selectedCount()
+  await boxes[0].click()          // and it toggles back off
+  await page.waitForTimeout(400)
+  const afterToggle = await selectedCount()
+
+  await page.screenshot({ path: SELECT_SHOT })
+  console.log(`  queue grid selected: ${before} -> ${afterOne} -> ${afterTwo} -> ${afterToggle} (expect 0 -> 1 -> 2 -> 1), no shift key used`)
+  let ok = before === 0 && afterOne === 1 && afterTwo === 2 && afterToggle === 1
+
+  // And the OTHER card grid: "On lookbook" is the sortable arrange grid, and it is the one in
+  // Cynthia's screenshot. A checkbox on only one of the two is this bug again for whoever is on
+  // the other.
+  for (const b of await page.$$('button')) {
+    const t = (await b.textContent())?.trim().toLowerCase()
+    if (t && t.startsWith('on lookbook')) { await b.click(); break }
+  }
+  await page.waitForTimeout(1500)
+  const arrangeBoxes = await page.$$('[role="checkbox"]')
+  console.log(`  on-lookbook checkboxes: ${arrangeBoxes.length}`)
+  let arrangeOk = arrangeBoxes.length > 0
+  if (arrangeOk) {
+    const b0 = await selectedCount()
+    await arrangeBoxes[0].click()
+    await page.waitForTimeout(400)
+    const b1 = await selectedCount()
+    await arrangeBoxes[0].click()
+    await page.waitForTimeout(400)
+    const b2 = await selectedCount()
+    console.log(`  on-lookbook selected: ${b0} -> ${b1} -> ${b2} (expect 0 -> 1 -> 0)`)
+    arrangeOk = b0 === 0 && b1 === 1 && b2 === 0
+    await arrangeBoxes[0].click()
+    await page.waitForTimeout(400)
+    await page.screenshot({ path: SELECT_SHOT.replace(/\.png$/, '-onlookbook.png') })
+  }
+  ok = ok && arrangeOk
+
+  await browser.close()
+  server.kill()
+  if (!ok) { console.error('FAIL - a plain click does not pick exactly one look on both grids'); process.exit(1) }
+  console.log('  PASS - picking one look is a click, on both card grids')
   process.exit(0)
 }
 

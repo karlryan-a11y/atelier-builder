@@ -10,6 +10,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { ChevronLeft, ChevronRight, GripVertical, Tag, X } from 'lucide-react'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
+import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
 
 /**
  * "On lookbook" arrange view. The card order here IS the order the client sees
@@ -108,6 +109,7 @@ export function LookArrangeGrid({
                 onRemove={onRemove}
                 onArchive={onArchive}
                 isSelected={selected?.has(item.id) ?? false}
+                anySelected={(selected?.size ?? 0) > 0}
                 hasBrush={!!activeBrushId && item.categoryIds.includes(activeBrushId)}
                 onCardClick={onCardClick}
                 tagging={tagging}
@@ -132,11 +134,13 @@ interface CardProps {
   isSelected: boolean
   hasBrush: boolean
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
+  /** True when a selection is in progress, so every checkbox stays visible. */
+  anySelected: boolean
   tagging: boolean
   renderActions?: (item: ArrangeItem) => React.ReactNode
 }
 
-function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, tagging, renderActions }: CardProps) {
+function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, anySelected, tagging, renderActions }: CardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: look.id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -162,8 +166,18 @@ function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive,
               : 'border-transparent hover:border-[#E8E4DF]'
       }`}
     >
-      {/* order number */}
-      <span className="absolute top-1.5 left-1.5 z-10 text-[9px] tracking-[0.1em] uppercase px-1.5 py-0.5 rounded bg-[#1A1A1A] text-white tabular-nums">
+      {/* Pick this one. ADR-0137: shift-click still works, this is the visible way in. */}
+      {onCardClick && (
+        <SelectCheckbox
+          checked={isSelected}
+          anySelected={anySelected}
+          label={look.name}
+          onToggle={() => onCardClick(look, true)}
+        />
+      )}
+
+      {/* order number — shifted across when the checkbox shares this corner */}
+      <span className={`absolute top-1.5 ${onCardClick ? BADGE_OFFSET_WHEN_SELECTABLE : 'left-1.5'} z-10 text-[9px] tracking-[0.1em] uppercase px-1.5 py-0.5 rounded bg-[#1A1A1A] text-white tabular-nums`}>
         {index + 1}
       </span>
 
