@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, memo } from 'react'
 import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
-import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
-import { categoriesOf, labelForCategory, isFixedCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
+import { categoriesOf, labelForCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
@@ -333,6 +332,21 @@ export function ClosetPanel() {
     return counts
   }, [categoriesByItem])
 
+  /**
+   * The chips, in the order she reads them: every category with at least one piece, A to Z by
+   * the label on screen. No rollup, no group headings, no "Custom" section — one list, like
+   * GoodPix. ADR-0136. Sorted by LABEL, not slug, because the slug `jeans` is shown as "Denim"
+   * and would otherwise sit between Hats and Jewelry.
+   */
+  const chipCategories = useMemo(() => {
+    const out: { slug: string; label: string; count: number }[] = []
+    for (const [slug, count] of categoryCounts) {
+      if (count <= 0) continue
+      out.push({ slug, label: labelForCategory(slug), count })
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label))
+  }, [categoryCounts])
+
   function toggleCategory(slug: string) {
     setActiveCategories((prev) => {
       const next = new Set(prev)
@@ -439,74 +453,62 @@ export function ClosetPanel() {
             </div>
           )}
 
-          {/* Garment-category filters (Clothing / Shoes / Handbags / Jewelry / Accessories) */}
+          {/*
+            EVERY CATEGORY SHE HAS, ALL VISIBLE, THE WAY GOODPIX SHOWS THEM. ADR-0136.
+
+            Cynthia Dada, 2026-09-22: "When creating a look in Atelier, can you please make it
+            possible for the categories to all be visible at the top? It makes a difference with
+            how long it takes to find items. The way goodpix has it is great" — and, twenty
+            minutes later, "I had garments categorized correctly in Goodpix and now they are in
+            different categories in Atelier".
+
+            Those are the same complaint. The sync has never written `category` or
+            `custom_categories` (see gp-sync itemRow: they are stylist-owned), and Atelier does
+            hold her own fine labels — Janet Foutty carries 20 distinct ones, Peyton Wheeler 26,
+            including blazers, cardigans, sweaters and tights. The rail was PRESENTING them
+            through a Bergdorf-style rollup: nine fixed buckets with group headings first and
+            everything else pushed under a "Custom" heading, inside a 192px box with its own
+            scrollbar. So her blazers were filed correctly and simply were not where she looked.
+
+            Now it is one flat, alphabetical row of chips with no headings and no inner scroll,
+            which is both closer to GoodPix and SHORTER than the block it replaces: the three
+            group headings and the Custom heading cost four rows on their own.
+
+            The rollup itself is untouched — SIDEBAR_STRUCTURE still orders the Collection rail in
+            Categorize and the client's own lookbook sidebar. This is the stylist's canvas only.
+          */}
           {categoryCounts.size > 0 && (
-            <div className="px-3 py-2 border-b border-border max-h-48 overflow-y-auto space-y-1.5">
-              <button
-                onClick={() => setActiveCategories(new Set())}
-                className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
-                  activeCategories.size === 0
-                    ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
-                    : 'border-border text-text-muted hover:border-blush'
-                }`}
-              >
-                All
-              </button>
-              {SIDEBAR_STRUCTURE.map((node) => {
-                const slugs = node.kind === 'group' ? node.children : [node.slug]
-                const present = slugs.filter((s) => (categoryCounts.get(s) ?? 0) > 0)
-                if (present.length === 0) return null
-                return (
-                  <div key={node.kind === 'group' ? node.label : node.slug}>
-                    {node.kind === 'group' && (
-                      <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">{node.label}</p>
-                    )}
-                    <div className="flex flex-wrap gap-1">
-                      {present.map((slug) => {
-                        const on = activeCategories.has(slug)
-                        return (
-                          <button
-                            key={slug}
-                            onClick={() => toggleCategory(slug)}
-                            className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
-                              on
-                                ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
-                                : 'border-border text-text-muted hover:border-blush'
-                            }`}
-                          >
-                            {CATEGORY_LABELS[slug]}
-                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{categoryCounts.get(slug) ?? 0}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-              {(() => {
-                const customSlugs = [...categoryCounts.keys()].filter((s) => !isFixedCategory(s) && (categoryCounts.get(s) ?? 0) > 0).sort()
-                if (customSlugs.length === 0) return null
-                return (
-                  <div>
-                    <p className="text-[8px] tracking-[0.3em] uppercase text-text-muted/40 mb-0.5">Custom</p>
-                    <div className="flex flex-wrap gap-1">
-                      {customSlugs.map((slug) => {
-                        const on = activeCategories.has(slug)
-                        return (
-                          <button
-                            key={slug}
-                            onClick={() => toggleCategory(slug)}
-                            className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${on ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-border text-text-muted hover:border-blush'}`}
-                          >
-                            {labelForCategory(slug)}
-                            <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{categoryCounts.get(slug) ?? 0}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })()}
+            <div className="px-3 py-2 border-b border-border">
+              <div className="flex flex-wrap gap-1">
+                <button
+                  onClick={() => setActiveCategories(new Set())}
+                  className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
+                    activeCategories.size === 0
+                      ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
+                      : 'border-border text-text-muted hover:border-blush'
+                  }`}
+                >
+                  All
+                </button>
+                {chipCategories.map(({ slug, label, count }) => {
+                  const on = activeCategories.has(slug)
+                  return (
+                    <button
+                      key={slug}
+                      onClick={() => toggleCategory(slug)}
+                      title={label}
+                      className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
+                        on
+                          ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
+                          : 'border-border text-text-muted hover:border-blush'
+                      }`}
+                    >
+                      {label}
+                      <span className={`ml-1 ${on ? 'text-white/60' : 'text-text-muted/50'}`}>{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
