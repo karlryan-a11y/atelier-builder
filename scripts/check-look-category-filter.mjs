@@ -12,7 +12,8 @@
  * Checked:
  *   1. filterByCategory returns only the looks in the picked category (and its nested ones),
  *      returns everything for "All", and returns everything while tagging is on.
- *   2. cardClickAction never tags with the switch off.
+ *   2. cardClickAction never tags with the switch off, and with the switch off a click PICKS
+ *      the look (ADR-0138) rather than doing nothing.
  *   3. mergeSubsetOrder keeps every look outside a filtered arrange in its slot, so dragging
  *      inside "Holiday Looks" cannot scramble the rest of her gallery.
  *   4. Select all takes the looks in view and leaves a selection made outside the filter
@@ -57,11 +58,36 @@ eq('a heading returns what is nested under it', ids(filterByCategory(looks, 'off
 eq('nested ids resolve', [...categoryIdsUnder('office', cats)].sort(), ['fw-office', 'office'])
 
 // ── 2. clicks ────────────────────────────────────────────────────────────────────────────
-eq('browsing click with a category picked does nothing', cardClickAction({ shiftKey: false, selecting: false, tagging: false, categoryId: 'holiday' }), 'nothing')
-eq('tagging click tags', cardClickAction({ shiftKey: false, selecting: false, tagging: true, categoryId: 'holiday' }), 'tag')
-eq('tagging with no category picked does nothing', cardClickAction({ shiftKey: false, selecting: false, tagging: true, categoryId: null }), 'nothing')
+// ADR-0138. Cynthia Dada, 2026-09-22: "Would it be possible to just click anywhere on the look
+// instead of ticking the box". With the switch OFF a click now PICKS the look. It used to return
+// 'nothing', so the first click on a card did nothing and every click after it selected, which is
+// the same invisible asymmetry the checkbox was added that morning to fix.
+//
+// The line that must not move is the one under it: with the switch ON a click still FILES. The
+// rail used to re-file any look clicked under it, silently, which is what Cynthia reported on
+// 2026-09-15 (ADR-0123). Browsing and filing stay different things.
+eq('browsing click picks the look', cardClickAction({ shiftKey: false, selecting: false, tagging: false, categoryId: 'holiday' }), 'select')
+eq('browsing click with no category picked still picks the look', cardClickAction({ shiftKey: false, selecting: false, tagging: false, categoryId: null }), 'select')
+eq('tagging click tags, it does NOT pick', cardClickAction({ shiftKey: false, selecting: false, tagging: true, categoryId: 'holiday' }), 'tag')
+eq('tagging with no category picked does nothing, and never silently picks', cardClickAction({ shiftKey: false, selecting: false, tagging: true, categoryId: null }), 'nothing')
 eq('shift-click selects', cardClickAction({ shiftKey: true, selecting: false, tagging: false, categoryId: null }), 'select')
+eq('shift-click outranks tagging, so the shortcut never files a look', cardClickAction({ shiftKey: true, selecting: false, tagging: true, categoryId: 'holiday' }), 'select')
 eq('click during a selection selects', cardClickAction({ shiftKey: false, selecting: true, tagging: true, categoryId: 'holiday' }), 'select')
+// A click can only ever do one of three things, and only one of them writes to her lookbook.
+for (const tagging of [false, true]) {
+  for (const selecting of [false, true]) {
+    for (const shiftKey of [false, true]) {
+      for (const categoryId of [null, 'holiday']) {
+        checked++
+        const got = cardClickAction({ shiftKey, selecting, tagging, categoryId })
+        if (!['select', 'tag', 'nothing'].includes(got)) failures.push(`click rule returned ${got}`)
+        if (got === 'tag' && !(tagging && categoryId)) {
+          failures.push(`a click FILED a look with tagging=${tagging} category=${categoryId}: browsing must never re-file`)
+        }
+      }
+    }
+  }
+}
 
 // ── 3. reorder inside a filter ───────────────────────────────────────────────────────────
 // Gallery 1..6; the filter holds 2, 4, 6 and she drags 6 to the front of it.

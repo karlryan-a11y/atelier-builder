@@ -93,7 +93,9 @@ export function LookArrangeGrid({
       <p className="text-[11px] text-[#888] mb-4 leading-relaxed">
         This is the order clients see in their {galleryName}. Drag a card, or use the
         arrows, to arrange it — changes save automatically.
-        {onCardClick && tagging && ' Tagging is on: click a card to add it to the picked category or take it out.'}
+        {onCardClick && (tagging
+          ? ' Tagging is on: click a card to add it to the picked category or take it out.'
+          : ' Click a card to pick it.')}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={rectSortingStrategy}>
@@ -112,7 +114,6 @@ export function LookArrangeGrid({
                 anySelected={(selected?.size ?? 0) > 0}
                 hasBrush={!!activeBrushId && item.categoryIds.includes(activeBrushId)}
                 onCardClick={onCardClick}
-                tagging={tagging}
                 renderActions={renderActions}
               />
             ))}
@@ -136,11 +137,10 @@ interface CardProps {
   onCardClick?: (item: ArrangeItem, shiftKey: boolean) => void
   /** True when a selection is in progress, so every checkbox stays visible. */
   anySelected: boolean
-  tagging: boolean
   renderActions?: (item: ArrangeItem) => React.ReactNode
 }
 
-function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, anySelected, tagging, renderActions }: CardProps) {
+function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive, isSelected, hasBrush, onCardClick, anySelected, renderActions }: CardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: look.id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -155,7 +155,7 @@ function ArrangeCard({ look, index, total, labelOf, onMove, onRemove, onArchive,
       style={style}
       onClick={(e) => onCardClick?.(look, e.shiftKey)}
       className={`group relative bg-white rounded-sm border-2 transition-colors ${
-        onCardClick && tagging ? 'cursor-pointer' : ''
+        onCardClick ? 'cursor-pointer' : ''
       } ${
         isDragging
           ? 'border-[#1A1A1A] shadow-lg'

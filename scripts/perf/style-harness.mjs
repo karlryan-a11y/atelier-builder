@@ -323,6 +323,79 @@ if (SELECT_SHOT) {
   console.log(`  queue grid selected: ${before} -> ${afterOne} -> ${afterTwo} -> ${afterToggle} (expect 0 -> 1 -> 2 -> 1), no shift key used`)
   let ok = before === 0 && afterOne === 1 && afterTwo === 2 && afterToggle === 1
 
+  // ADR-0138: clicking the CARD, not the box. Cynthia: "just click anywhere on the look".
+  // Clear first, then click a card's picture with nothing selected, which is the state where a
+  // click used to do nothing at all.
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent())?.trim().toLowerCase() === 'clear') { await b.click(); break }
+  }
+  await page.waitForTimeout(400)
+  const cleared = await selectedCount()
+  // A real mouse click in the middle of the picture area of a card, which is what "anywhere on
+  // the look" means. Cards are found through their checkbox so each one is counted once: the tile
+  // renders more than one <img> per card, and picking images gave the same card twice.
+  const cardBoxes = await page.evaluate(() =>
+    [...document.querySelectorAll('[role="checkbox"]')]
+      .map((cb) => cb.parentElement?.getBoundingClientRect())
+      .filter(Boolean)
+      .map((r) => ({ x: r.x + r.width / 2, y: r.y + r.height * 0.35 })))
+  const clickCard = async (i) => { await page.mouse.click(cardBoxes[i].x, cardBoxes[i].y); await page.waitForTimeout(400) }
+  await clickCard(0)
+  const bodyOne = await selectedCount()
+  await clickCard(1)
+  const bodyTwo = await selectedCount()
+  await clickCard(0)
+  const bodyToggle = await selectedCount()
+  console.log(`  click the CARD body: ${cleared} -> ${bodyOne} -> ${bodyTwo} -> ${bodyToggle} (expect 0 -> 1 -> 2 -> 1)`)
+  ok = ok && cleared === 0 && bodyOne === 1 && bodyTwo === 2 && bodyToggle === 1
+
+  // And a button ON the card must not pick it as well. Rename is the safest to press: it opens a
+  // prompt, which we dismiss.
+  page.once('dialog', (d) => d.dismiss())
+  const beforeBtn = await selectedCount()
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent())?.trim().toLowerCase() === 'rename') { await b.click(); break }
+  }
+  await page.waitForTimeout(500)
+  const afterBtn = await selectedCount()
+  console.log(`  a button on the card: ${beforeBtn} -> ${afterBtn} (must not change)`)
+  ok = ok && beforeBtn === afterBtn
+
+  // THE HALF THAT MUST NOT MOVE. With Tag looks ON a card click FILES the look into the picked
+  // category; it does not pick it. That is ADR-0123, the defect Cynthia reported on 2026-09-15
+  // when the rail was silently re-filing looks. ADR-0138 only changed what happens with the
+  // switch OFF, and this is the proof it left the other branch alone.
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent())?.trim().toLowerCase() === 'clear') { await b.click(); break }
+  }
+  await page.waitForTimeout(300)
+  for (const b of await page.$$('button[aria-pressed]')) {
+    if (((await b.textContent()) ?? '').toLowerCase().includes('tag looks')) { await b.click(); break }
+  }
+  await page.waitForTimeout(400)
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent())?.trim() === 'Office') { await b.click(); break }
+  }
+  await page.waitForTimeout(600)
+  const tagBoxes = await page.evaluate(() =>
+    [...document.querySelectorAll('[role="checkbox"]')]
+      .map((cb) => cb.parentElement?.getBoundingClientRect())
+      .filter(Boolean)
+      .map((r) => ({ x: r.x + r.width / 2, y: r.y + r.height * 0.35 })))
+  const cardText = () => page.evaluate(() => {
+    const cb = document.querySelector('[role="checkbox"]')
+    return cb?.parentElement?.textContent ?? ''
+  })
+  const textBefore = await cardText()
+  const selBeforeTag = await selectedCount()
+  await page.mouse.click(tagBoxes[0].x, tagBoxes[0].y)
+  await page.waitForTimeout(800)
+  const textAfter = await cardText()
+  const selAfterTag = await selectedCount()
+  const filed = !textBefore.includes('Office') && textAfter.includes('Office')
+  console.log(`  tagging ON, click the card: filed into Office = ${filed}, selected ${selBeforeTag} -> ${selAfterTag} (must stay 0)`)
+  ok = ok && filed && selBeforeTag === 0 && selAfterTag === 0
+
   // And the OTHER card grid: "On lookbook" is the sortable arrange grid, and it is the one in
   // Cynthia's screenshot. A checkbox on only one of the two is this bug again for whoever is on
   // the other.

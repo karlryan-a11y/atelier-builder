@@ -80,6 +80,19 @@ inspected++
 if (!/opts\.shiftKey\s*\|\|\s*opts\.selecting/.test(filter)) {
   fail(`src/lib/lookCategoryFilter.ts: shift-click no longer selects. The checkbox is an addition, not a replacement (ADR-0137).`)
 }
+// ADR-0138: and the card itself is clickable, not just the box. Cynthia asked for this the same
+// day the box shipped, because a 20px target in a corner is not "anywhere on the look".
+inspected++
+if (!/return 'select'\s*$/m.test(filter)) {
+  fail(`src/lib/lookCategoryFilter.ts: a click with tagging OFF no longer picks the look (ADR-0138). The first click on a card would do nothing again.`)
+}
+for (const rel of CARD_RENDERERS) {
+  const text = strip(readFileSync(ROOT + rel, 'utf8'))
+  inspected++
+  if (/tagging\s*\?\s*'cursor-pointer'/.test(text)) {
+    fail(`${rel}: the card only shows a pointer while tagging, so it does not look clickable when she is picking (ADR-0138).`)
+  }
+}
 
 if (inspected === 0) { console.error('\n❌ card-select: inspected nothing.\n'); process.exit(1) }
 console.log(`   ${inspected} file(s) inspected: ${CARD_RENDERERS.length} card renderer(s), the shared checkbox, and the shift-click rule`)

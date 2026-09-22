@@ -771,7 +771,7 @@ export function CategorizePanel() {
               ? `Tagging is on. Pick a category, then click ${mode} to add them to it or take them out.`
               : selected.size > 0
                 ? `${selected.size} selected. Click the category you want them in, then press the + button above. Your selection is kept.`
-                : `Click a category to see only its ${mode}. To file ${mode}, turn on Tag ${mode}.`}
+                : `Click a category to see only its ${mode}. Click a card to pick it. To file ${mode} as you click, turn on Tag ${mode}.`}
           </p>
           {/* Tagging is a switch she turns on, never a side effect of browsing. Off by default. */}
           <button
@@ -1101,7 +1101,7 @@ export function CategorizePanel() {
                   <div
                     key={item.id}
                     onClick={(e) => onCardClick(item, e.shiftKey)}
-                    className={`group relative ${tagging ? 'cursor-pointer' : ''} bg-white rounded-sm border-2 transition-all ${
+                    className={`group relative cursor-pointer bg-white rounded-sm border-2 transition-all ${
                       isSel ? 'border-[#1A1A1A]' : hasBrush ? 'border-[#F8E5E7]' : 'border-transparent hover:border-[#E8E4DF]'
                     }`}
                   >

@@ -58,9 +58,21 @@ export function filterByCategory<T extends { categoryIds: string[] }>(
 export type CardClick = 'select' | 'tag' | 'nothing'
 
 /**
- * What a click on a card does. Shift-click, or any click while a selection is open, selects.
- * Otherwise it tags ONLY when the switch is on and a category is picked. Everything else is a
- * no-op, which is the point: a click made while browsing can never re-file a look.
+ * What a click on a card does.
+ *
+ * WITH TAGGING OFF, A CLICK PICKS THE LOOK. ADR-0138. Cynthia Dada, 2026-09-22, on the checkbox
+ * that shipped that morning: "Would it be possible to just click anywhere on the look instead of
+ * ticking the box". Until now this returned 'nothing' in that state, so the FIRST click on a card
+ * did nothing at all and every click after the first one selected — the same invisible asymmetry
+ * the checkbox was added to fix, one layer up. The tick box stays: it is what shows a card can be
+ * picked, and it is the only way this works on an iPad.
+ *
+ * WITH TAGGING ON, A CLICK STILL FILES. That is ADR-0123 and it is not negotiable here: the rail
+ * used to re-file any look clicked under it, silently, which is the defect Cynthia reported on
+ * 2026-09-15. A stylist who deliberately turns the switch on is filing, not browsing.
+ *
+ * Shift-click, and any click while a selection is open, always selects. That is the muscle memory
+ * and it outranks everything.
  */
 export function cardClickAction(opts: {
   shiftKey: boolean
@@ -69,8 +81,9 @@ export function cardClickAction(opts: {
   categoryId: string | null
 }): CardClick {
   if (opts.shiftKey || opts.selecting) return 'select'
-  if (opts.tagging && opts.categoryId) return 'tag'
-  return 'nothing'
+  // Tagging on: file it, or do nothing until she has picked the category to file it into.
+  if (opts.tagging) return opts.categoryId ? 'tag' : 'nothing'
+  return 'select'
 }
 
 /**
