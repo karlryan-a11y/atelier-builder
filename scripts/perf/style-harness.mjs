@@ -63,11 +63,24 @@ const CLIENT = { id: 'harnessclient000000000001', name: 'Harness Client' }
 const N_ITEMS = 1300
 const TAGS = ['Tops', 'Pants', 'Skirts', 'Dresses', 'Shoes', 'Handbags', 'Jewelry', 'Jackets', 'Sweaters', 'Belts']
   .map((name, i) => ({ id: `tag${String(i).padStart(21, '0')}`, name }))
+// The rail's chips come from the pieces' own categories. A realistic HEAVY client, because that
+// is where the chips cost room: Danielle York carries 50 and Barbie 53 (measured 2026-09-23),
+// against a median of 14. ADR-0139 exists because a fixture of six hid that entirely.
+const HEAVY_CATEGORIES = [
+  '49ers', 'band-tees', 'belts', 'bodysuits', 'bolero', 'boots', 'bracelets', 'briefs',
+  'brooches', 'button-downs', 'coats', 'cropped', 'denim', 'dresses', 'earrings', 'flats',
+  'gloves', 'graphic-tees', 'handbags', 'hats', 'heel', 'high-top-sneakers', 'jackets',
+  'jewelry', 'jumpsuits', 'longsleeves', 'missing', 'necklaces', 'newly-added', 'outerwear',
+  'pants', 'pendants', 'question-mark', 'rings', 'sandals', 'scarves', 'sets', 'shoes',
+  'shorts', 'shortsleeves', 'skirts', 'sleeveless', 'sneakers', 'socks', 'sweaters',
+  'sweatshirts', 'tights', 'time-pieces', 'tops', 'vests',
+]
 const hex = (n) => n.toString(16).padStart(24, '0')
 const FILLER = 'x'.repeat(2400)
 const items = Array.from({ length: N_ITEMS }, (_, i) => ({
   id: hex(0xa0000 + i), client_id: CLIENT.id, name: `Piece ${i + 1}`, name_override: null,
-  style_note: i % 17 === 0 ? 'wear with heels' : null, category: null, custom_categories: i % 9 === 0 ? ['travel'] : [],
+  style_note: i % 17 === 0 ? 'wear with heels' : null,
+  category: HEAVY_CATEGORIES[i % HEAVY_CATEGORIES.length], custom_categories: i % 9 === 0 ? ['travel'] : [],
   category_suggested: null, brand: ['Chanel', 'Loro Piana', 'The Row', 'Khaite'][i % 4], color: ['Black', 'Ivory', 'Navy'][i % 3],
   color_family: null, color_families: null, color_audit: null, content_tag_ids: [TAGS[i % TAGS.length].id],
   is_deleted: false, transitioned_at: null, transition_reason: null, transition_source: null,
@@ -260,6 +273,51 @@ if (SHOT) {
   await page.waitForTimeout(3000)   // let the look-usage read land so the marks are on screen
   const rail = await page.$('.w-72')
   await (rail ?? page).screenshot({ path: SHOT })
+  // ADR-0139: on a heavy client the chips must not push the pieces off the bottom of the rail.
+  // Paige Berndt, 2026-09-23, on Danielle York: "I am unable to see pieces ... except for a tiny
+  // sliver of them in the corner". Measure what is actually on screen, in pixels.
+  const railView = () => page.evaluate(() => {
+    const rail = document.querySelector('.w-72')
+    if (!rail) return null
+    const r = rail.getBoundingClientRect()
+    const tiles = [...rail.querySelectorAll('[aria-roledescription="draggable"]')]
+    const visible = tiles.filter((t) => {
+      const b = t.getBoundingClientRect()
+      return b.top < r.bottom && b.bottom > r.top && b.height > 0
+    })
+    const chips = rail.querySelector('.flex.flex-wrap')
+    const toggle = [...rail.querySelectorAll('button')].find((b) => /categories/i.test(b.textContent ?? ''))
+    return {
+      chipPx: chips ? Math.round(chips.getBoundingClientRect().height) : 0,
+      chips: chips ? chips.querySelectorAll('button').length : 0,
+      tilesFullyVisible: visible.filter((t) => {
+        const b = t.getBoundingClientRect()
+        return b.top >= r.top && b.bottom <= r.bottom
+      }).length,
+      toggleText: toggle?.textContent?.trim() ?? null,
+      expanded: toggle?.getAttribute('aria-expanded') ?? null,
+    }
+  })
+  const collapsed = await railView()
+  console.log(`\n  heavy client (${collapsed.chips - 1} categories):`)
+  console.log(`    collapsed: chips ${collapsed.chipPx}px, ${collapsed.tilesFullyVisible} piece tiles fully visible, toggle "${collapsed.toggleText}"`)
+  if (collapsed.toggleText) {
+    const btn = [...(await page.$$('.w-72 button'))]
+    for (const b of btn) { if (/show all/i.test((await b.textContent()) ?? '')) { await b.click(); break } }
+    await page.waitForTimeout(600)
+    const opened = await railView()
+    console.log(`    expanded:  chips ${opened.chipPx}px, ${opened.tilesFullyVisible} piece tiles fully visible, toggle "${opened.toggleText}"`)
+    for (const b of [...(await page.$$('.w-72 button'))]) { if (/collapse/i.test((await b.textContent()) ?? '')) { await b.click(); break } }
+    await page.waitForTimeout(600)
+    const reclosed = await railView()
+    console.log(`    re-collapsed: chips ${reclosed.chipPx}px, ${reclosed.tilesFullyVisible} tiles fully visible`)
+    if (collapsed.tilesFullyVisible < 2) { console.error('FAIL - the pieces are a sliver even collapsed'); await browser.close(); server.kill(); process.exit(1) }
+    if (opened.chipPx <= collapsed.chipPx) { console.error('FAIL - "Show all" did not open the chips out'); await browser.close(); server.kill(); process.exit(1) }
+    if (reclosed.chipPx !== collapsed.chipPx) { console.error('FAIL - collapsing did not put it back'); await browser.close(); server.kill(); process.exit(1) }
+  } else {
+    console.error('FAIL - no collapse toggle on a 50-category client'); await browser.close(); server.kill(); process.exit(1)
+  }
+
   const marks = await page.evaluate(() => {
     const rail = document.querySelector('.w-72')
     const dots = [...(rail?.querySelectorAll('[title]') ?? [])].map((e) => e.getAttribute('title'))

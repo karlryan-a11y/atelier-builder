@@ -17,9 +17,9 @@
  * Two things are guarded, because this can go wrong in two ways:
  *
  *   1. THE SOURCE. The rail builds its chips from the client's OWN category counts, sorted by the
- *      label on screen, with no rollup structure and no fixed-vs-custom split, and the block it
- *      sits in has no inner max-height. A reintroduced `max-h-*` is the exact defect: the chips
- *      exist and cannot be seen.
+ *      label on screen, with no rollup structure and no fixed-vs-custom split. It may cap its
+ *      height ONLY if the collapsed state still scrolls and a control opens it out (ADR-0139,
+ *      after ADR-0136's outright ban on a cap cost Paige Berndt sight of her pieces).
  *   2. THE DATA, over every real client. For each one, how many distinct categories the rail
  *      would now offer versus how many the old rollup showed as a named bucket. A client whose
  *      chips do not cover every category her pieces carry is a failure.
@@ -64,10 +64,33 @@ if (/isFixedCategory/.test(src)) {
   fail(`${RAIL}: splitting categories into fixed and custom again. One flat list, like GoodPix.`)
 }
 checks++
-// The container the chips wrap inside must not cap its own height.
+// ADR-0139 CORRECTS THIS RULE. ADR-0136 banned an inner max-height outright, on the grounds that
+// a scroll box was what hid Cynthia's categories. That was half right and it broke the other
+// half: with no cap at all the chips ate the rail on the heavy clients and Paige Berndt could
+// not see the pieces she was styling (Danielle York, 50 categories). Measured: 121 of 134
+// clients never overflow, so the cap costs them nothing; the 13 that do are the ones being
+// styled.
+//
+// The rule is therefore not "no cap". It is: NOTHING MAY BE UNREACHABLE, and she must be able to
+// open it out. A cap is allowed only when the collapsed state scrolls AND a control removes it.
 const container = src.slice(src.indexOf('{categoryCounts.size > 0 &&'), src.indexOf('{/* Item grid */}'))
 if (/max-h-\d/.test(container)) {
-  fail(`${RAIL}: the category block has an inner max-height again, so the chips scroll inside a box and she cannot see them all. That IS the bug (ADR-0136).`)
+  if (!/overflow-y-auto/.test(container)) {
+    fail(`${RAIL}: the category block caps its height without scrolling, so some of her categories cannot be reached at all (ADR-0139).`)
+  }
+  if (!/catsExpanded/.test(container) || !/aria-expanded/.test(container)) {
+    fail(`${RAIL}: the category block is capped with no way to open it out. Cynthia asked for collapsible, not hidden (ADR-0139).`)
+  }
+}
+checks++
+if (!/localStorage/.test(src)) {
+  fail(`${RAIL}: the expanded choice is not remembered, so a stylist who opens the chips out has to do it again on every client (ADR-0139).`)
+}
+checks++
+// Measured, never guessed from a count: the chips wrap, so "Denim" and "High-Top-Sneakers" are
+// not the same width and a category threshold would be wrong on half the roster.
+if (!/scrollHeight/.test(src)) {
+  fail(`${RAIL}: whether the chips overflow is no longer measured. A category-count threshold cannot know how wide her labels are (ADR-0139).`)
 }
 checks++
 if (!/localeCompare/.test(src)) {

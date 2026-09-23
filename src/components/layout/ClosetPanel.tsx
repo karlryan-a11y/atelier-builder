@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, memo } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react'
 import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { categoriesOf, labelForCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
@@ -13,6 +13,9 @@ import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useItemLookUsage } from '@/hooks/useItemLookUsage'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
+
+/** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
+const CATS_EXPANDED_KEY = 'atelier.closetCategoriesExpanded'
 
 /**
  * One closet tile. MEMOISED, and every prop is either the cached item object (same identity
@@ -265,6 +268,32 @@ export function ClosetPanel() {
   // one read per client, shared through the Style cache, and it is read-only.
   const { byItem: lookUsage, error: usageError } = useItemLookUsage(activeClient?.id ?? null)
   const [unstyledOnly, setUnstyledOnly] = useState(false)
+  /**
+   * WHETHER THE CATEGORY CHIPS ARE OPENED OUT. ADR-0139.
+   *
+   * ADR-0136 took the height cap off so every category would be visible, and on a client with a
+   * lot of them the chips ate the rail: Paige Berndt on Danielle York, 2026-09-23, "I am unable
+   * to see pieces as I am on the canvas to style except for a tiny sliver of them in the corner".
+   * Measured across the 134 clients who have categories: the median is 14 and 121 of them are
+   * under 20, which is four rows and fine, but **Danielle York has 50 and Barbie 53** — around
+   * 400 and 530 pixels of chips in a 288px rail. The heavy clients are the ones being styled.
+   *
+   * So the cap comes back at the height it was before ADR-0136, where it had never been reported
+   * as a problem, and Cynthia Dada's own answer in that thread is what sits on top of it: "Maybe
+   * you could make it collapsable Karl? So that way we can have the categories all at the top
+   * when we need them but if they're in the way, we can collapse?"
+   *
+   * Collapsed still SCROLLS, so no category is unreachable either way; the toggle is about how
+   * much room the chips take, never about what exists. It is remembered per stylist, because
+   * whoever wants it open wants it open on every client.
+   */
+  const [catsExpanded, setCatsExpanded] = useState<boolean>(() => {
+    try { return localStorage.getItem(CATS_EXPANDED_KEY) === '1' } catch { return false }
+  })
+  const catsRef = useRef<HTMLDivElement>(null)
+  // Whether the chips actually overflow the collapsed height. Measured rather than guessed from a
+  // category count: the chips wrap, so "Denim" and "High-Top-Sneakers" are not the same width.
+  const [catsOverflow, setCatsOverflow] = useState(false)
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null)
   const [savingItem, setSavingItem] = useState(false)
   const [zoomIndex, setZoomIndex] = useState<number | null>(null)
@@ -346,6 +375,22 @@ export function ClosetPanel() {
     }
     return out.sort((a, b) => a.label.localeCompare(b.label))
   }, [categoryCounts])
+
+  // Does the collapsed block hide anything? Re-measured when her categories change or the panel
+  // is opened out, so the toggle only appears on the clients that need it.
+  useEffect(() => {
+    const el = catsRef.current
+    if (!el) { setCatsOverflow(false); return }
+    setCatsOverflow(el.scrollHeight > el.clientHeight + 1)
+  }, [chipCategories, catsExpanded])
+
+  function toggleCatsExpanded() {
+    setCatsExpanded((v) => {
+      const next = !v
+      try { localStorage.setItem(CATS_EXPANDED_KEY, next ? '1' : '0') } catch { /* private window */ }
+      return next
+    })
+  }
 
   function toggleCategory(slug: string) {
     setActiveCategories((prev) => {
@@ -479,7 +524,12 @@ export function ClosetPanel() {
           */}
           {categoryCounts.size > 0 && (
             <div className="px-3 py-2 border-b border-border">
-              <div className="flex flex-wrap gap-1">
+              {/*
+                Collapsed it scrolls, so every chip is still reachable; expanded it takes the room
+                it needs. `max-h-48` is the height this block had before ADR-0136, where it had
+                never been reported as a problem. ADR-0139.
+              */}
+              <div ref={catsRef} className={`flex flex-wrap gap-1 ${catsExpanded ? '' : 'max-h-48 overflow-y-auto'}`}>
                 <button
                   onClick={() => setActiveCategories(new Set())}
                   className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
@@ -509,6 +559,16 @@ export function ClosetPanel() {
                   )
                 })}
               </div>
+              {/* Only on the clients where it changes anything: 121 of 134 never overflow. */}
+              {(catsOverflow || catsExpanded) && (
+                <button
+                  onClick={toggleCatsExpanded}
+                  aria-expanded={catsExpanded}
+                  className="mt-1.5 text-[9px] tracking-[0.2em] uppercase text-text-muted/60 hover:text-text transition-colors"
+                >
+                  {catsExpanded ? 'Collapse categories' : `Show all ${chipCategories.length} categories`}
+                </button>
+              )}
             </div>
           )}
 
