@@ -36,6 +36,17 @@ export interface LookCategory {
    */
   is_residence: boolean
   /**
+   * WHICH SEASON THIS CATEGORY IS, if it is one. ADR-0147. 'ss' = Spring/Summer, 'fw' =
+   * Fall/Winter, null = not a season.
+   *
+   * A TAG A STYLIST SETS, never inferred from the slug. The lookbook used to test the slug
+   * against a hardcoded list, so `springsummer` was a season and `spring-summer` was not:
+   * measured over all 823 categories on 2026-09-23, 133 matched and 91 more obviously meant a
+   * season and did nothing, silently, on 34 clients. Same shape as is_residence, and for the
+   * same reason.
+   */
+  season: 'ss' | 'fw' | null
+  /**
    * Stylist-only note on how to style this category, e.g. "always a sports jacket, never
    * jeans" on Summit Club. Amaia asked for it: the rule lives in one stylist's head today,
    * so a second stylist covering her client cannot know it. NOT rendered on the client
@@ -151,7 +162,7 @@ export function useLookCategories(clientId: string | null) {
     const sort_order = categories.length
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order })
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, season, description, parent_slug').single()
     if (error || !data) { console.error('createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory
@@ -276,6 +287,21 @@ export function useLookCategories(clientId: string | null) {
     if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
     return plan
   }, [categories, looks, fetchAll, setCategories])
+
+  /**
+   * Tag a category as a season, or clear it. ADR-0147.
+   *
+   * Deliberately NOT confirmed, unlike the Home toggle. Ticking Home can switch a client's whole
+   * front page over, which is why planResidenceToggle asks first. A season tag changes how her
+   * Looks page GROUPS what is already there: nothing appears, nothing disappears, and re-ticking
+   * puts it back. A confirm on something that harmless teaches her to click through the one that
+   * is not.
+   */
+  const setCategorySeason = useCallback(async (id: string, season: 'ss' | 'fw' | null) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, season } : c)))
+    const { error } = await supabase.from('look_categories').update({ season }).eq('id', id)
+    if (error) { console.error('setCategorySeason:', error.message); await fetchAll() }
+  }, [fetchAll, setCategories])
 
   /**
    * Write the stylist note on a category. Deliberately SEPARATE from renameCategory rather
@@ -410,7 +436,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, error, categories, looks, capsules, draftCount,
-    createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
+    createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -451,7 +477,7 @@ export function useLookCategoryVocab(clientId: string | null) {
   const refetch = useCallback(async () => {
     if (!clientId) { setCategories([]); return }
     const { data } = await supabase.from('look_categories')
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
+      .select('id, slug, label, sort_order, is_hidden, is_residence, season, description, parent_slug')
       .eq('client_id', clientId).order('sort_order').order('label')
     setCategories((data ?? []) as LookCategory[])
   }, [clientId, setCategories])
@@ -465,7 +491,7 @@ export function useLookCategoryVocab(clientId: string | null) {
     if (existing) return existing
     const { data, error } = await supabase.from('look_categories')
       .insert({ client_id: clientId, slug, label: l, sort_order: categories.length })
-      .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug').single()
+      .select('id, slug, label, sort_order, is_hidden, is_residence, season, description, parent_slug').single()
     if (error || !data) { console.error('vocab createCategory:', error?.message); return null }
     setCategories((prev) => [...prev, data as LookCategory])
     return data as LookCategory

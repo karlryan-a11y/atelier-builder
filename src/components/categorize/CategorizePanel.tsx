@@ -105,7 +105,7 @@ function CategoryRow({ label, count, coverage, on, onClick }: {
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, deleteCategory, restoreCategory,
+    loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
@@ -831,6 +831,31 @@ export function CategorizePanel() {
                       her home page opens on one tile per home. Kept beside the pencil because
                       the two go together, and shown filled when on so the state is legible
                       without hovering, which does not exist on the tablet these are used on. */}
+                  {/*
+                    WHICH SEASON THIS IS, IF IT IS ONE. ADR-0147. One control cycling
+                    none -> Spring/Summer -> Fall/Winter -> none, rather than two buttons: a
+                    category is one season or neither, never both, and a cycle cannot express an
+                    impossible state. Shown only when it IS a season, or on hover, so 599 of the
+                    823 categories that are not seasonal stay quiet.
+
+                    No confirm, unlike Home. Ticking Home can switch a client's whole front page
+                    over. A season tag changes how her Looks page groups what is already there:
+                    nothing appears, nothing disappears, re-ticking puts it back.
+                  */}
+                  <button
+                    onClick={() => setCategorySeason(cat.id, cat.season === null || cat.season === undefined ? 'ss' : cat.season === 'ss' ? 'fw' : null)}
+                    className={`flex-none px-1 rounded text-[8px] tracking-[0.12em] uppercase transition-opacity ${cat.season ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    aria-label={cat.season === 'ss'
+                      ? `${cat.label} is a Spring/Summer category. Click to make it Fall/Winter.`
+                      : cat.season === 'fw'
+                        ? `${cat.label} is a Fall/Winter category. Click to stop it being a season.`
+                        : `Make ${cat.label} a Spring/Summer category`}
+                    title={cat.season
+                      ? `${cat.season === 'ss' ? 'Spring/Summer' : 'Fall/Winter'} — her Looks page groups by this. Click to change.`
+                      : 'Not a season. Click to tag it Spring/Summer, then Fall/Winter.'}
+                  >
+                    {cat.season === 'ss' ? 'SS' : cat.season === 'fw' ? 'FW' : '··'}
+                  </button>
                   <button
                     onClick={() => handleToggleHome(cat)}
                     className={`flex-none p-1 rounded transition-opacity ${cat.is_residence ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
