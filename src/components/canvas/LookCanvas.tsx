@@ -554,8 +554,11 @@ export function LookCanvas() {
 
   const images = useCanvasImages(imageUrlMap)
 
+  // ADR-0146: a hidden piece is not drawn, which also keeps it out of the saved picture, because
+  // that picture is this stage (render/composite.ts calls stage.toDataURL). It stays in
+  // `state.nodes`, so it stays in the look's piece list and the client can still shop it.
   const sortedNodes = useMemo(
-    () => [...state.nodes].sort((a, b) => a.z_index - b.z_index),
+    () => [...state.nodes].filter((n) => !(n.type === 'closet_item' && n.hidden)).sort((a, b) => a.z_index - b.z_index),
     [state.nodes]
   )
 

@@ -5,7 +5,7 @@ import {
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
   Sparkles, FilePlus, Bold, Underline, AlignCenter,
-  Eraser, BringToFront, SendToBack, Loader2,
+  Eraser, BringToFront, SendToBack, Loader2, EyeOff,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
@@ -288,6 +288,24 @@ export function CanvasToolbar() {
               title={selectedClosetItems.length > 1 ? `Flip ${selectedClosetItems.length} items horizontally (F)` : 'Flip horizontal (F)'}
             >
               <FlipHorizontal className="h-3.5 w-3.5 text-text-muted" />
+            </button>
+          )}
+
+          {/*
+            OFF THE BOARD, STILL IN THE LOOK. ADR-0146. Cynthia Dada, 2026-09-23: "I need to add
+            an image of this scarf tied around the waist but need to keep the item on the board
+            invisible so it's still linked to this look." Hiding is not deleting: the piece stays
+            in the look, so the client still sees it under Pieces in this look and can still shop
+            it. It comes back from the In this look panel, which is the only place a thing you
+            cannot see can be found again.
+          */}
+          {singleNode?.type === 'closet_item' && (
+            <button
+              onClick={() => updateNode(singleNode.id, { hidden: true } as Partial<ClosetItemNode>)}
+              className="p-1.5 hover:bg-tile rounded-sm transition-colors"
+              title="Hide on the board — the piece stays in the look and she can still shop it"
+            >
+              <EyeOff className="h-3.5 w-3.5 text-text-muted" />
             </button>
           )}
 

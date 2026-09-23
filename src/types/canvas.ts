@@ -33,6 +33,22 @@ export interface ClosetItemNode {
   /** When set by compose, the render layer computes scale = target_height / image.naturalHeight.
    *  Cleared on manual transform so user edits stick. */
   target_height?: number
+  /**
+   * OFF THE BOARD, STILL IN THE LOOK. ADR-0146.
+   *
+   * Cynthia Dada, 2026-09-23: "I need to add an image of this scarf tied around the waist but
+   * need to keep the item on the board invisible so it's still linked to this look."
+   *
+   * A hidden piece is not drawn and is not in the saved picture, but it IS still a node, and
+   * `closet_item_ids` is built from the nodes (hooks/useLooks.ts). So the client still sees the
+   * scarf under "Pieces in this look" and can still shop it, while the board shows the photo of
+   * it actually tied. Deleting the piece instead would break that link, which is the thing she
+   * was trying to avoid.
+   *
+   * Only a closet piece can be hidden. A plain picture has no link worth keeping, so hiding one
+   * would just be a confusing way to delete it.
+   */
+  hidden?: boolean
 }
 
 export interface TextNode {

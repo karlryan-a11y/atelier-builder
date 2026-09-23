@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, ChevronLeft, Layers, Image as ImageIcon, Copy } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Layers, Image as ImageIcon, Copy, Eye } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
 import { OMIT_LABEL, omittedHeadline } from '@/lib/restyleSelection'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import type { CanvasNode } from '@/types/canvas'
 
 
 interface LookItem { id: string; name: string; brand: string | null; image: string | null }
@@ -15,6 +16,7 @@ interface LookItem { id: string; name: string; brand: string | null; image: stri
 // canvas nodes live and resolves images the same way the collection does (proxy for digitized items).
 export function LookItemsPanel() {
   const nodes = useCanvasStore((s) => s.state.nodes)
+  const updateNodes = useCanvasStore((s) => s.updateNodes)
   const reference = useCanvasStore((s) => s.restyleReference)
   const [open, setOpen] = useState(true)
   const [items, setItems] = useState<LookItem[]>([])
@@ -26,6 +28,23 @@ export function LookItemsPanel() {
       if (n.type === 'closet_item' && !seen.has(n.closet_item_id)) { seen.add(n.closet_item_id); ids.push(n.closet_item_id) }
     }
     return ids
+  }, [nodes])
+
+  /**
+   * WHERE A HIDDEN PIECE IS FOUND AGAIN. ADR-0146.
+   *
+   * A piece hidden on the board cannot be clicked, so without this it would be gone for good and
+   * "hide" would be a trap rather than a tool. This list is the one place it still exists, which
+   * is also where it belongs: the panel's whole job is what is IN the look, and a hidden piece is
+   * still in the look.
+   */
+  const hiddenNodeIdsByItem = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const n of nodes) {
+      if (n.type !== 'closet_item' || !n.hidden) continue
+      m.set(n.closet_item_id, [...(m.get(n.closet_item_id) ?? []), n.id])
+    }
+    return m
   }, [nodes])
 
   useEffect(() => {
@@ -80,19 +99,34 @@ export function LookItemsPanel() {
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {items.length === 0 ? (
           <p className="text-[11px] text-[#bbb] px-1 pt-2 leading-relaxed">Add pieces to the board and they'll list here.</p>
-        ) : items.map((it) => (
-          <div key={it.id} className="flex items-center gap-2 p-1.5 rounded-sm hover:bg-[#F8F7F5]">
-            <div className="w-9 h-11 flex-none bg-[#F8F7F5] rounded-sm overflow-hidden flex items-center justify-center">
-              {it.image
-                ? <TileImage src={it.image} width={PIECE_TILE_WIDTH} alt={it.name} className="max-w-full max-h-full object-contain" loading="lazy" />
-                : <Layers className="h-3.5 w-3.5 text-[#ccc]" />}
+        ) : items.map((it) => {
+          const hiddenIds = hiddenNodeIdsByItem.get(it.id) ?? []
+          const isHidden = hiddenIds.length > 0
+          return (
+            <div key={it.id} className={`flex items-center gap-2 p-1.5 rounded-sm hover:bg-[#F8F7F5] ${isHidden ? 'opacity-55' : ''}`}>
+              <div className="w-9 h-11 flex-none bg-[#F8F7F5] rounded-sm overflow-hidden flex items-center justify-center">
+                {it.image
+                  ? <TileImage src={it.image} width={PIECE_TILE_WIDTH} alt={it.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                  : <Layers className="h-3.5 w-3.5 text-[#ccc]" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                {it.brand && <p className="text-[9px] tracking-[0.12em] uppercase text-[#999] truncate">{it.brand}</p>}
+                <p className="text-[11px] text-[#1A1A1A] truncate leading-tight">{it.name}</p>
+                {isHidden && <p className="text-[9px] tracking-[0.12em] uppercase text-[#bbb]">Hidden on the board</p>}
+              </div>
+              {isHidden && (
+                <button
+                  onClick={() => updateNodes(hiddenIds.map((id: string) => ({ id, updates: { hidden: false } as Partial<CanvasNode> })))}
+                  className="shrink-0 text-[#bbb] hover:text-[#1A1A1A]"
+                  title="Show on the board again"
+                  aria-label={`Show ${it.name} on the board again`}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <div className="min-w-0">
-              {it.brand && <p className="text-[9px] tracking-[0.12em] uppercase text-[#999] truncate">{it.brand}</p>}
-              <p className="text-[11px] text-[#1A1A1A] truncate leading-tight">{it.name}</p>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

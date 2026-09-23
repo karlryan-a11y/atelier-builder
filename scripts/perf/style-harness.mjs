@@ -36,6 +36,7 @@ const ASSERT = args.includes('--assert')
 const JSON_OUT = arg('--json', null)
 const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet rail and exit
 const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card checkbox and exit
+const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board and exit (ADR-0146)
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -485,6 +486,71 @@ if (SELECT_SHOT) {
   server.kill()
   if (!ok) { console.error('FAIL - a plain click does not pick exactly one look on both grids'); process.exit(1) }
   console.log('  PASS - picking one look is a click, on both card grids')
+  process.exit(0)
+}
+
+// ADR-0146: hiding a piece takes it OFF the board and leaves it IN the look. Driven rather than
+// asserted, because the value is entirely in the second half: the client must still see the piece
+// under "Pieces in this look" and still be able to shop it.
+if (HIDE_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.evaluate(({ board, url }) => {
+    const urls = Object.fromEntries(board.nodes.map((n) => [n.id, url]))
+    globalThis.__stores.canvas.getState().loadLook('harness-board', board, urls)
+  }, { board, url: PIECE_URL })
+  await page.waitForTimeout(1500)
+
+  const shape = () => page.evaluate(() => {
+    const st = globalThis.__stores.canvas.getState()
+    const nodes = st.state.nodes
+    const stage = globalThis.__Konva.stages[0]
+    return {
+      nodes: nodes.length,
+      hidden: nodes.filter((n) => n.type === 'closet_item' && n.hidden).length,
+      // what the look would be saved WITH: the same derivation hooks/useLooks.ts uses
+      linkedPieces: new Set(nodes.filter((n) => n.type === 'closet_item').map((n) => n.closet_item_id)).size,
+      drawn: stage ? stage.find('Image').filter((k) => k.isVisible()).length : -1,
+      panelRows: document.querySelectorAll('.w-52 .flex.items-center.gap-2.p-1\\.5').length,
+    }
+  })
+
+  const before = await shape()
+  // select the first piece on the board, then press Hide
+  const first = await page.evaluate(() => {
+    const st = globalThis.__stores.canvas.getState()
+    const n = st.state.nodes.find((x) => x.type === 'closet_item')
+    st.setSelectedNodeIds([n.id]); return n.id
+  })
+  await page.waitForTimeout(500)
+  let pressed = false
+  for (const b of await page.$$('button')) {
+    if (/hide on the board/i.test((await b.getAttribute('title')) ?? '')) { await b.click(); pressed = true; break }
+  }
+  await page.waitForTimeout(800)
+  const after = await shape()
+
+  // and back again, from the In this look panel
+  let restored = null
+  for (const b of await page.$$('button')) {
+    if (/show .* on the board again/i.test((await b.getAttribute('aria-label')) ?? '')) { await b.click(); break }
+  }
+  await page.waitForTimeout(800)
+  restored = await shape()
+
+  await page.screenshot({ path: HIDE_SHOT })
+  console.log(`\n  hide a piece (node ${first.slice(0, 10)}):`)
+  console.log(`    before: ${before.drawn} images drawn, ${before.linkedPieces} pieces linked to the look, ${before.hidden} hidden`)
+  console.log(`    after:  ${after.drawn} images drawn, ${after.linkedPieces} pieces linked to the look, ${after.hidden} hidden`)
+  console.log(`    back:   ${restored.drawn} images drawn, ${restored.linkedPieces} pieces linked to the look, ${restored.hidden} hidden`)
+  const ok = pressed
+    && after.drawn === before.drawn - 1
+    && after.linkedPieces === before.linkedPieces     // THE POINT: the link survives
+    && after.hidden === 1
+    && restored.drawn === before.drawn && restored.hidden === 0
+  await browser.close(); server.kill()
+  if (!ok) { console.error('FAIL - hiding did not take it off the board while leaving it in the look'); process.exit(1) }
+  console.log('  PASS - off the board, still in the look, and it comes back')
   process.exit(0)
 }
 
