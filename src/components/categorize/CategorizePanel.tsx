@@ -375,7 +375,18 @@ export function CategorizePanel() {
       // good pix and this is what showed up" — and the grid only when there is not.
       const board = await buildGoodPixBoard(look.id, look.closetItemIds)
       const imageUrls = await resolveClosetImageUrls(board.canvas)
-      useCanvasStore.getState().loadLookAsNew(board.canvas, imageUrls)
+      // REBUILD REPLACES, IT DOES NOT DUPLICATE. ADR-0148. Cynthia Dada, 2026-09-23: "I'm trying
+      // to update the pants in this look by restyling but when I go to save, it acts like I'm
+      // saving a new look, not updating a look." She was right: this used loadLookAsNew, so the
+      // save opened with an empty name, said Save rather than Update, and left her with two
+      // looks and a four-step dance to retire the first one by hand.
+      //
+      // Restyle, from the Transitions queue, has taken the original's place since ADR-0076: the
+      // new row inherits the published state, the slot and the category filing, and the original
+      // is archived and still recoverable. Nothing is overwritten, so 0076's zero-data-loss rule
+      // holds. There was never a reason for Rebuild to do less; the two paths look identical on
+      // screen and did opposite things.
+      useCanvasStore.getState().loadLookAsReplacement(look.id, [], board.canvas, imageUrls)
       useCanvasStore.getState().setRestyleReference({
         lookId: look.id, lookName: look.name, imageUrl: look.image ?? null,
         omitted: board.omitted, notInPicture: board.notInPicture, fromLayout: board.fromLayout,

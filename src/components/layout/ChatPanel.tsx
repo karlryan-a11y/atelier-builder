@@ -404,7 +404,10 @@ export function ChatPanel() {
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-30"
             >
               <Save className="h-3 w-3" />
-              {currentLookId ? 'Update Look' : 'Save Look'}
+              {/* A rebuild REPLACES the look it opened, so it updates from her point of view
+                  even though the row underneath is a new one (ADR-0148). Saying "Save" there is
+                  what made Cynthia think she was about to end up with two. */}
+              {currentLookId || replacesLookId ? 'Update Look' : 'Save Look'}
             </button>
             <button
               onClick={handleNewLook}
