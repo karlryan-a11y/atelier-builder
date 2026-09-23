@@ -65,7 +65,7 @@ const TAGS = ['Tops', 'Pants', 'Skirts', 'Dresses', 'Shoes', 'Handbags', 'Jewelr
   .map((name, i) => ({ id: `tag${String(i).padStart(21, '0')}`, name }))
 // The rail's chips come from the pieces' own categories. A realistic HEAVY client, because that
 // is where the chips cost room: Danielle York carries 50 and Barbie 53 (measured 2026-09-23),
-// against a median of 14. ADR-0139 exists because a fixture of six hid that entirely.
+// against a median of 14. ADR-0144 exists because a fixture of six hid that entirely.
 const HEAVY_CATEGORIES = [
   '49ers', 'band-tees', 'belts', 'bodysuits', 'bolero', 'boots', 'bracelets', 'briefs',
   'brooches', 'button-downs', 'coats', 'cropped', 'denim', 'dresses', 'earrings', 'flats',
@@ -273,7 +273,7 @@ if (SHOT) {
   await page.waitForTimeout(3000)   // let the look-usage read land so the marks are on screen
   const rail = await page.$('.w-72')
   await (rail ?? page).screenshot({ path: SHOT })
-  // ADR-0139: on a heavy client the chips must not push the pieces off the bottom of the rail.
+  // ADR-0144: on a heavy client the chips must not push the pieces off the bottom of the rail.
   // Paige Berndt, 2026-09-23, on Danielle York: "I am unable to see pieces ... except for a tiny
   // sliver of them in the corner". Measure what is actually on screen, in pixels.
   const railView = () => page.evaluate(() => {

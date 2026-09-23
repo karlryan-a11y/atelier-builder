@@ -269,7 +269,7 @@ export function ClosetPanel() {
   const { byItem: lookUsage, error: usageError } = useItemLookUsage(activeClient?.id ?? null)
   const [unstyledOnly, setUnstyledOnly] = useState(false)
   /**
-   * WHETHER THE CATEGORY CHIPS ARE OPENED OUT. ADR-0139.
+   * WHETHER THE CATEGORY CHIPS ARE OPENED OUT. ADR-0144.
    *
    * ADR-0136 took the height cap off so every category would be visible, and on a client with a
    * lot of them the chips ate the rail: Paige Berndt on Danielle York, 2026-09-23, "I am unable
@@ -527,7 +527,7 @@ export function ClosetPanel() {
               {/*
                 Collapsed it scrolls, so every chip is still reachable; expanded it takes the room
                 it needs. `max-h-48` is the height this block had before ADR-0136, where it had
-                never been reported as a problem. ADR-0139.
+                never been reported as a problem. ADR-0144.
               */}
               <div ref={catsRef} className={`flex flex-wrap gap-1 ${catsExpanded ? '' : 'max-h-48 overflow-y-auto'}`}>
                 <button
