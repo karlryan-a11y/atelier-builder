@@ -538,12 +538,29 @@ if (HIDE_SHOT) {
   await page.waitForTimeout(800)
   restored = await shape()
 
+  // Does `hidden` survive being saved and reopened? canvas_state is stored as JSON and loaded
+  // back whole, so this round-trips the board through exactly that to be sure the flag is not
+  // quietly dropped somewhere between the store and the page.
+  const roundTrip = await page.evaluate(() => {
+    const st = globalThis.__stores.canvas.getState()
+    const n = st.state.nodes.find((x) => x.type === 'closet_item')
+    st.updateNode(n.id, { hidden: true })
+    const saved = JSON.parse(JSON.stringify(globalThis.__stores.canvas.getState().state))
+    const urls = Object.fromEntries(saved.nodes.map((x) => [x.id, '/__harness/piece.png']))
+    globalThis.__stores.canvas.getState().loadLook('harness-board', saved, urls)
+    const back = globalThis.__stores.canvas.getState().state.nodes
+    return { savedHidden: saved.nodes.filter((x) => x.hidden).length, reopenedHidden: back.filter((x) => x.hidden).length }
+  })
+  await page.waitForTimeout(600)
+
   await page.screenshot({ path: HIDE_SHOT })
   console.log(`\n  hide a piece (node ${first.slice(0, 10)}):`)
   console.log(`    before: ${before.drawn} images drawn, ${before.linkedPieces} pieces linked to the look, ${before.hidden} hidden`)
   console.log(`    after:  ${after.drawn} images drawn, ${after.linkedPieces} pieces linked to the look, ${after.hidden} hidden`)
   console.log(`    back:   ${restored.drawn} images drawn, ${restored.linkedPieces} pieces linked to the look, ${restored.hidden} hidden`)
+  console.log(`    saved and reopened: ${roundTrip.savedHidden} hidden in canvas_state, ${roundTrip.reopenedHidden} after reload`)
   const ok = pressed
+    && roundTrip.savedHidden === 1 && roundTrip.reopenedHidden === 1
     && after.drawn === before.drawn - 1
     && after.linkedPieces === before.linkedPieces     // THE POINT: the link survives
     && after.hidden === 1
