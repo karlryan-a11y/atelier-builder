@@ -54,10 +54,18 @@ COMMENT ON COLUMN look_categories.season IS
 --   seasonSlugs map already matched, so the day after this runs those 75 clients behave as they
 --   did the day before.
 --
---   PASS 2 catches the ones the list missed and nobody would argue about: the season word as a
---   whole word inside the slug. `spring-summer`, `fall-winter`, `ss-2026-work`,
---   `fall-winter-elevated-casual`. It is still a stylist's to correct, and the Categorize control
---   is how she corrects it. A category that is ambiguous is left NULL rather than guessed.
+--   PASS 2 catches the ones the list missed and nobody would argue about: a slug that is NOTHING
+--   BUT season words. `spring-summer`, `fall-winter`, `fall-winter-2023`.
+--
+--   IT DELIBERATELY DOES NOT TAG A COMBINED CATEGORY. `fall-winter-work`,
+--   `spring-summer-elevated-casual`, `ss-2026-weekend` are an occasion with a season in the name,
+--   and tagging one would be destructive rather than merely wrong: a season leaves the category
+--   list to become the toggle, so tagging "Spring Summer Work" would take WORK off that client's
+--   category list altogether. Measured 2026-09-23: 99 of the 109 clients with seasons keep them
+--   standalone the way Janet Foutty does, and 10 build them this way -- Carol Carmany, Christina
+--   Klinepeter, Kristen Seeger Wilmette, Sarah Rodriguez, Kari Sheinfeld, Danelle Bender, James
+--   Walker, Ashley Averill, Linda Rutledge. Those ten are left exactly as they are today, and
+--   whether to restructure them is a stylist's decision, not a migration's.
 --
 -- Nothing here decides which season is CURRENT. That is a tag too, and a stylist sets it.
 
@@ -70,14 +78,15 @@ UPDATE look_categories SET season = 'fw'
  WHERE season IS NULL
    AND slug IN ('fall','winter','fw','fw24','fw25','fw26','fw27','fallwinter','cool-weather');
 
--- pass 2: the season word as a whole word anywhere in the slug, which the list missed
+-- pass 2: slugs made ENTIRELY of season words. The anchors are what keep an occasion out:
+-- 'fall-winter' matches, 'fall-winter-work' does not, because 'work' is not a season word.
 UPDATE look_categories SET season = 'ss'
  WHERE season IS NULL
-   AND slug ~ '(^|-)(ss|spring|summer)([0-9]{0,4})($|-)';
+   AND slug ~ '^(ss|spring|summer)[0-9]{0,4}(-(ss|spring|summer)[0-9]{0,4})*$';
 
 UPDATE look_categories SET season = 'fw'
  WHERE season IS NULL
-   AND slug ~ '(^|-)(fw|fall|winter|autumn)([0-9]{0,4})($|-)';
+   AND slug ~ '^(fw|fall|winter|autumn)[0-9]{0,4}(-(fw|fall|winter|autumn)[0-9]{0,4})*$';
 
 INSERT INTO schema_migrations (version, source, verified, note) VALUES
  ('027_category_season', 'atelier-builder/migrations',
