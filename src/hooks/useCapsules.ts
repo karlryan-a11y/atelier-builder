@@ -73,6 +73,10 @@ export function useCapsules(clientId: string | null) {
     name: string
     description?: string
     lookIds: string[]
+    /** The looks placed on a board capsule (ADR-0152), in raw.board_look_ids. Deliberately NOT
+     *  raw.look_ids: the client site draws a capsule that has look_ids as a collage of those
+     *  looks instead of the board picture the stylist composed, and that is Karl's call. */
+    boardLookIds?: string[]
     closetItemIds: string[]
     imageBase64?: string  // PNG base64 for the capsule hero
     canvasState?: any     // full canvas state — set for board-composed capsules so they can be re-opened/edited later
@@ -122,6 +126,7 @@ export function useCapsules(clientId: string | null) {
         ...(opts.existingRaw ?? {}),
         source: 'builder',
         look_ids: opts.lookIds,
+        ...(opts.boardLookIds ? { board_look_ids: opts.boardLookIds } : {}),
         ...(opts.canvasState ? { canvas_state: opts.canvasState } : {}),
         ...(imageR2Key ? {
           image_r2_key: imageR2Key,

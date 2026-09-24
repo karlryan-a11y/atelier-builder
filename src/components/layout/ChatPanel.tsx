@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStore, exportCanvasImage, settleCanvasTransforms } from '@/stores/canvasStore'
@@ -13,6 +13,9 @@ import { LookGallery } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
 import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
 import { SaveAsCapsuleDialog } from '@/components/canvas/SaveAsCapsuleDialog'
+import { AddLooksDialog } from '@/components/canvas/AddLooksDialog'
+import { addLooksToCapsuleBoard, isCapsuleBoard } from '@/lib/capsuleLooks'
+import { lookIdsOnBoard } from '@/lib/capsuleLayout'
 import {
   runComposePipeline,
   resolveDisambiguation,
@@ -38,9 +41,9 @@ export function ChatPanel() {
   // Narrow, shallow-compared subscription: a tap or drag on the board changes neither of these,
   // so it no longer re-renders this panel and its looks gallery. `nodes` changes only when a
   // piece is added, removed or moved.
-  const { currentLookId, replacesLookId, replacesSiblingLookIds, restyleReference, currentCapsuleId, replacesCapsuleId, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
+  const { currentLookId, replacesLookId, replacesSiblingLookIds, restyleReference, currentCapsuleId, replacesCapsuleId, buildingCapsule, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
     currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds, restyleReference: s.restyleReference,
-    currentCapsuleId: s.currentCapsuleId, replacesCapsuleId: s.replacesCapsuleId, isDirty: s.isDirty,
+    currentCapsuleId: s.currentCapsuleId, replacesCapsuleId: s.replacesCapsuleId, buildingCapsule: s.buildingCapsule, isDirty: s.isDirty,
     loadLook: s.loadLook, loadLookAsNew: s.loadLookAsNew, reset: s.reset, markClean: s.markClean,
     noteSavedAs: s.noteSavedAs, noteSavedCapsuleAs: s.noteSavedCapsuleAs, addNode: s.addNode,
   })))
@@ -50,6 +53,16 @@ export function ChatPanel() {
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
   const [showSaveAsCapsuleDialog, setShowSaveAsCapsuleDialog] = useState(false)
   const [savingCapsule, setSavingCapsule] = useState(false)
+  // ADR-0152: looks go ONTO a capsule. The board is a capsule when one is being edited, rebuilt
+  // or put together; a click on a look then adds it instead of replacing the board.
+  const onCapsule = isCapsuleBoard({ currentCapsuleId, replacesCapsuleId, buildingCapsule })
+  const looksOnBoard = useMemo(() => (onCapsule ? lookIdsOnBoard({ nodes }) : []), [onCapsule, nodes])
+  const [showAddLooks, setShowAddLooks] = useState(false)
+  const [addingLooks, setAddingLooks] = useState(false)
+  const [addLooksError, setAddLooksError] = useState<string | null>(null)
+  // A look she clicked while the board held unsaved work that is not a capsule: ask what she
+  // means rather than offering only "discard", which is what Cynthia was stuck with.
+  const [pendingLook, setPendingLook] = useState<LookRow | null>(null)
 
   // Compose state
   const [messages, setMessages] = useState<ComposeMessage[]>([])
@@ -248,27 +261,58 @@ export function ChatPanel() {
       name: data.name,
       description: data.description,
       lookIds: [],
+      boardLookIds: lookIdsOnBoard(canvasState),
       closetItemIds,
       imageBase64,
       canvasState,
       existingRaw: currentCapsule?.raw,
     })
 
-    // The board now IS the saved replacement, so a second Save updates it rather than inserting
-    // a third capsule and re-retiring an already-retired original.
-    if (replacesCapsuleId && saved?.data?.id) noteSavedCapsuleAs(saved.data.id)
+    // The board now IS the saved capsule, so the next Save updates it. This used to happen only
+    // after a replacement, so every fresh "Save as Capsule" pressed twice made a second capsule:
+    // Janet Foutty had five Denvers and five Cape Cods on 2026-09-24 (ADR-0152).
+    if (saved?.data?.id) {
+      noteSavedCapsuleAs(saved.data.id)
+      markClean()
+    }
 
     setSavingCapsule(false)
     setShowSaveAsCapsuleDialog(false)
-  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs])
+  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs, markClean])
 
-  const handleSelectLook = useCallback(async (look: LookRow) => {
-    if (isDirty && !confirm('You have unsaved changes. Discard and load this look?')) return
+  const handleAddLooks = useCallback(async (picked: LookRow[]) => {
+    if (picked.length === 0) return
+    setAddingLooks(true)
+    setAddLooksError(null)
+    try {
+      await addLooksToCapsuleBoard(picked)
+      setShowAddLooks(false)
+    } catch (e) {
+      setAddLooksError(e instanceof Error ? e.message : 'Could not add those looks.')
+    } finally {
+      setAddingLooks(false)
+    }
+  }, [])
+
+  const openLook = useCallback(async (look: LookRow) => {
     const canvasState = look.canvas_state as LookCanvasState | null
     if (!canvasState) return
     const newImageUrls = await resolveClosetImageUrls(canvasState)
     loadLook(look.id, canvasState, newImageUrls)
-  }, [isDirty, loadLook])
+  }, [loadLook])
+
+  // A click on a look. On a capsule it ADDS the look (ADR-0152). Anywhere else it opens the look,
+  // and if that would throw away unsaved work she is asked which she meant, with adding offered
+  // first, instead of a browser box whose only choices were discard or cancel.
+  const handleSelectLook = useCallback(async (look: LookRow) => {
+    if (onCapsule) {
+      if (looksOnBoard.includes(look.id)) return
+      await handleAddLooks([look])
+      return
+    }
+    if (isDirty && nodes.length > 0) { setPendingLook(look); return }
+    await openLook(look)
+  }, [onCapsule, looksOnBoard, handleAddLooks, isDirty, nodes.length, openLook])
 
   // Duplicate: load this look's items/layout onto the board as a NEW unsaved look so the stylist
   // can swap a few pieces and Save without touching the original.
@@ -451,7 +495,9 @@ export function ChatPanel() {
           <div className="px-3 py-2 border-b border-border flex items-center gap-2">
             <button
               onClick={() => setShowSaveDialog(true)}
-              disabled={nodes.length === 0}
+              // Several looks saved as ONE look is never what she means (ADR-0152).
+              disabled={nodes.length === 0 || buildingCapsule}
+              title={buildingCapsule ? 'This board is a capsule. Use Save as Capsule.' : undefined}
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-30"
             >
               <Save className="h-3 w-3" />
@@ -482,8 +528,22 @@ export function ChatPanel() {
           </div>
         )}
 
-        {/* Bundle several already-saved looks into a capsule grid */}
+        {/* Put any number of saved looks on this capsule, or start one (ADR-0152). */}
         {activeClient && looks.length > 0 && (
+          <div className="px-3 py-1.5 border-b border-border">
+            <button
+              onClick={() => { setAddLooksError(null); setShowAddLooks(true) }}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-[#1A1A1A] text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text"
+            >
+              + {onCapsule ? 'Add Looks to Capsule' : 'Start Capsule from Looks'}
+            </button>
+            {addingLooks && <p className="text-[9px] text-text-muted mt-1 text-center">Adding looks</p>}
+            {!showAddLooks && addLooksError && <p className="text-[9px] text-red-500 mt-1 text-center">{addLooksError}</p>}
+          </div>
+        )}
+
+        {/* Bundle several already-saved looks into a fixed picture grid (not editable later) */}
+        {activeClient && looks.length > 0 && !onCapsule && (
           <div className="px-3 py-1.5 border-b border-border">
             <button
               onClick={() => setShowCapsuleDialog(true)}
@@ -506,6 +566,17 @@ export function ChatPanel() {
             <p className="text-[9px] text-text-muted mt-0.5 leading-relaxed">
               These are its pieces on a fresh board. "Replace Capsule" puts this on her site in
               its place and keeps the original in Archived.
+            </p>
+          </div>
+        )}
+
+        {/* A capsule she is putting together from looks and has not saved yet (ADR-0152). */}
+        {buildingCapsule && (
+          <div className="px-3 py-2 border-b border-border bg-tile/50">
+            <p className="text-[10px] tracking-[0.2em] uppercase text-text-muted/60">New Capsule</p>
+            <p className="text-[11px] font-medium text-text">{looksOnBoard.length} {looksOnBoard.length === 1 ? 'look' : 'looks'} on the board</p>
+            <p className="text-[9px] text-text-muted mt-0.5 leading-relaxed">
+              Click a look to add it. "Save as Capsule" saves it, and saving again updates the same capsule.
             </p>
           </div>
         )}
@@ -541,6 +612,8 @@ export function ChatPanel() {
               error={looksError}
               onRetry={() => { void fetchLooks() }}
               currentLookId={currentLookId}
+              onBoardIds={looksOnBoard}
+              addMode={onCapsule}
               onSelect={handleSelectLook}
               onDuplicate={handleDuplicateLook}
               onDelete={(id) => deleteLook(id)}
@@ -692,6 +765,55 @@ export function ChatPanel() {
           onSave={handleSave}
           onClose={() => setShowSaveDialog(false)}
         />
+      )}
+
+      {showAddLooks && (
+        <AddLooksDialog
+          looks={looks}
+          onBoard={looksOnBoard}
+          startsCapsule={!onCapsule}
+          adding={addingLooks}
+          error={addLooksError}
+          onAdd={(picked) => { void handleAddLooks(picked) }}
+          onClose={() => setShowAddLooks(false)}
+        />
+      )}
+
+      {pendingLook && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-sm shadow-xl w-[400px] mx-4 p-5 space-y-3">
+            <p className="text-sm font-medium text-[#1A1A1A]">{pendingLook.name}</p>
+            <p className="text-[12px] leading-relaxed text-[#666]">
+              The board has changes that are not saved. Do you want to put this look on the board with
+              them, as a capsule, or open it on its own?
+            </p>
+            {currentLook && (
+              <p className="text-[11px] leading-relaxed text-[#888]">
+                Adding makes a new capsule. The changes go into the capsule, not into {currentLook.name}.
+              </p>
+            )}
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={() => { const l = pendingLook; setPendingLook(null); void handleAddLooks([l]) }}
+                className="w-full py-2.5 bg-[#1A1A1A] text-white text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#333]"
+              >
+                Add to the board as a capsule
+              </button>
+              <button
+                onClick={() => { const l = pendingLook; setPendingLook(null); void openLook(l) }}
+                className="w-full py-2.5 border border-[#E8E4DF] text-[11px] tracking-[0.15em] uppercase rounded-sm hover:bg-[#F8F7F5]"
+              >
+                Open it instead and lose the changes
+              </button>
+              <button
+                onClick={() => setPendingLook(null)}
+                className="w-full py-2 text-[11px] tracking-[0.15em] uppercase text-[#888] hover:text-[#1A1A1A]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showCapsuleDialog && (
