@@ -31,7 +31,7 @@ interface EditItemDialogProps {
    *  Passing false is a CLAIM — say why in a comment, and note that a surface which shows this field
    *  must also FETCH color_family + color_families, or it saves an empty set over real data. */
   enableMultiColor?: boolean
-  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
+  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; description: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
   onClose: () => void
   /** When provided, shows a "Remove BG" button that strips the item's image to transparent. */
   onRemoveBackground?: () => void
@@ -69,6 +69,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   const [brand, setBrand] = useState(item.brand ?? '')
   const [color, setColor] = useState(item.color ?? '')
   const [styleNote, setStyleNote] = useState(item.style_note ?? '')
+  const [description, setDescription] = useState(item.description ?? '')
   const [category, setCategory] = useState(item.category ?? '')
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -116,6 +117,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       brand: brand.trim() || null,
       color: color.trim() || null,
       style_note: styleNote.trim() || null,
+      description: description.trim() || null,
       category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
       // Only the Collection tab manages "Also in"; when disabled, omit the key so other
       // consumers' saves never touch custom_categories.
@@ -303,6 +305,25 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
             />
           )}
 
+          {/* HERS, then OURS. The pair is the design: the only thing that stops a stylist writing
+              "she hates the neckline, keep for resale" in the box the client reads is seeing the
+              two of them together, each with its own caption. ADR-0151. */}
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder='e.g. "Whiskey houndstooth wool, three-quarter sleeve, ruffled hem at mid-calf"'
+              rows={3}
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
+            />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+              Shown to the client on her piece, and searchable by you both
+            </p>
+          </div>
+
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
               Internal Note
@@ -317,7 +338,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
             {/* Every other field on this dialog IS client-facing (name, brand, color, category).
                 This one deliberately is not — say so, or stylists assume the client reads it. */}
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
-              Team only — never shown to the client
+              Team only — never shown to the client, and never in her search
             </p>
           </div>
         </div>

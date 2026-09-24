@@ -118,6 +118,9 @@ async function publish(body: any) {
   const color = String(body.color || '').trim() || null
   const category = String(body.category || '').trim().toLowerCase() || null
   const styleNote = String(body.style_note || '').trim() || null
+  // Client-visible description (migration 028, ADR-0151). Separate from style_note on purpose:
+  // one is hers to read and search, the other is team-only and she can do neither with it.
+  const description = String(body.description || '').trim() || null
   // The colour SET (ADR-0115), primary first. Palette values only, deduped, empties dropped — the
   // same posture as "Also in" below.
   const colors: string[] = [...new Set(
@@ -133,12 +136,12 @@ async function publish(body: any) {
       .filter((c: string) => c && c !== category),
   )]
   const patch = {
-    name, brand, color, category, style_note: styleNote,
+    name, brand, color, category, style_note: styleNote, description,
     custom_categories: customCategories,
     color_family: colors[0] ?? null,
     color_families: colors.slice(1),
     is_deleted: false, // now LIVE
-    raw: { item_name: name, brand, color, colors, category, style_note: styleNote, custom_categories: customCategories, manual_add: true },
+    raw: { item_name: name, brand, color, colors, category, style_note: styleNote, description, custom_categories: customCategories, manual_add: true },
   }
   const resp = await rest(`gp_closet_items?id=eq.${id}&is_deleted=eq.true`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
   if (!resp.ok) throw new Error(`publish failed: ${await resp.text()}`)

@@ -21,7 +21,7 @@ import { r2ImageUrl } from '@/lib/imageUrls'
  * the identical picture as the full raw (0 mismatches).
  */
 export const CLOSET_SELECT =
-  'id, client_id, name, name_override, style_note, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
+  'id, client_id, name, name_override, style_note, description, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
   'raw_image:raw->>image, raw_processed_image:raw->>processed_image, raw_image0:raw->images->>0, ' +
   'primary_image_hash, processed_image_hash, source, added_at'
 

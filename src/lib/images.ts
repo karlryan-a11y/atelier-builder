@@ -15,6 +15,12 @@ export interface ClosetItem {
   name_override?: string | null
   /** Stylist-only note pinned to this garment (e.g. "must be styled with heels"). */
   style_note?: string | null
+  /**
+   * CLIENT-VISIBLE description of the garment (fabric, pattern, cut, length). Shown on her piece
+   * sheet and searched by her as well as by the team. The team-only field is `style_note`, which
+   * she can neither see nor search. Migration 028, ADR-0151.
+   */
+  description?: string | null
   /** Stylist garment-category override (Phase B). Wins over auto-detection; the
    *  lookbook Collection sidebar reads it. Scraper never writes it. */
   category?: string | null

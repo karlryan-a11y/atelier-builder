@@ -5,16 +5,18 @@ import { useLookCategoryVocab } from '@/hooks/useLookCategories'
 
 interface SaveLookDialogProps {
   initialName: string
+  initialClientNote: string
   initialNotes: string
   initialTags: string[]
   saving: boolean
-  onSave: (data: { name: string; notes: string; tags: string[] }) => void
+  onSave: (data: { name: string; notes: string; clientNote: string; tags: string[] }) => void
   onClose: () => void
 }
 
-export function SaveLookDialog({ initialName, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
+export function SaveLookDialog({ initialName, initialClientNote, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
   const [name, setName] = useState(initialName)
   const [notes, setNotes] = useState(initialNotes)
+  const [clientNote, setClientNote] = useState(initialClientNote)
   const [tags, setTags] = useState<string[]>(initialTags)
 
   const activeClient = useClientStore((s) => s.activeClient)
@@ -123,6 +125,22 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
             </div>
           </div>
 
+          {/* HERS, THEN OURS. gp_looks.notes_client has existed on all 15,785 live looks since the
+              beginning and is filled on ZERO of them: written by nothing, shown by nothing. Same
+              as the piece's internal note being empty on all 1,077 of Peyton's. A field nobody
+              can find anything with is a field nobody fills. ADR-0151. */}
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Note for her</label>
+            <textarea
+              value={clientNote}
+              onChange={(e) => setClientNote(e.target.value)}
+              placeholder='e.g. "Dinner in Positano. Flat sandals, hair up."'
+              rows={2}
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
+            />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client under this look</p>
+          </div>
+
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Internal Notes</label>
             <textarea
@@ -143,7 +161,7 @@ export function SaveLookDialog({ initialName, initialNotes, initialTags, saving,
             Cancel
           </button>
           <button
-            onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, tags })}
+            onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, clientNote, tags })}
             disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
           >

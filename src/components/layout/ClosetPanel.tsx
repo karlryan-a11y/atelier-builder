@@ -12,6 +12,7 @@ import { EditItemDialog } from './EditItemDialog'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useItemLookUsage } from '@/hooks/useItemLookUsage'
+import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
@@ -400,17 +401,22 @@ export function ClosetPanel() {
     })
   }
 
+  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => ({
+    name: i.name, nameOverride: i.name_override, brand: i.brand, color: i.color,
+    description: i.description, internalNote: i.style_note,
+    categories: categoriesByItem.get(i.id) ?? [],
+    tags: (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
+  }), [categoriesByItem, tagNameById])
+
   const filtered = useMemo(() => {
     let result = items
+    // ONE MATCHER, TEAM AUDIENCE (ADR-0151). This rail used to read four fields with its own
+    // substring test, which is why a piece findable in Categorize was not findable here. Near
+    // misses are folded IN on the rail rather than shown separately: she is dragging pieces onto
+    // a board, not auditing a list, and a second grid in a 320px rail helps nobody.
     if (search) {
-      const q = search.toLowerCase()
-      result = result.filter(
-        (i) =>
-          displayName(i).toLowerCase().includes(q) ||
-          i.name?.toLowerCase().includes(q) ||
-          i.brand?.toLowerCase().includes(q) ||
-          i.color?.toLowerCase().includes(q)
-      )
+      const { full, near } = searchPieces(result, search, fieldsOf, 'team')
+      result = [...full, ...near]
     }
     if (activeCategories.size > 0) {
       // Multi-select unions: show an item if ANY of its categories is selected.
@@ -421,7 +427,7 @@ export function ClosetPanel() {
     // unpublished, which is a different job, so it stays out of this list (ADR-0134).
     if (unstyledOnly) result = result.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none')
     return result
-  }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage])
+  }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage, fieldsOf])
 
   // The line under the grid, over whatever she has filtered to.
   const coverage = useMemo(() => styledCoverage(filtered.map((i) => i.id), lookUsage), [filtered, lookUsage])

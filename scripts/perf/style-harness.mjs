@@ -39,6 +39,7 @@ const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card chec
 const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board and exit (ADR-0146)
 const FILING_SHOT = arg('--filing-shot', null)   // drive the Save box's categories and exit (ADR-0149)
 const SEARCH_SHOT = arg('--search-shot', null)   // drive Categorize's look search and exit (ADR-0150)
+const DESC_SHOT = arg('--desc-shot', null)       // drive the piece description + search and exit (ADR-0151)
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -82,8 +83,11 @@ const hex = (n) => n.toString(16).padStart(24, '0')
 const FILLER = 'x'.repeat(2400)
 const items = Array.from({ length: N_ITEMS }, (_, i) => ({
   id: hex(0xa0000 + i), client_id: CLIENT.id, name: `Piece ${i + 1}`, name_override: null,
-  style_note: i % 17 === 0 ? 'wear with heels' : null,
+  style_note: i === 5 ? 'she hates the neckline, keep for resale' : (i % 17 === 0 ? 'wear with heels' : null),
   category: HEAVY_CATEGORIES[i % HEAVY_CATEGORIES.length], custom_categories: i % 9 === 0 ? ['travel'] : [],
+  // ADR-0151: one piece carries the word only in its DESCRIPTION and one only in the TEAM note,
+  // so the two audiences can be told apart by what they can find.
+  description: i === 3 ? 'Whiskey houndstooth wool, three-quarter sleeve, ruffled hem at mid-calf' : null,
   category_suggested: null, brand: ['Chanel', 'Loro Piana', 'The Row', 'Khaite'][i % 4], color: ['Black', 'Ivory', 'Navy'][i % 3],
   color_family: null, color_families: null, color_audit: null, content_tag_ids: [TAGS[i % TAGS.length].id],
   is_deleted: false, transitioned_at: null, transition_reason: null, transition_source: null,
@@ -532,6 +536,67 @@ if (SELECT_SHOT) {
   if (!ok) { console.error('FAIL - a plain click does not pick exactly one look on both grids'); process.exit(1) }
   console.log('  PASS - picking one look is a click, on both card grids')
   process.exit(0)
+}
+
+// ADR-0151: one matcher, every field — and the team's note is the team's alone.
+//
+// Maegan Watson, 2026-09-24: "we have to be able to search houndstooth and the dress shows up."
+// Driven on the real rail because the whole claim is "type a word and it finds it whichever
+// field the word is in", and only the running app can answer that.
+if (DESC_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+
+  const box = await page.$('input[placeholder="Search pieces..."]')
+  const names = () => page.evaluate(() => {
+    const rail = document.querySelector('input[placeholder="Search pieces..."]')?.closest('aside, div[class*="w-"]')
+    const scope = rail ?? document
+    return [...scope.querySelectorAll('p')].map((e) => e.textContent.trim()).filter((t) => /^Piece \d+$/.test(t))
+  })
+  const type = async (q) => {
+    await box.click({ clickCount: 3 }); await page.keyboard.press('Backspace')
+    if (q) await box.type(q, { delay: 25 })
+    await page.waitForTimeout(650)
+    return names()
+  }
+
+  const all = await names()
+  const byName = await type('Piece 4')
+  const byBrand = await type('khaite')
+  const byColour = await type('ivory')
+  const byCategory = await type('denim')
+  const byDescription = await type('houndstooth')     // ONLY in Piece 4's description
+  const byDescription2 = await type('mid-calf')
+  const byInternal = await type('resale')             // ONLY in Piece 6's team note
+  const nearMiss = await type('houndstooth wool zebra')
+  const nothing = await type('zzzz')
+  await type('')
+
+  await page.screenshot({ path: DESC_SHOT })
+  const n = (a) => a.length
+  console.log(`\n  the canvas rail, ${n(all)} pieces in view:`)
+  console.log(`    "Piece 4"                -> ${n(byName)}   (name)`)
+  console.log(`    "khaite"                 -> ${n(byBrand)}   (brand)`)
+  console.log(`    "ivory"                  -> ${n(byColour)}   (colour)`)
+  console.log(`    "denim"                  -> ${n(byCategory)}   (category)`)
+  console.log(`    "houndstooth"            -> ${n(byDescription)}   ${byDescription.join(', ')}   (DESCRIPTION only)`)
+  console.log(`    "mid-calf"               -> ${n(byDescription2)}   ${byDescription2.join(', ')}   (description, hyphenated)`)
+  console.log(`    "resale"                 -> ${n(byInternal)}   ${byInternal.join(', ')}   (TEAM note only)`)
+  console.log(`    "houndstooth wool zebra" -> ${n(nearMiss)}   ${nearMiss.join(', ')}   (2 of 3 words: near)`)
+  console.log(`    "zzzz"                   -> ${n(nothing)}`)
+
+  const ok = n(all) > 20
+    && n(byName) >= 1 && n(byBrand) > 0 && n(byColour) > 0 && n(byCategory) > 0
+    && n(byDescription) === 1 && byDescription[0] === 'Piece 4'
+    && n(byDescription2) === 1 && byDescription2[0] === 'Piece 4'
+    && n(byInternal) === 1 && byInternal[0] === 'Piece 6'
+    && n(nearMiss) === 1 && nearMiss[0] === 'Piece 4'
+    && n(nothing) === 0
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - a word is found whichever field it is in, and a near miss is not an empty page.\n`)
+  console.log(`  ${DESC_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
 }
 
 // ADR-0150: she can find one look by name, and open it from a piece that is in it.
