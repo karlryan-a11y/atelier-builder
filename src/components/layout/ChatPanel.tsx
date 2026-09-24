@@ -8,6 +8,7 @@ import { useLooks } from '@/hooks/useLooks'
 import { useCapsules } from '@/hooks/useCapsules'
 import { supabase } from '@/lib/supabase'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
+import { readLookFiling, applyLookFiling } from '@/lib/lookFiling'
 import { LookGallery } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
 import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
@@ -72,6 +73,37 @@ export function ChatPanel() {
   // The canvas store already carries its name for the panel beside the board; that is the name.
   const restyledLookName = replacesLookId ? restyleReference?.lookName ?? '' : ''
 
+  /**
+   * WHERE THIS BOARD'S LOOK IS ALREADY FILED, read from `look_category_assignments` — the table
+   * Categorize and the client's Looks page actually file by. ADR-0149.
+   *
+   * Read for the look being EDITED and for the one being REPLACED alike. A replacement has no
+   * `currentLookId` (ADR-0076 inserts a new row), which is why the box used to open with every
+   * pill blank on a look that was already in three categories. Cynthia Dada, 2026-09-24: "This
+   * look was already in a category but I'm not sure what."
+   *
+   * Loaded here rather than inside the dialog so the same value is both what she is SHOWN and the
+   * baseline the save diffs against — one read, so the screen and the write cannot disagree.
+   * `lookFilingOk` is false only when the read failed; the save then adds and never removes.
+   */
+  const filedLookId = currentLookId ?? replacesLookId
+  const [lookFiling, setLookFiling] = useState<string[]>([])
+  const [lookFilingOk, setLookFilingOk] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const f = await readLookFiling(filedLookId, activeClient?.id ?? null)
+      if (cancelled) return
+      // A look filed in nothing falls back to its old `tags`, so the 72 looks that were ticked
+      // into a column nothing files by still open with their pills on — and the next save files
+      // them for real. Without this, ADR-0149 would blank the very looks it exists to explain.
+      const legacy = looks.find((l) => l.id === filedLookId)?.tags ?? []
+      setLookFiling(f.labels.length ? f.labels : legacy)
+      setLookFilingOk(f.ok)
+    })()
+    return () => { cancelled = true }
+  }, [filedLookId, activeClient?.id, looks])
+
   // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -125,10 +157,28 @@ export function ChatPanel() {
     // look and retiring an original that is already retired.
     if (replacesLookId && saved?.data?.id) noteSavedAs(saved.data.id)
 
+    // FILE IT WHERE SHE SAID. The pills used to write `gp_looks.tags` only, which nothing files
+    // by — 72 live looks were tagged and in no category at all on 2026-09-24 (ADR-0149). Last,
+    // and deliberately: saveLook has already run replaceTransitionedLook, which copies the
+    // original's filing onto the new row, so this is the stylist's word over the inherited one.
+    // Never fatal — the look IS saved, and a filing that did not stick must not read as a lost
+    // restyle.
+    const savedId = saved?.data?.id
+    if (savedId) {
+      try {
+        await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFiling : [], data.tags)
+        const f = await readLookFiling(savedId, activeClient.id)
+        setLookFiling(f.labels)
+        setLookFilingOk(f.ok)
+      } catch (e) {
+        console.error('Filing the look failed (look saved):', e)
+      }
+    }
+
     markClean()
     setSaving(false)
     setShowSaveDialog(false)
-  }, [activeClient, currentLookId, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user])
+  }, [activeClient, currentLookId, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
@@ -635,7 +685,7 @@ export function ChatPanel() {
         <SaveLookDialog
           initialName={currentLook?.name || restyledLookName}
           initialNotes={currentLook?.notes_internal ?? ''}
-          initialTags={currentLook?.tags ?? []}
+          initialTags={lookFiling}
           saving={saving}
           onSave={handleSave}
           onClose={() => setShowSaveDialog(false)}

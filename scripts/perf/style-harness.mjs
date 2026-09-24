@@ -37,6 +37,7 @@ const JSON_OUT = arg('--json', null)
 const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet rail and exit
 const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card checkbox and exit
 const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board and exit (ADR-0146)
+const FILING_SHOT = arg('--filing-shot', null)   // drive the Save box's categories and exit (ADR-0149)
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -121,7 +122,16 @@ const cats = ['Office', 'Weekend', 'Travel', 'Evening', 'Aspen', 'Palm Beach'].m
   id: hex(0xd0000 + i), client_id: CLIENT.id, slug: label.toLowerCase().replace(/\s+/g, '-'), label, sort_order: i,
   is_hidden: false, is_residence: false, description: null, parent_slug: null,
 }))
-const TABLES = { gp_closet_items: items, gp_content_tags: TAGS, gp_looks: looks, looks, gp_boards: boards, look_categories: cats }
+// ADR-0149: where a look is FILED. Harness Look 1 sits in Office and Travel, so the Save box has
+// something real to open with and something real to take away.
+const assignments = [
+  { look_id: looks[0].id, category_id: cats[0].id },   // Office
+  { look_id: looks[0].id, category_id: cats[2].id },   // Travel
+]
+const TABLES = { gp_closet_items: items, gp_content_tags: TAGS, gp_looks: looks, looks, gp_boards: boards, look_categories: cats, look_category_assignments: assignments }
+
+/** Every write the app made, in order. Filled by handleRest; read by --filing-shot. */
+const writes = []
 
 // ── a tiny PostgREST ─────────────────────────────────────────────────────────
 function splitTop(s) {
@@ -168,9 +178,44 @@ function matches(row, key, val) {
   if (op === 'cs') return true
   return true
 }
-function handleRest(url, method, headers) {
+function handleRest(url, method, headers, body) {
   const table = url.pathname.split('/').pop()
   const rows = TABLES[table] ?? []
+  // WRITES. The mock used to answer every non-GET with `[]`, which meant a save returned no row
+  // and nothing downstream of it could be driven at all. It now applies the write and echoes it,
+  // the way PostgREST does with `return=representation`, and records it for the assertions.
+  if (method === 'POST' || method === 'PATCH' || method === 'DELETE') {
+    let parsed = null
+    try { parsed = body ? JSON.parse(body) : null } catch { /* not JSON */ }
+    const list = Array.isArray(parsed) ? parsed : parsed ? [parsed] : []
+    const eqOf = (k) => { const v = url.searchParams.get(k); return v?.startsWith('eq.') ? v.slice(3) : null }
+    if (method === 'DELETE') {
+      const keep = rows.filter((r) => {
+        for (const [k, v] of url.searchParams) {
+          if (['select', 'order', 'offset', 'limit', 'columns', 'on_conflict'].includes(k)) continue
+          if (!matches(r, k, v)) return true      // not matched by the filter: keep it
+        }
+        return false
+      })
+      const removed = rows.length - keep.length
+      if (TABLES[table]) TABLES[table].splice(0, rows.length, ...keep)
+      writes.push({ table, method, removed, query: url.search })
+    } else {
+      for (const r of list) {
+        const idKey = 'id' in r ? 'id' : null
+        const i = idKey ? rows.findIndex((x) => x[idKey] === r[idKey])
+          : rows.findIndex((x) => x.look_id === r.look_id && x.category_id === r.category_id)
+        if (i >= 0) rows[i] = { ...rows[i], ...r }
+        else if (method === 'POST') rows.push({ ...r })
+        else { const j = rows.findIndex((x) => x.id === eqOf('id')); if (j >= 0) rows[j] = { ...rows[j], ...r } }
+      }
+      writes.push({ table, method, rows: list.length, ids: list.map((r) => r.id ?? `${r.look_id}:${r.category_id}`) })
+    }
+    const h = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' }
+    const echo = method === 'DELETE' ? [] : list.map((r) => ({ ...(rows.find((x) => x.id === r.id) ?? r) }))
+    if (/vnd\.pgrst\.object/.test(headers.accept ?? '')) return { status: 200, headers: h, body: JSON.stringify(echo[0] ?? null) }
+    return { status: 200, headers: h, body: JSON.stringify(echo) }
+  }
   const params = url.searchParams
   let result = rows.filter((r) => {
     for (const [k, v] of params) {
@@ -188,7 +233,6 @@ function handleRest(url, method, headers) {
     'content-range': `${result.length ? offset : '*'}-${result.length ? offset + result.length - 1 : ''}/${/count=/.test(headers.prefer ?? '') ? total : '*'}`.replace('*-/', '*/'),
   }
   if (method === 'HEAD') return { status: 200, headers: h, body: '' }
-  if (method !== 'GET') return { status: 200, headers: h, body: '[]' }
   if (/vnd\.pgrst\.object/.test(headers.accept ?? '')) return { status: 200, headers: h, body: JSON.stringify(result[0] ?? null) }
   return { status: 200, headers: h, body: JSON.stringify(result) }
 }
@@ -247,7 +291,7 @@ await page.route('**/*', async (route) => {
     let res
     if (url.pathname === '/auth/v1/user') res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify(USER) }
     else if (url.pathname === '/rest/v1/users') res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ id: 'harness-user', email: USER.email, display_name: 'Harness', role: 'admin' }) }
-    else if (url.pathname.startsWith('/rest/v1/')) res = handleRest(url, r.method(), headers)
+    else if (url.pathname.startsWith('/rest/v1/')) res = handleRest(url, r.method(), headers, r.postData())
     else res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: '{}' }
     const bytes = Buffer.byteLength(res.body ?? '')
     net.requests++
@@ -487,6 +531,104 @@ if (SELECT_SHOT) {
   if (!ok) { console.error('FAIL - a plain click does not pick exactly one look on both grids'); process.exit(1) }
   console.log('  PASS - picking one look is a click, on both card grids')
   process.exit(0)
+}
+
+// ADR-0149: the Save box's CATEGORIES pills mean the same thing as Categorize's pills.
+//
+// Cynthia Dada, 2026-09-24: "When I go to update, it asks me to add to a category. This look was
+// already in a category but I'm not sure what. Can it just stay in the categories it was in?"
+//
+// Driven, not asserted from the source, because the two halves that were broken are both things
+// you can only see by doing it: WHICH PILLS ARE ON when the box opens on a REBUILD, and WHICH
+// TABLE the save writes to. The board is loaded as a replacement — no currentLookId, exactly the
+// case she hit — of Harness Look 1, which is filed in Office and Travel.
+if (FILING_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.evaluate(({ board, url, lookId, name }) => {
+    const urls = Object.fromEntries(board.nodes.map((n) => [n.id, url]))
+    globalThis.__stores.canvas.getState().loadLookAsReplacement(lookId, [], board, urls)
+    // loadLookAsReplacement clears the reference, so set it after: this is what CategorizePanel
+    // does on a real Rebuild, and it is where the look's own NAME comes from (ADR-0132).
+    globalThis.__stores.canvas.getState().setRestyleReference({ lookId, lookName: name, imageUrl: null, omitted: [], notInPicture: [], fromLayout: false, covers: 1 })
+  }, { board, url: PIECE_URL, lookId: looks[0].id, name: looks[0].name })
+  await page.waitForTimeout(1800)
+
+  const openSave = async () => {
+    for (const b of await page.$$('button')) {
+      const t = (await b.innerText().catch(() => '')) ?? ''
+      if (/^(update look|save look)$/i.test(t.trim())) { await b.click(); return t.trim() }
+    }
+    return null
+  }
+  const buttonLabel = await openSave()
+  await page.waitForTimeout(900)
+
+  // What the box says, and which pills it opened with.
+  // Scoped to the dialog, and to its round pills only: the app behind it has a Travel chip on the
+  // closet rail and a nav full of buttons, and grabbing those would grade the wrong thing.
+  const pillState = () => page.evaluate(() => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    if (!dlg) return null
+    const name = dlg.querySelector('input')?.value ?? ''
+    const pills = [...dlg.querySelectorAll('button.rounded-full')]
+      .map((b) => ({ label: b.textContent.trim(), on: b.className.includes('text-white') }))
+    return { name, pills }
+  })
+  const opened = await pillState()
+
+  const clickPill = (label) => page.evaluate((l) => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    const b = [...(dlg?.querySelectorAll('button.rounded-full') ?? [])].find((x) => x.textContent.trim() === l)
+    if (!b) return false
+    b.click(); return true
+  }, label)
+  // Take one away, add one that was never on. Both directions, in one save.
+  const unticked = await clickPill('Travel')
+  const ticked = await clickPill('Evening')
+  await page.waitForTimeout(300)
+  const edited = await pillState()
+
+  writes.length = 0
+  await page.evaluate(() => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    const b = [...(dlg?.querySelectorAll('button') ?? [])].find((x) => x.textContent.trim().toUpperCase() === 'SAVE')
+    b?.click()
+  })
+  await page.waitForTimeout(2500)
+  await page.screenshot({ path: FILING_SHOT })
+
+  const filingWrites = writes.filter((w) => w.table === 'look_category_assignments')
+  const newLookId = TABLES.looks.find((l) => l.id !== looks[0].id && l.name === opened?.name)?.id ?? null
+  const filedNow = TABLES.look_category_assignments
+    .filter((a) => a.look_id === (newLookId ?? looks[0].id))
+    .map((a) => cats.find((c) => c.id === a.category_id)?.label)
+    .sort()
+
+  const onAtOpen = (opened?.pills ?? []).filter((p) => p.on).map((p) => p.label).sort()
+  const onAtSave = (edited?.pills ?? []).filter((p) => p.on).map((p) => p.label).sort()
+
+  console.log(`\n  the Save box on a REBUILD of "${looks[0].name}" (filed: Office, Travel):`)
+  console.log(`    button says:      ${buttonLabel}`)
+  console.log(`    name box:         "${opened?.name ?? '(none)'}"`)
+  console.log(`    pills ON at open: ${onAtOpen.join(', ') || '(none)'}`)
+  console.log(`    after unticking Travel and ticking Evening: ${onAtSave.join(', ') || '(none)'}`)
+  console.log(`    writes to look_category_assignments: ${filingWrites.length ? filingWrites.map((w) => `${w.method} ${w.rows ?? w.removed}`).join(', ') : '(none)'}`)
+  console.log(`    filed after save: ${filedNow.join(', ') || '(none)'}`)
+
+  const ok = buttonLabel?.toLowerCase() === 'update look'
+    && opened?.name === looks[0].name
+    && onAtOpen.join(',') === 'Office,Travel'          // THE POINT: it opens with its filing on
+    && unticked && ticked
+    && onAtSave.join(',') === 'Evening,Office'
+    && filingWrites.some((w) => w.method === 'POST')
+    && filingWrites.some((w) => w.method === 'DELETE' && w.removed === 1)
+    && filedNow.join(',') === 'Evening,Office'         // and the table says what the screen said
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - the box opens with the look's filing on, and saving writes it.\n`)
+  console.log(`  ${FILING_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
 }
 
 // ADR-0146: hiding a piece takes it OFF the board and leaves it IN the look. Driven rather than
