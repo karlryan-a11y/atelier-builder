@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { Plus, Tag, X, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
+import { Plus, Tag, X, Search, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { LoadError } from '@/components/common/LoadError'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
@@ -25,6 +25,7 @@ import type { QueueCard } from '@/lib/transitionQueue'
 import { selectRestylePieces, type RestylePiece } from '@/lib/restyleSelection'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
+import { searchByName } from '@/lib/lookSearch'
 import { hasResidences, residencesFrom } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
@@ -149,6 +150,11 @@ export function CategorizePanel() {
   const [tagging, setTagging] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<Status>('draft')
+  // ADR-0150. Cynthia Dada, 2026-09-24: "Can we please add the ability to search for look names?
+  // I need to search for 182 and 175 to change the pants out." Her workaround was Chrome's Find
+  // bar. Deliberately NOT in the URL or persisted: a stylist who leaves a filter behind by
+  // accident sees a short list and reads it as looks missing, which is the bug ADR-0136 was.
+  const [search, setSearch] = useState('')
   const [newCat, setNewCat] = useState('')
   const [editing, setEditing] = useState<string | null>(null) // category ID being renamed
   const [editVal, setEditVal] = useState('')
@@ -398,6 +404,25 @@ export function CategorizePanel() {
     }
   }
 
+  /**
+   * Open a look from the Collection tab's "Styled in N looks" list. ADR-0150.
+   *
+   * Deliberately the SAME handler the Looks grid uses, not a second route onto the canvas.
+   * ADR-0148 exists because there were two ways in that looked identical and did opposite
+   * things; a third would be the same mistake again. So this resolves the id to the look
+   * Categorize already holds and hands it to handleRebuildLook, which replaces rather than
+   * duplicates.
+   *
+   * The usage map and this list are read from gp_looks with nearly the same filters, so a miss
+   * is rare. It is still possible (a look archived in another tab since the page loaded), and
+   * it says so rather than doing nothing, which is indistinguishable from a broken button.
+   */
+  function handleOpenLookFromPiece(lookId: string) {
+    const look = looks.find((l) => l.id === lookId)
+    if (!look) { alert('That look is no longer in this list. Refresh Categorize and try again.'); return }
+    void handleRebuildLook(look)
+  }
+
   function handleRenameLook(look: TaggableLook) {
     const name = prompt('Rename look', look.name)
     if (name !== null) renameLook(look.id, name)
@@ -434,7 +459,15 @@ export function CategorizePanel() {
   )
   // Then by the category picked in the rail, unless tagging is on (tagging needs every card).
   const visible = useMemo(
-    () => filterByCategory(inStatus, activeBrush, categories, tagging),
+    // Search LAST, over whatever the status pills and the category rail left. The three compose:
+    // "the drafts in Evening called 182" is one question, and she can ask it. (ADR-0150)
+    () => searchByName(filterByCategory(inStatus, activeBrush, categories, tagging), search),
+    [inStatus, activeBrush, categories, tagging, search],
+  )
+  // What search alone removed, so the empty state can tell her the search is why, rather than
+  // leaving her looking at a blank grid wondering where her looks went.
+  const beforeSearch = useMemo(
+    () => filterByCategory(inStatus, activeBrush, categories, tagging).length,
     [inStatus, activeBrush, categories, tagging],
   )
   const filtering = !!activeBrush && !tagging
@@ -968,7 +1001,7 @@ export function CategorizePanel() {
               .map((m) => (
               <button
                 key={m}
-                onClick={() => { setMode(m); setSelected(new Set()); setTagging(false) }}
+                onClick={() => { setMode(m); setSelected(new Set()); setTagging(false); setSearch('') }}
                 className={`relative px-4 py-1.5 text-[12px] tracking-[0.18em] uppercase rounded transition-colors ${mode === m ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A]'}`}
               >
                 {m}
@@ -992,6 +1025,34 @@ export function CategorizePanel() {
               >{s.label}</button>
             ))}
           </div>
+          )}
+
+          {/* SEARCH BY NAME. ADR-0150. Sits beside the status pills because it narrows the same
+              list they do, and it carries a count so she can see it working without counting
+              tiles. The clear button is not decoration: a search left behind reads as missing
+              looks. */}
+          {(mode === 'looks' || mode === 'capsules') && (
+            <div className="relative flex items-center">
+              <Search className="absolute left-2.5 w-3.5 h-3.5 text-[#bbb] pointer-events-none" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={mode === 'looks' ? 'Search look names…' : 'Search capsule names…'}
+                aria-label={mode === 'looks' ? 'Search look names' : 'Search capsule names'}
+                className="w-[210px] pl-8 pr-16 py-1.5 text-[12px] bg-[#F8F7F5] rounded border border-transparent focus:border-[#E8E4DF] focus:bg-white focus:outline-none placeholder:text-[#bbb]"
+              />
+              {search && (
+                <div className="absolute right-1.5 flex items-center gap-1">
+                  <span className="text-[10px] text-[#888] tabular-nums">{visible.length}</span>
+                  <button
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
+                    className="p-0.5 text-[#bbb] hover:text-[#1A1A1A] transition-colors"
+                  ><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+            </div>
           )}
 
           {(selectAllText || selected.size > 0) && (
@@ -1072,17 +1133,30 @@ export function CategorizePanel() {
               onCategoryCounts={onGarmentCounts}
               onCategoryCoverage={onGarmentCoverage}
               onTransitioned={transitions.refetch}
+              onOpenLook={handleOpenLookFromPiece}
             />
           ) : loading ? (
             <p className="text-[#888] text-sm">Loading…</p>
           ) : loadError ? (
             <LoadError what={mode === 'capsules' ? 'the capsules' : 'the looks'} onRetry={() => { void refetch() }} />
           ) : visible.length === 0 ? (
+            /* A search that finds nothing must SAY it was the search, and offer the way out.
+               An unexplained empty grid is what a stylist reads as "my looks are gone". */
+            search && beforeSearch > 0 ? (
+              <p className="text-[#888] text-sm">
+                Nothing named “{search}” in this view.{' '}
+                <button onClick={() => setSearch('')} className="underline hover:text-[#1A1A1A]">
+                  Clear the search
+                </button>{' '}
+                to see all {beforeSearch}.
+              </p>
+            ) : (
             <p className="text-[#888] text-sm">
               {filtering
                 ? `No ${mode} in ${activeBrushLabel} in this view.`
                 : status === 'draft' ? `No ${mode} waiting in the queue, all caught up.` : `No ${mode} here.`}
             </p>
+            )
           ) : (mode === 'looks' || mode === 'capsules') && status === 'published' ? (
             <LookArrangeGrid
               items={visible as (TaggableLook | TaggableCapsule)[]}

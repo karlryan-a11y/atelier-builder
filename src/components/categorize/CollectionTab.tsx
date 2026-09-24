@@ -28,7 +28,7 @@ const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', c
 // Each item's garment category is resolved with the SAME resolver as the lookbook + Style canvas
 // (override → tag → name), so GoodPix carry-overs categorize too. Reports counts up for the rail
 // filter and accepts a garment-category filter.
-export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned }: {
+export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned, onOpenLook }: {
   clientId: string | null
   filterCategories?: Set<string>
   /**
@@ -41,6 +41,18 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   onCategoryCoverage?: (coverage: Map<string, StyledCoverage>) => void
   /** Called after a stylist transitions a piece out, so the Transitions tab + badge refresh live. */
   onTransitioned?: () => void
+  /**
+   * Open one of the looks in the "Styled in N looks" list on the canvas, ready to change.
+   * ADR-0150. Cynthia Dada, 2026-09-24: "If we can edit looks from the back end where we click
+   * on the garment and it shows what looks they're styled in, that would be even better."
+   *
+   * Half of that has existed since ADR-0103: the piece card already says "Styled in 4 looks" and
+   * opens a list of exactly those looks. The list was a dead end — pictures she could look at and
+   * not act on, so finding the look and then opening it were two different jobs in two tabs.
+   * The panel owns the rebuild (it needs the look's piece list and the canvas store), so it hands
+   * it down rather than this tab reaching for the store itself.
+   */
+  onOpenLook?: (lookId: string) => void
 }) {
   const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(clientId)
   const { activeClient } = useClientStore()
@@ -742,19 +754,38 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
             </div>
             <div className="overflow-y-auto p-5">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {looksModal.looks.map((lk) => (
-                  <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
-                    <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
-                      {lk.image
-                        ? <TileImage src={lk.image} width={LOOK_TILE_WIDTH} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
-                        : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
-                    </div>
-                    <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2">
-                      {lk.name}
-                      {!lk.published && <span className="ml-1.5 text-[10px] tracking-[0.14em] uppercase text-[#9a6b3f]">Draft</span>}
-                    </p>
-                  </div>
-                ))}
+                {looksModal.looks.map((lk) => {
+                  const body = (
+                    <>
+                      <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
+                        {lk.image
+                          ? <TileImage src={lk.image} width={LOOK_TILE_WIDTH} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                          : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
+                      </div>
+                      <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2 text-left">
+                        {lk.name}
+                        {!lk.published && <span className="ml-1.5 text-[10px] tracking-[0.14em] uppercase text-[#9a6b3f]">Draft</span>}
+                      </p>
+                    </>
+                  )
+                  if (!onOpenLook) {
+                    return <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">{body}</div>
+                  }
+                  return (
+                    <button
+                      key={lk.id}
+                      type="button"
+                      onClick={() => { setLooksModal(null); onOpenLook(lk.id) }}
+                      title={`Open "${lk.name}" on the canvas to change it`}
+                      className="group block w-full border border-[#E8E4DF] rounded-sm overflow-hidden bg-white text-left hover:border-[#1A1A1A] focus:outline-none focus:border-[#1A1A1A] transition-colors cursor-pointer"
+                    >
+                      {body}
+                      <span className="block px-2.5 pb-2 text-[9px] tracking-[0.16em] uppercase text-[#bbb] group-hover:text-[#1A1A1A] transition-colors">
+                        Open on canvas
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>

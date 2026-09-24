@@ -38,6 +38,7 @@ const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet
 const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card checkbox and exit
 const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board and exit (ADR-0146)
 const FILING_SHOT = arg('--filing-shot', null)   // drive the Save box's categories and exit (ADR-0149)
+const SEARCH_SHOT = arg('--search-shot', null)   // drive Categorize's look search and exit (ADR-0150)
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -531,6 +532,124 @@ if (SELECT_SHOT) {
   if (!ok) { console.error('FAIL - a plain click does not pick exactly one look on both grids'); process.exit(1) }
   console.log('  PASS - picking one look is a click, on both card grids')
   process.exit(0)
+}
+
+// ADR-0150: she can find one look by name, and open it from a piece that is in it.
+//
+// Cynthia Dada, 2026-09-24: "Can we please add the ability to search for look names? I need to
+// search for 182 and 175 ... If we can edit looks from the back end where we click on the garment
+// and it shows what looks they're styled in, that would be even better."
+//
+// Driven rather than asserted, because "the grid narrows as I type" and "the tile opens the look"
+// are both things only a real browser can answer. The fixture's 40 looks are named Harness Look 1
+// to 40, which reproduces the shape of her problem exactly: typing 1, then 18, then 18 must
+// narrow 40 -> 13 -> 1 (Look 1/10-19, then 18, then 18 alone at "182" has no match, so the test
+// uses 1 -> 1x -> 18).
+if (SEARCH_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.evaluate(() => globalThis.__stores.view.getState().setStyleTab('categorize'))
+  await page.waitForTimeout(2500)
+
+  const box = await page.$('input[aria-label="Search look names"]')
+  if (!box) { console.log('\n  FAIL - no search box in Categorize.\n'); await browser.close(); stop(); process.exit(1) }
+
+  // Left on the default QUEUE view on purpose: the 20 drafts are what a stylist actually opens
+  // Categorize to work through, and the assertions below are relative, so they hold whatever the
+  // status pill is set to.
+  // SCOPED TO THE CATEGORIZE COLUMN. The canvas rail on the right lists all 40 looks too, and it
+  // stays mounted across a tab switch on purpose (check-style-tabs-mounted). Scraping the whole
+  // page therefore reads 40 whatever the grid is showing, which is how the first run of this
+  // said PASS-shaped numbers for a filter that was working perfectly.
+  const namesOnScreen = () => page.evaluate(() => {
+    const input = document.querySelector('input[aria-label="Search look names"]')
+    const col = input?.closest('div.flex-1.flex.flex-col')
+    if (!col) return []
+    return [...new Set([...col.querySelectorAll('p,div,span')]
+      .map((e) => e.textContent.trim())
+      .filter((t) => /^Harness Look \d+$/.test(t)))]
+  })
+
+  const type = async (q) => {
+    await box.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    if (q) await box.type(q, { delay: 40 })
+    await page.waitForTimeout(700)
+    return namesOnScreen()
+  }
+
+  const all = await namesOnScreen()
+  const one = await type('1')
+  const oneEight = await type('18')
+  const eighteen = await type('Harness Look 18')
+  const reordered = await type('18 harness')
+  void one
+  const nothing = await type('zzz')
+  const emptyMsg = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('p')].find((e) => /Nothing named/.test(e.textContent))
+    return el ? el.textContent.replace(/\s+/g, ' ').trim() : null
+  })
+  await type('')
+  const cleared = await namesOnScreen()
+
+  // Now the other half: Collection -> a piece -> "Styled in N looks" -> click a tile.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().toLowerCase() === 'collection')
+    b?.click()
+  })
+  await page.waitForTimeout(3000)
+  const usageBtn = await page.evaluateHandle(() =>
+    [...document.querySelectorAll('button')].find((b) => /Styled in \d+ look|In \d+ draft look/.test(b.textContent)) ?? null)
+  const hasUsage = await usageBtn.evaluate((e) => !!e)
+  let modalTiles = 0, opensOnCanvas = false, replaces = null
+  if (hasUsage) {
+    await usageBtn.asElement().click()
+    await page.waitForTimeout(900)
+    modalTiles = await page.evaluate(() =>
+      [...document.querySelectorAll('button')].filter((b) => /Open on canvas/.test(b.textContent)).length)
+    if (modalTiles > 0) {
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find((x) => /Open on canvas/.test(x.textContent))
+        b?.click()
+      })
+      await page.waitForTimeout(2500)
+      const st = await page.evaluate(() => {
+        const c = globalThis.__stores.canvas.getState()
+        return { replaces: c.replacesLookId, current: c.currentLookId, nodes: c.state.nodes.length, tab: globalThis.__stores.view.getState().styleTab }
+      })
+      opensOnCanvas = st.tab === 'canvas' && st.nodes > 0
+      replaces = st
+    }
+  }
+  await page.screenshot({ path: SEARCH_SHOT })
+
+  const n = (a) => a.length
+  console.log(`\n  searching the ${n(all)} looks in Categorize's queue:`)
+  console.log(`    ""                  -> ${n(all)}`)
+  console.log(`    "1"                 -> ${n(one)}`)
+  console.log(`    "18"                -> ${n(oneEight)}  ${oneEight.join(', ')}`)
+  console.log(`    "Harness Look 18"   -> ${n(eighteen)}  ${eighteen.join(', ')}`)
+  console.log(`    "18 harness"        -> ${n(reordered)}  ${reordered.join(', ')}   (word order must not matter)`)
+  console.log(`    "zzz"               -> ${n(nothing)}   message: ${emptyMsg ?? '(none)'}`)
+  console.log(`    cleared             -> ${n(cleared)}`)
+  console.log(`\n  a piece's "Styled in N looks" list: ${hasUsage ? 'found' : 'NOT FOUND'}, ${modalTiles} openable tile(s)`)
+  if (replaces) console.log(`    clicked one -> tab=${replaces.tab}, ${replaces.nodes} pieces on the board, replacesLookId=${replaces.replaces ? 'set' : 'NULL'}, currentLookId=${replaces.current ?? 'null'}`)
+
+  const ok = n(all) > 1                                  // there is a list to narrow
+    && n(one) < n(all)                                   // typing narrows
+    && n(oneEight) < n(one)                              // and narrows again
+    && n(eighteen) === 1 && eighteen[0] === 'Harness Look 18'   // down to the one she wanted
+    && n(reordered) === 1 && reordered[0] === eighteen[0]       // word order does not matter
+    && n(nothing) === 0 && !!emptyMsg                    // and an empty result says WHY
+    && /Clear the search/.test(emptyMsg)
+    && n(cleared) === n(all)                             // clearing puts every look back
+    && hasUsage && modalTiles > 0 && opensOnCanvas
+    && !!replaces?.replaces && !replaces?.current      // REPLACES, does not duplicate (ADR-0148)
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - the grid narrows as she types, and a piece's look opens on the canvas as a replacement.\n`)
+  console.log(`  ${SEARCH_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
 }
 
 // ADR-0149: the Save box's CATEGORIES pills mean the same thing as Categorize's pills.
