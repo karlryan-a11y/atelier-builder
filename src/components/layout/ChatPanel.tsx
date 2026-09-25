@@ -122,7 +122,7 @@ export function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSave = useCallback(async (data: { name: string; notes: string; clientNote: string; tags: string[] }) => {
+  const handleSave = useCallback(async (data: { name: string; notes: string; clientNote: string; tags: string[]; toTry: boolean }) => {
     if (!activeClient) return
     setSaving(true)
 
@@ -163,6 +163,7 @@ export function ChatPanel() {
       tags: data.tags,
       notesInternal: data.notes,
       notesClient: data.clientNote,
+      toTry: data.toTry,
       imageBase64,
       createdBy: authUserId ?? undefined,
     })
@@ -759,6 +760,7 @@ export function ChatPanel() {
         <SaveLookDialog
           initialName={currentLook?.name || restyledLookName}
           initialClientNote={currentLook?.notes_client ?? ''}
+          initialToTry={!!currentLook?.to_try_at}
           initialNotes={currentLook?.notes_internal ?? ''}
           initialTags={lookFiling}
           saving={saving}

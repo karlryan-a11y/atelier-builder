@@ -6,17 +6,19 @@ import { useLookCategoryVocab } from '@/hooks/useLookCategories'
 interface SaveLookDialogProps {
   initialName: string
   initialClientNote: string
+  initialToTry: boolean
   initialNotes: string
   initialTags: string[]
   saving: boolean
-  onSave: (data: { name: string; notes: string; clientNote: string; tags: string[] }) => void
+  onSave: (data: { name: string; notes: string; clientNote: string; tags: string[]; toTry: boolean }) => void
   onClose: () => void
 }
 
-export function SaveLookDialog({ initialName, initialClientNote, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
+export function SaveLookDialog({ initialName, initialClientNote, initialToTry, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
   const [name, setName] = useState(initialName)
   const [notes, setNotes] = useState(initialNotes)
   const [clientNote, setClientNote] = useState(initialClientNote)
+  const [toTry, setToTry] = useState(initialToTry)
   const [tags, setTags] = useState<string[]>(initialTags)
 
   const activeClient = useClientStore((s) => s.activeClient)
@@ -72,6 +74,25 @@ export function SaveLookDialog({ initialName, initialClientNote, initialNotes, i
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
             />
           </div>
+
+          {/* TO BE TRIED, directly under the name. ADR-0153. This is the moment she knows the
+              answer: she has just freestyled the look and is typing its name. Anywhere else and
+              it becomes a second trip. 478 looks currently say "to be tried" in their NAME
+              because there was nowhere to put it. */}
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={toTry}
+              onChange={(e) => setToTry(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-none accent-[#1A1A1A] cursor-pointer"
+            />
+            <span>
+              <span className="text-[12px] text-text block">To be tried</span>
+              <span className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 block mt-0.5">
+                She has not tried this on yet
+              </span>
+            </span>
+          </label>
 
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Categories</label>
@@ -161,7 +182,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialNotes, i
             Cancel
           </button>
           <button
-            onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, clientNote, tags })}
+            onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, clientNote, tags, toTry })}
             disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
           >
