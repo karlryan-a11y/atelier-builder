@@ -11,7 +11,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
 import { styleFromPastLooks } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
-import type { ClosetItemNode, TextNode } from '@/types/canvas'
+import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
 import { BOARD_PRESETS } from '@/types/canvas'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -40,9 +40,8 @@ const TEXT_COLORS = [
 
 export function CanvasToolbar() {
   const {
-    state, selectedNodeIds, updateNode, removeNodes, duplicateNodes,
-    moveLayer, setNodeImageUrl, flipNodes, addNode, undo, redo, past, future, alignNodes, distributeNodes,
-    isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit, rememberTextStyle,
+    state, selectedNodeIds, setNodeImageUrl, addNode, undo, redo, past, future,
+    isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
   // ✨ steps through real looks with the same mix: the same pieces pressed again = the next look.
@@ -76,13 +75,11 @@ export function CanvasToolbar() {
 
   const selectedNodes = selectedNodeIds
     .map((id) => state.nodes.find((n) => n.id === id))
-    .filter(Boolean)
+    .filter((n): n is CanvasNode => !!n)
 
-  const singleNode = selectedNodes.length === 1 ? selectedNodes[0] : null
   const hasSelection = selectedNodes.length > 0
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
-  const selectedClosetItems = selectedNodes.filter((n): n is ClosetItemNode => !!n && n.type === 'closet_item')
 
   // ✨ (ADR-0128). Arranges the pieces like a real look the team styled with the same mix of
   // pieces, her own looks first, and labels only brands saved on the pieces. It never deletes:
@@ -142,7 +139,8 @@ export function CanvasToolbar() {
   }
 
   return (
-    <div data-canvas-toolbar className="flex flex-wrap items-center justify-center gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+    <div data-canvas-toolbar className="w-full flex flex-col gap-1 bg-white border border-border rounded-sm shadow-sm px-2 py-1">
+    <div data-toolbar-base className="flex flex-wrap items-center justify-center gap-1">
       {/* Board size — Portrait (look) / Square / Landscape */}
       {(Object.keys(BOARD_PRESETS) as Array<keyof typeof BOARD_PRESETS>).map((key) => {
         const p = BOARD_PRESETS[key]
@@ -210,15 +208,68 @@ export function CanvasToolbar() {
           <Sparkles className="h-3.5 w-3.5 text-text-muted" />
         )}
       </button>
-      {styleRun && (
-        <span className="text-[10px] tabular-nums text-text-muted whitespace-nowrap" title={styleRun.note}>{styleRun.short}</span>
-      )}
+      {/* A fixed slot, so pressing Style never re-wraps this row and moves the board. */}
+      <span className="w-12 truncate text-center text-[10px] tabular-nums text-text-muted whitespace-nowrap" title={styleRun?.note}>{styleRun?.short ?? ''}</span>
+    </div>
 
+      {/*
+        THE BOARD HOLDS STILL. Cynthia Dada, 2026-09-25: "Can you please fix this auto zoom that's
+        happening? It messes up when I'm trying to move text." The board is fitted to the space
+        under this toolbar, so a toolbar that grows when she selects something shrinks the board
+        under her cursor, on the press. This strip is therefore always as tall as the TALLEST set
+        of controls any selection can show at this width: each of those sets is drawn here,
+        invisible and inert, in the same grid cell as the real one. Its height depends on the
+        width alone. The controls are one component, so a new button reserves its own room.
+        Measured by `node scripts/perf/style-harness.mjs --steady-board` (WebKit, three sizes).
+      */}
+      <div data-toolbar-context className="grid border-t border-border pt-1">
+        {SIZERS.map((nodes, i) => (
+          <div key={i} aria-hidden="true" inert className="invisible [grid-area:1/1] flex flex-wrap items-center justify-center gap-1">
+            <SelectionControls nodes={nodes} removingBg={false} onRemoveBg={() => {}} />
+          </div>
+        ))}
+        <div className="[grid-area:1/1] flex flex-wrap items-center justify-center gap-1">
+          {hasSelection ? (
+            <SelectionControls nodes={selectedNodes} removingBg={removingBg} onRemoveBg={handleRemoveBg} />
+          ) : (
+            <span className="text-[10px] tracking-wide text-text-muted">Select a piece or a label to edit it</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// The largest control sets a selection can bring up, used only to reserve the context strip's
+// height (see data-toolbar-context). Stand-in nodes: never drawn, never on the board.
+const SIZER_TEXT: TextNode = { id: 'sizer_text', type: 'text', content: '', font_family: DEFAULT_FONT, font_size: 32, fill: '#1A1A1A', x: 0, y: 0, rotation: 0, z_index: 0 }
+const SIZER_PIECE: ClosetItemNode = { id: 'sizer_piece', type: 'closet_item', closet_item_id: '', x: 0, y: 0, scale: 1, rotation: 0, flipped: false, z_index: 0, locked: false }
+const SIZERS: CanvasNode[][] = [
+  [SIZER_TEXT],
+  [SIZER_PIECE],
+  [SIZER_PIECE, { ...SIZER_PIECE, id: 'sizer_piece_2' }, { ...SIZER_PIECE, id: 'sizer_piece_3' }],
+]
+
+/** Everything that acts on the current selection. Drawn for real, and as the strip's sizers. */
+function SelectionControls({ nodes, removingBg, onRemoveBg }: {
+  nodes: CanvasNode[]
+  removingBg: boolean
+  onRemoveBg: (node: ClosetItemNode) => void
+}) {
+  const { updateNode, removeNodes, duplicateNodes, moveLayer, flipNodes, alignNodes, distributeNodes, rememberTextStyle } = useCanvasStore()
+  const selectedNodes = nodes
+  const selectedNodeIds = nodes.map((n) => n.id)
+  const singleNode = nodes.length === 1 ? nodes[0] : null
+  const hasSelection = nodes.length > 0
+  const selectedClosetItems = nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item')
+  const handleRemoveBg = onRemoveBg
+
+  return (
+    <>
       {singleNode?.type === 'text' && (() => {
         const tn = singleNode as TextNode
         return (
           <>
-            <div className="w-px h-4 bg-border mx-0.5" />
             <select
               value={tn.font_family}
               onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle({ font_family: e.target.value, font_size: tn.font_size }) }}
@@ -279,7 +330,7 @@ export function CanvasToolbar() {
 
       {hasSelection && (
         <>
-          <div className="w-px h-4 bg-border mx-0.5" />
+          {singleNode?.type === 'text' && <div className="w-px h-4 bg-border mx-0.5" />}
 
           {selectedClosetItems.length > 0 && (
             <button
@@ -423,6 +474,6 @@ export function CanvasToolbar() {
           </button>
         </>
       )}
-    </div>
+    </>
   )
 }

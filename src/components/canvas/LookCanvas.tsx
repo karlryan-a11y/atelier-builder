@@ -939,14 +939,16 @@ export function LookCanvas() {
   return (
     <main
       ref={setNodeRef}
-      className="flex-1 flex flex-col items-center relative overflow-hidden"
+      className="@container flex-1 flex flex-col items-center relative overflow-hidden"
       style={{ backgroundColor: 'rgba(245, 241, 234, 0.3)' }}
     >
       {/* Toolbar area — sits in the gray zone above the canvas */}
       {/* Zoom, toolbar and grid are flex siblings, never absolutely positioned: on a narrow
           canvas column the floating zoom covered Portrait/Square and the grid toggle sat on
-          top of the Style (sparkles) button, so it looked gone. check-canvas-toolbar-layout. */}
-      <div data-toolbar-row className="w-full flex items-center gap-2 px-3 py-3 shrink-0">
+          top of the Style (sparkles) button, so it looked gone. check-canvas-toolbar-layout.
+          On a narrow column (an iPad upright) the toolbar was squeezed to a sliver between them
+          and its colours spilled onto the next panel, so there it takes a line of its own. */}
+      <div data-toolbar-row className="w-full flex flex-wrap items-center gap-2 px-3 py-3 shrink-0">
         <div data-zoom-controls className="shrink-0 flex items-center gap-1">
           <button
             onClick={() => setZoom((z) => nextZoom(z, -1))}
@@ -958,7 +960,7 @@ export function LookCanvas() {
           </button>
           <button
             onClick={() => setZoom(MIN_ZOOM)}
-            className="px-2 py-1 rounded-sm border bg-white border-border text-text-muted hover:bg-tile text-[10px] tabular-nums tracking-wider transition-colors"
+            className="w-12 py-1 text-center rounded-sm border bg-white border-border text-text-muted hover:bg-tile text-[10px] tabular-nums tracking-wider transition-colors"
             title="Fit the whole board"
           >
             {zoomLabel(zoom)}
@@ -972,13 +974,13 @@ export function LookCanvas() {
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="flex-1 min-w-0 flex justify-center">
+        <div className="order-last basis-full @xl:order-none @xl:basis-0 flex-1 min-w-0 flex justify-center">
           <CanvasToolbar />
         </div>
         <button
           data-grid-toggle
           onClick={() => setShowGrid(!showGrid)}
-          className={`shrink-0 p-1.5 rounded-sm border transition-colors ${
+          className={`shrink-0 ml-auto @xl:ml-0 p-1.5 rounded-sm border transition-colors ${
             showGrid ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-border text-text-muted hover:bg-tile'
           }`}
           title="Toggle grid"

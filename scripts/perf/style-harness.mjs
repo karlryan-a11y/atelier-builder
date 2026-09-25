@@ -40,6 +40,7 @@ const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board an
 const FILING_SHOT = arg('--filing-shot', null)   // drive the Save box's categories and exit (ADR-0149)
 const SEARCH_SHOT = arg('--search-shot', null)   // drive Categorize's look search and exit (ADR-0150)
 const DESC_SHOT = arg('--desc-shot', null)       // drive the piece description + search and exit (ADR-0151)
+const STEADY = args.includes('--steady-board')   // the board must not move when she selects something, and exit
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -311,6 +312,17 @@ await page.route('**/*', async (route) => {
   // never touches the network.
   return route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: '{}' })
 })
+
+async function nodeCenterOf(id) {
+  return page.evaluate((nid) => {
+    const st = globalThis.__Konva.stages.find((s) => s.findOne('#' + nid))
+    const kn = st?.findOne('#' + nid)
+    if (!kn) return null
+    const r = kn.getClientRect()
+    const c = st.container().getBoundingClientRect()
+    return { x: c.left + r.x + r.width / 2, y: c.top + r.y + r.height / 2 }
+  }, id)
+}
 
 await page.goto(`http://localhost:${PORT}/`)
 await page.waitForFunction(() => !!globalThis.__stores && !!document.querySelector('button') && [...document.querySelectorAll('button')].some((b) => b.textContent?.trim().toLowerCase() === 'categorize'), null, { timeout: 30000 })
@@ -815,6 +827,106 @@ if (FILING_SHOT) {
   process.exit(ok && errors.length === 0 ? 0 : 1)
 }
 
+// THE BOARD HOLDS STILL. Cynthia Dada, 2026-09-25, #watson-atelier (Loom, no audio): "Can you
+// please fix this auto zoom that's happening? It messes up when I'm trying to move text." and
+// "It also does it when I select garments". The zoom never changed (125% throughout); the BOARD
+// did. Since 2026-09-18 (078b92c) the toolbar wraps, selecting a label or a piece adds its
+// controls, the toolbar grows a row, the space under it shrinks, and the board is re-fitted to
+// that space, so it shrinks under her cursor on the press and grows back when she lets go.
+//
+// Measured, not asserted from source: at three real screen sizes, the board's on-screen box in
+// every selection state, a drag of a text label, and whether every toolbar button is reachable.
+if (STEADY) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  const text = {
+    id: 'tx_harness_label', type: 'text', content: 'Daytime Workshops', font_family: 'Amalfi Coast', font_size: 48,
+    fill: '#1A1A1A', x: 300, y: 20, rotation: 0, z_index: 99,
+  }
+  const withText = { ...board, nodes: [...board.nodes, text] }
+  const SIZES = [
+    { name: 'MacBook Air 1440x900', width: 1440, height: 900 },
+    { name: 'laptop 1280x800', width: 1280, height: 800 },
+    { name: 'iPad 1024x1366', width: 1024, height: 1366 },
+  ]
+  const STATES = [
+    { name: 'nothing selected', ids: [] },
+    { name: 'a garment', ids: [boardNodes[0].id] },
+    { name: 'a text label', ids: [text.id] },
+    { name: 'two garments', ids: [boardNodes[0].id, boardNodes[1].id] },
+    { name: 'three garments', ids: [boardNodes[0].id, boardNodes[1].id, boardNodes[2].id] },
+    { name: 'a label and a garment', ids: [text.id, boardNodes[3].id] },
+    { name: 'nothing selected again', ids: [] },
+  ]
+  const boardBox = () => page.evaluate(() => {
+    const c = globalThis.__Konva.stages[0]?.container().getBoundingClientRect()
+    return c ? { x: Math.round(c.left), y: Math.round(c.top), w: Math.round(c.width), h: Math.round(c.height) } : null
+  })
+  // Every toolbar control must be on screen and inside the toolbar, never clipped or scrolled away.
+  const unreachable = () => page.evaluate(() => {
+    const bar = document.querySelector('[data-canvas-toolbar]')
+    if (!bar) return ['no toolbar']
+    const out = []
+    // The context strip's sizers are invisible and inert by design; only real controls count.
+    const controls = [...bar.querySelectorAll('button, select')].filter((el) => !el.closest('[inert], [aria-hidden="true"]'))
+    for (const el of controls) {
+      const b = el.getBoundingClientRect()
+      if (!b.width || !b.height) continue
+      // the element actually hit at its centre must be itself (or inside it)
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+      if (!hit || !(hit === el || el.contains(hit))) out.push(`${el.getAttribute('title') ?? el.tagName}${hit ? ' (under ' + (hit.getAttribute('title') ?? hit.tagName + '.' + String(hit.className).slice(0, 40)) + ')' : ' (off screen)'}`)
+    }
+    return { controls: controls.length, out }
+  })
+  let fails = 0, measured = 0
+  for (const size of SIZES) {
+    await page.setViewportSize({ width: size.width, height: size.height })
+    await page.evaluate(({ b, url }) => {
+      const urls = Object.fromEntries(b.nodes.map((n) => [n.id, url]))
+      globalThis.__stores.canvas.getState().loadLook('harness-board', b, urls)
+      globalThis.__stores.canvas.getState().setSelectedNodeIds([])
+    }, { b: withText, url: PIECE_URL })
+    await page.waitForTimeout(900)
+    const rest = await boardBox()
+    console.log(`\n  ${size.name}: board ${rest?.w}x${rest?.h} at (${rest?.x}, ${rest?.y}) with nothing selected`)
+    const SHOTDIR = arg('--shots', null)
+    for (const st of STATES) {
+      await page.evaluate((ids) => globalThis.__stores.canvas.getState().setSelectedNodeIds(ids), st.ids)
+      await page.waitForTimeout(400)
+      const b = await boardBox()
+      const r = await unreachable()
+      measured++
+      const moved = !b || b.w !== rest.w || b.h !== rest.h || b.x !== rest.x || b.y !== rest.y
+      const bad = moved || r.out.length > 0
+      if (bad) fails++
+      if (SHOTDIR) await page.screenshot({ path: `${SHOTDIR}/${size.width}x${size.height}-${st.name.replace(/\s+/g, '-')}.png` })
+      console.log(`    ${bad ? 'FAIL' : 'ok  '} ${st.name.padEnd(24)} board ${b?.w}x${b?.h} at (${b?.x}, ${b?.y})${moved ? '  <- MOVED' : ''}; ${r.controls} controls, ${r.out.length} unreachable${r.out.length ? ': ' + r.out.join(', ') : ''}`)
+    }
+    // The thing she was doing: press a label (which selects it and grows the toolbar) and drag it.
+    await page.evaluate(() => globalThis.__stores.canvas.getState().setSelectedNodeIds([]))
+    await page.waitForTimeout(400)
+    const start = await nodeCenterOf(text.id)
+    const before = await page.evaluate((id) => globalThis.__stores.canvas.getState().state.nodes.find((n) => n.id === id), text.id)
+    const scale = rest.w / withText.canvas.width
+    await page.mouse.move(start.x, start.y); await page.mouse.down()
+    for (let s = 1; s <= 10; s++) { await page.mouse.move(start.x + s * 6, start.y + s * 3); await page.waitForTimeout(20) }
+    await page.mouse.up(); await page.waitForTimeout(400)
+    const after = await page.evaluate((id) => globalThis.__stores.canvas.getState().state.nodes.find((n) => n.id === id), text.id)
+    const dx = Math.round((after.x - before.x) * scale), dy = Math.round((after.y - before.y) * scale)
+    const b = await boardBox()
+    measured++
+    // Her hand moved 60,30 on screen; the label must follow it to within a couple of pixels.
+    const dragBad = Math.abs(dx - 60) > 3 || Math.abs(dy - 30) > 3 || b.w !== rest.w || b.y !== rest.y
+    if (dragBad) fails++
+    console.log(`    ${dragBad ? 'FAIL' : 'ok  '} drag a label 60,30 on screen  it moved ${dx},${dy}; board after ${b.w}x${b.h} at (${b.x}, ${b.y})`)
+  }
+  await browser.close(); server.kill()
+  if (measured === 0) { console.error('FAIL - measured nothing'); process.exit(1) }
+  if (fails || errors.length) { console.error(`FAIL - ${fails} of ${measured} measurements moved the board or hid a control; ${errors.length} page errors`); process.exit(1) }
+  console.log(`\n  PASS - ${measured} measurements across ${SIZES.length} screen sizes: the board never moved and every toolbar control was reachable (WebKit)`)
+  process.exit(0)
+}
+
 // ADR-0146: hiding a piece takes it OFF the board and leaves it IN the look. Driven rather than
 // asserted, because the value is entirely in the second half: the client must still see the piece
 // under "Pieces in this look" and still be able to shop it.
@@ -850,7 +962,9 @@ if (HIDE_SHOT) {
   })
   await page.waitForTimeout(500)
   let pressed = false
-  for (const b of await page.$$('button')) {
+  // :not([inert] *) - the toolbar's context strip holds invisible, inert copies of every control
+  // to reserve its height; only the real one can be pressed.
+  for (const b of await page.$$('button:not([inert] *)')) {
     if (/hide on the board/i.test((await b.getAttribute('title')) ?? '')) { await b.click(); pressed = true; break }
   }
   await page.waitForTimeout(800)
