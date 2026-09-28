@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LookCategory, TaggableLook, TaggableCapsule } from '../hooks/useLookCategories.ts'
 import type { LookCanvasState } from '../types/canvas.ts'
 import { lookImageUrl } from './lookImage.ts'
+import { seasonFromGoodPixRaw } from './lookSeasons.ts'
 
 export interface LookCategoriesData {
   categories: LookCategory[]
@@ -111,6 +112,7 @@ export async function loadLookCategories(
         sort_order: l.sort_order ?? null,
         source: l.source ?? 'goodpix',
         closetItemIds: (l.closet_item_ids as string[] | null) ?? [],
+        gpSeason: seasonFromGoodPixRaw(l.raw),
       })),
       capsules: ((capsRes.data ?? []) as any[]).map((b) => ({
         id: b.id,

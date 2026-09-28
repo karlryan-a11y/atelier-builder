@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { X, Save, Plus, StickyNote } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategoryVocab } from '@/hooks/useLookCategories'
+import { useLooksSeasons } from '@/hooks/useLooksSeasons'
+import { seasonTargets, type SeasonChoice } from '@/lib/lookSeasons'
 
 interface SaveLookDialogProps {
   initialName: string
@@ -27,7 +29,27 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
   const [newCat, setNewCat] = useState('')
   // Categories to show as pills: this client's persisted taxonomy (look_categories) +
   // any just-created this session + anything already selected on the look.
+  // SEASON, ASKED FOR ON ITS OWN ROW. ADR-0154. A season is a category like any other, but it is
+  // the one the client's page groups by, so it gets its own question instead of hiding in the
+  // pills. Required once seasons are on for her: a look saved without one would sit under All
+  // only. The season categories leave the pills so the same choice is not offered twice.
+  const { on: seasonsOn } = useLooksSeasons(activeClient?.id ?? null)
+  const targets = seasonTargets(categories)
+  const labelOfId = (id?: string) => categories.find((c) => c.id === id)?.label
+  const ssLabel = labelOfId(targets.ss)
+  const fwLabel = labelOfId(targets.fw)
+  const seasonLabels = new Set(categories.filter((c) => c.season).map((c) => c.label.toLowerCase()))
+  const hasTag = (l?: string) => !!l && tags.some((t) => t.toLowerCase() === l.toLowerCase())
+  const inSeason = tags.some((t) => seasonLabels.has(t.toLowerCase()))
+  const seasonChoice: SeasonChoice | null = hasTag(ssLabel) && hasTag(fwLabel) ? 'both' : hasTag(ssLabel) ? 'ss' : hasTag(fwLabel) ? 'fw' : null
+  const chooseSeason = (choice: SeasonChoice) => {
+    const add = choice === 'both' ? [ssLabel, fwLabel] : [choice === 'ss' ? ssLabel : fwLabel]
+    setTags((prev) => [...prev.filter((t) => !seasonLabels.has(t.toLowerCase())), ...add.filter((x): x is string => !!x)])
+  }
+  const needsSeason = !!seasonsOn && !inSeason
+
   const shownCats = [...new Set([...categories.map((c) => c.label), ...sessionNew, ...tags])]
+    .filter((l) => !seasonLabels.has(l.toLowerCase()))
 
   // The styling notes for the categories currently ON this look. This is the surface Amaia
   // asked for: the rule ("always a sports jacket, never jeans") has to be readable at the
@@ -93,6 +115,27 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
               </span>
             </span>
           </label>
+
+          {ssLabel && fwLabel && (
+            <div>
+              <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Season</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([['ss', 'Spring/Summer'], ['fw', 'Fall/Winter'], ['both', 'Both']] as const).map(([key, text]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => chooseSeason(key)}
+                    className={`text-[9px] tracking-[0.15em] uppercase px-2 py-1.5 rounded-full border transition-colors ${
+                      seasonChoice === key ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-border text-text-muted hover:border-blush'
+                    }`}
+                  >{text}</button>
+                ))}
+              </div>
+              {needsSeason && (
+                <p className="text-[10px] text-text-muted mt-1.5">Pick a season. Seasons are on for her Looks page.</p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Categories</label>
@@ -183,7 +226,8 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
           </button>
           <button
             onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, clientNote, tags, toTry })}
-            disabled={saving}
+            disabled={saving || needsSeason}
+            title={needsSeason ? 'Pick a season first' : undefined}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
           >
             <Save className="h-3 w-3" />

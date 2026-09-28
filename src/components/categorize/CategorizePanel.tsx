@@ -34,6 +34,8 @@ import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, s
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
+import { SeasonsBar, SeasonQueue } from '@/components/categorize/SeasonsPanel'
+import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -143,11 +145,14 @@ export function CategorizePanel() {
   )
 
   const [mode, setMode] = useState<Mode>('looks')
+  const looksSeasons = useLooksSeasons(activeClient?.id ?? null)
   // The category picked in the rail (an ID), or null for all of them. It FILTERS the grid.
   // It only tags when `tagging` is on: see lib/lookCategoryFilter.ts for why a click used to
   // re-file looks without saying so.
   const [brush, setBrush] = useState<string | null>(null)
   const [tagging, setTagging] = useState(false)
+  // ADR-0154: the per-client seasons switch, and the list of looks standing in its way.
+  const [seasonQueue, setSeasonQueue] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<Status>('draft')
   // ADR-0150. Cynthia Dada, 2026-09-24: "Can we please add the ability to search for look names?
@@ -1149,7 +1154,21 @@ export function CategorizePanel() {
               <button onClick={() => { setTagging(false); setSelected(new Set()) }} className="flex-none text-[10px] tracking-[0.15em] uppercase underline">Done</button>
             </div>
           )}
-          {mode === 'nesting' ? (
+          {mode === 'looks' && (
+            <SeasonsBar
+              looks={looks}
+              categories={categories}
+              on={looksSeasons.on}
+              onToggle={looksSeasons.setOn}
+              switchError={looksSeasons.error}
+              queueOpen={seasonQueue}
+              onToggleQueue={() => setSeasonQueue((v) => !v)}
+              onFilled={() => refetch()}
+            />
+          )}
+          {mode === 'looks' && seasonQueue ? (
+            <SeasonQueue looks={looks} categories={categories} assignLook={assignLook} />
+          ) : mode === 'nesting' ? (
             <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
           ) : mode === 'collection' ? (
             <CollectionTab

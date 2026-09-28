@@ -73,6 +73,8 @@ export interface TaggableLook {
   // are a flat scraped image + closet_item_ids and can only be REBUILT onto the canvas.
   source: string
   closetItemIds: string[]
+  /** The season GoodPix's own tag names ("ss office casual"), offered as a suggestion only. ADR-0154. */
+  gpSeason: 'ss' | 'fw' | null
 }
 export interface TaggableCapsule {
   id: string
