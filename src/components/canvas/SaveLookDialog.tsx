@@ -31,8 +31,9 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
   // any just-created this session + anything already selected on the look.
   // SEASON, ASKED FOR ON ITS OWN ROW. ADR-0154. A season is a category like any other, but it is
   // the one the client's page groups by, so it gets its own question instead of hiding in the
-  // pills. Required once seasons are on for her: a look saved without one would sit under All
-  // only. The season categories leave the pills so the same choice is not offered twice.
+  // pills. OPTIONAL, always (Karl, 2026-09-28: a look must not need a category to go live). A
+  // look saved without one still goes live and shows under All; the Seasons bar in Categorize
+  // counts it. The season categories leave the pills so the same choice is not offered twice.
   const { on: seasonsOn } = useLooksSeasons(activeClient?.id ?? null)
   const targets = seasonTargets(categories)
   const labelOfId = (id?: string) => categories.find((c) => c.id === id)?.label
@@ -46,7 +47,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
     const add = choice === 'both' ? [ssLabel, fwLabel] : [choice === 'ss' ? ssLabel : fwLabel]
     setTags((prev) => [...prev.filter((t) => !seasonLabels.has(t.toLowerCase())), ...add.filter((x): x is string => !!x)])
   }
-  const needsSeason = !!seasonsOn && !inSeason
+  const noSeasonYet = !!seasonsOn && !inSeason
 
   const shownCats = [...new Set([...categories.map((c) => c.label), ...sessionNew, ...tags])]
     .filter((l) => !seasonLabels.has(l.toLowerCase()))
@@ -131,8 +132,8 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
                   >{text}</button>
                 ))}
               </div>
-              {needsSeason && (
-                <p className="text-[10px] text-text-muted mt-1.5">Pick a season. Seasons are on for her Looks page.</p>
+              {noSeasonYet && (
+                <p className="text-[10px] text-text-muted mt-1.5">Optional. Without one it shows under All on her Looks page.</p>
               )}
             </div>
           )}
@@ -226,8 +227,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
           </button>
           <button
             onClick={() => onSave({ name: name.trim() || 'Untitled Look', notes, clientNote, tags, toTry })}
-            disabled={saving || needsSeason}
-            title={needsSeason ? 'Pick a season first' : undefined}
+            disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
           >
             <Save className="h-3 w-3" />

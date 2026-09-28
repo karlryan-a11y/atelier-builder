@@ -76,7 +76,8 @@ rules++
 if (!/disabled=\{[^}]*!on && !st\.canTurnOn/.test(bar)) errors.push('SeasonsPanel.tsx: the switch can be turned on before every look has a season (ADR-0154)')
 const dialog = readFileSync(join(ROOT, 'src/components/canvas/SaveLookDialog.tsx'), 'utf8')
 rules++
-if (!/disabled=\{saving \|\| needsSeason\}/.test(dialog)) errors.push('SaveLookDialog.tsx: a look can be saved with no season while seasons are on for her (ADR-0154)')
+// Karl, 2026-09-28: a look must never need a category to go live. The season row is optional.
+if (/disabled=\{[^}]*(needsSeason|noSeasonYet|inSeason)/.test(dialog)) errors.push('SaveLookDialog.tsx: Save is blocked until a season is picked. A season is optional; a look must never need a category to go live (Karl, 2026-09-28)')
 const panel2 = readFileSync(join(ROOT, 'src/components/categorize/CategorizePanel.tsx'), 'utf8')
 rules++
 if (!/<SeasonsBar/.test(panel2)) errors.push('CategorizePanel.tsx: the Seasons bar is not mounted on the Looks tab')
