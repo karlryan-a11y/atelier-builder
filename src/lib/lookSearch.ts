@@ -23,14 +23,19 @@
  */
 
 /** Terms, lowercased, with runs of whitespace collapsed. Empty query = no terms = no filtering. */
+/** Lowercase with accents folded, so "cafe" finds "Café" (ADR-0155). */
+function fold(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 export function searchTerms(query: string): string[] {
-  return query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter(Boolean)
+  return fold(query).split(/\s+/).map((t) => t.trim()).filter(Boolean)
 }
 
 /** Does this name satisfy every term? An unnamed look matches nothing but an empty query. */
 export function matchesSearch(name: string | null | undefined, terms: string[]): boolean {
   if (terms.length === 0) return true
-  const n = (name ?? '').toLowerCase()
+  const n = fold(name ?? '')
   return terms.every((t) => n.includes(t))
 }
 

@@ -20,9 +20,13 @@ import { r2ImageUrl } from '@/lib/imageUrls'
  * Verified on production 2026-09-19: over all 89,593 closet rows the trimmed fields resolve to
  * the identical picture as the full raw (0 mismatches).
  */
+// retailer, size, material and GoodPix's description are here to be SEARCHED (ADR-0155): every
+// field on the piece, not only the ones someone thought of. No comment inside the string below:
+// check-closet-raw-fields reads it as one run of quoted pieces.
 export const CLOSET_SELECT =
   'id, client_id, name, name_override, style_note, description, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
   'raw_image:raw->>image, raw_processed_image:raw->>processed_image, raw_image0:raw->images->>0, ' +
+  'retailer, size, raw_material:raw->>material, raw_description:raw->>description, ' +
   'primary_image_hash, processed_image_hash, source, added_at'
 
 const PAGE = 1000
@@ -32,6 +36,8 @@ type ClosetRow = Omit<ClosetItem, 'raw'> & {
   raw_image: string | null
   raw_processed_image: string | null
   raw_image0: string | null
+  raw_material: string | null
+  raw_description: string | null
 }
 
 export interface ClosetData {
@@ -63,8 +69,10 @@ function closetQuery(clientId: string, count = false) {
 }
 
 function toItem(row: ClosetRow): ClosetItem {
-  const { raw_image, raw_processed_image, raw_image0, ...rest } = row
+  const { raw_image, raw_processed_image, raw_image0, raw_material, raw_description, ...rest } = row
   const raw: ClosetItem['raw'] = {}
+  if (raw_material != null) raw.material = raw_material
+  if (raw_description != null) raw.description = raw_description
   if (raw_processed_image != null) raw.processed_image = raw_processed_image
   if (raw_image != null) raw.image = raw_image
   if (raw_image0 != null) raw.images = [raw_image0]

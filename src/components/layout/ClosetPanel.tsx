@@ -13,6 +13,7 @@ import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useItemLookUsage } from '@/hooks/useItemLookUsage'
 import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
+import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
@@ -393,7 +394,12 @@ export function ClosetPanel() {
     })
   }
 
+  /*
+   * A CATEGORY TAP STARTS A NEW SEARCH (ADR-0155). Maegan, 2026-09-26: "the search bar needs to
+   * clear when we click on a new category." Both "All" and every chip go through here.
+   */
   function toggleCategory(slug: string) {
+    setSearch('')
     setActiveCategories((prev) => {
       const next = new Set(prev)
       next.has(slug) ? next.delete(slug) : next.add(slug)
@@ -401,23 +407,16 @@ export function ClosetPanel() {
     })
   }
 
-  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => ({
-    name: i.name, nameOverride: i.name_override, brand: i.brand, color: i.color,
-    description: i.description, internalNote: i.style_note,
-    categories: categoriesByItem.get(i.id) ?? [],
-    tags: (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
-  }), [categoriesByItem, tagNameById])
+  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => closetSearchFields(
+    i,
+    categoriesByItem.get(i.id) ?? [],
+    (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
+  ), [categoriesByItem, tagNameById])
 
   const filtered = useMemo(() => {
     let result = items
-    // ONE MATCHER, TEAM AUDIENCE (ADR-0151). This rail used to read four fields with its own
-    // substring test, which is why a piece findable in Categorize was not findable here. Near
-    // misses are folded IN on the rail rather than shown separately: she is dragging pieces onto
-    // a board, not auditing a list, and a second grid in a 320px rail helps nobody.
-    if (search) {
-      const { full, near } = searchPieces(result, search, fieldsOf, 'team')
-      result = [...full, ...near]
-    }
+    // ONE MATCHER, TEAM AUDIENCE (ADR-0151). Every possible match, closest first (ADR-0155).
+    if (search) result = searchPieces(result, search, fieldsOf, 'team').ranked
     if (activeCategories.size > 0) {
       // Multi-select unions: show an item if ANY of its categories is selected.
       result = result.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c)))
@@ -537,7 +536,7 @@ export function ClosetPanel() {
               */}
               <div ref={catsRef} className={`flex flex-wrap gap-1 ${catsExpanded ? '' : 'max-h-48 overflow-y-auto'}`}>
                 <button
-                  onClick={() => setActiveCategories(new Set())}
+                  onClick={() => { setSearch(''); setActiveCategories(new Set()) }}
                   className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
                     activeCategories.size === 0
                       ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'

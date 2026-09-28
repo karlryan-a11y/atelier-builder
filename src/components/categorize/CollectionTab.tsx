@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
 import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
+import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
@@ -184,12 +185,21 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
    * Now every surface asks the same question of the same fields, and this one also sees the
    * internal note because a stylist may search her own notes.
    */
-  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => ({
-    name: i.name, nameOverride: i.name_override, brand: i.brand, color: i.color,
-    description: i.description, internalNote: i.style_note,
-    categories: categoriesByItem.get(i.id) ?? [],
-    tags: (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
-  }), [categoriesByItem, tagNameById])
+  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => closetSearchFields(
+    i,
+    categoriesByItem.get(i.id) ?? [],
+    (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
+  ), [categoriesByItem, tagNameById])
+
+  /*
+   * A CATEGORY TAP STARTS A NEW SEARCH (ADR-0155). Maegan, 2026-09-26: "the search bar needs to
+   * clear when we click on a new category." Search and category filter together, so a search left
+   * behind turns every category she taps into "plaid rosie dress in Shoes". Keyed on the SET'S
+   * CONTENTS, not its identity, so a re-render that rebuilds the same Set does not wipe what she
+   * is typing.
+   */
+  const filterKey = filterCategories ? [...filterCategories].sort().join('|') : ''
+  useEffect(() => { setQ('') }, [filterKey])
 
   const searched = useMemo(() => {
     let live = items.filter((i) => !i.is_deleted)
@@ -198,11 +208,9 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     }
     return searchPieces(live, q, fieldsOf, 'team')
   }, [items, q, filterCategories, categoriesByItem, fieldsOf])
-  // NEAR matches are kept OUT of the main list and shown under their own heading. Folding them in
-  // would mean "Search" quietly returning things that do not match what she typed; leaving them
-  // out entirely is the empty page that made Cynthia add a second Margaret dress.
-  const baseVisible = searched.full
-  const nearMisses = searched.near
+  // EVERY POSSIBLE MATCH, CLOSEST FIRST, IN ONE LIST (ADR-0155). This used to put the near
+  // matches under a "Nearly" heading; Karl, 2026-09-28: no heading, ranked by closest match.
+  const baseVisible = searched.ranked
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
   // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
@@ -615,7 +623,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         </div>
       )}
 
-      {visible.length === 0 && nearMisses.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="text-[#888] text-sm">{q ? 'No items match your search.' : 'This client has no collection items yet.'}</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -720,43 +728,6 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
               </div>
             )
           })}
-        </div>
-      )}
-
-      {/* NEARLY. The Margaret dress was in her closet the whole time; "margaret satin sheath midi"
-          returned an empty page because one word of four was missing, so it was added a second
-          time. A near miss is shown, under its own line, never folded in. ADR-0151. */}
-      {nearMisses.length > 0 && (
-        <div className="mt-10">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-[10px] tracking-[0.25em] uppercase text-[#aaa] flex-none">
-              Nearly · {nearMisses.length} {nearMisses.length === 1 ? 'piece matches' : 'pieces match'} all but one word
-            </span>
-            <span className="h-px bg-[#E8E4DF] flex-1" />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {nearMisses.map((item) => {
-              const img = resolveItemImage(item)
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setEditing(item)}
-                  title="Edit this piece"
-                  className="group text-left border border-[#E8E4DF] rounded-sm overflow-hidden bg-white hover:border-[#1A1A1A] transition-colors"
-                >
-                  <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
-                    {img
-                      ? <TileImage src={img} width={PIECE_TILE_WIDTH} alt={displayName(item)} className="max-w-full max-h-full object-contain" loading="lazy" />
-                      : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No photo</span>}
-                  </div>
-                  <div className="p-2.5">
-                    <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] truncate">{item.brand || '\u00a0'}</p>
-                    <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
         </div>
       )}
 
