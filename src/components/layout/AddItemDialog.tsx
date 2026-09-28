@@ -124,11 +124,14 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
         toPrefillDataUri(f).then(uri => api({ action: 'prefill', image: uri }).then(d => d?.fields || {})).catch(() => ({})),
       ])
       if (imgUrl) setProcessedUrl(imgUrl)
-      if (fields.name && !name) setName(fields.name)
-      if (fields.brand && !brand) setBrand(fields.brand)
-      if (fields.color && !color) setColor(fields.color)
-      if (Array.isArray(fields.colors) && fields.colors.length && !colorSet.length) setColorSet(fields.colors)
-      if (fields.category && !category) setCategory(fields.category)
+      // Fill only what is STILL empty now. `name` etc. here are the values from when the photo was
+      // picked, so reading them overwrote anything typed while it processed (Cynthia, 2026-09-25).
+      // The functional form sees the latest. check-additem-keeps-typing.mjs.
+      if (fields.name) setName(cur => cur.trim() ? cur : fields.name)
+      if (fields.brand) setBrand(cur => cur.trim() ? cur : fields.brand)
+      if (fields.color) setColor(cur => cur.trim() ? cur : fields.color)
+      if (Array.isArray(fields.colors) && fields.colors.length) setColorSet(cur => cur.length ? cur : fields.colors)
+      if (fields.category) setCategory(cur => cur ? cur : fields.category)
     } catch {
       alert('Could not process that photo — try again.')
     } finally { setProcessing(false) }
