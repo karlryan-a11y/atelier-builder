@@ -212,6 +212,16 @@ function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
       .setSelectFolderEnabled(true)
       .setOwnedByMe(false)
 
+    // Everything she can open, with no ownership filter. "Shared with me" hides files she OWNS,
+    // so photos she uploaded into a client's shared folder showed as "No items in this folder"
+    // (Cynthia Dada, Peyton Wheeler > Exploration > Dresses, 2026-09-25). Search a folder name
+    // here and the folder opens with every photo in it. check-drive-picker.mjs.
+    const allFiles = new picker.DocsView(picker.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+    // setLabel names the tab; guarded so an older Picker build without it can't break the dialog.
+    if (typeof allFiles.setLabel === 'function') allFiles.setLabel('All files')
+
     const sharedDrives = new picker.DocsView(picker.ViewId.DOCS)
       .setIncludeFolders(true)
       .setSelectFolderEnabled(true)
@@ -220,6 +230,7 @@ function openPicker(accessToken: string): Promise<PickedDoc[] | null> {
     const builder = new picker.PickerBuilder()
       .addView(myDrive)
       .addView(sharedWithMe)
+      .addView(allFiles)
       .addView(sharedDrives)
       .setOAuthToken(accessToken)
       .setDeveloperKey(API_KEY)
