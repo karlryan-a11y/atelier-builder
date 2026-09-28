@@ -87,7 +87,7 @@ export async function convertHeicToJpeg(file: File): Promise<File> {
   const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: QUALITY })
   const jpeg = Array.isArray(converted) ? converted[0] : converted
   const small = await downscaleJpeg(jpeg)
-  return new File([small], file.name, { type: 'image/jpeg', lastModified: file.lastModified })
+  return new File([small], jpgName, { type: 'image/jpeg', lastModified: file.lastModified })
 }
 
 // Anything larger than this gets downscaled before upload. Camera/iPhone photos at full

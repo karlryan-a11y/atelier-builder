@@ -51,6 +51,14 @@ for (const file of files) {
     failures.push(`${file}: does work before the sign-in gate`)
     continue
   }
+  // A gated endpoint is called with an Authorization header. If its CORS preflight does not allow
+  // that header, the browser blocks every cross-origin call before it is sent. This is how the
+  // 9/17 gate silently broke HEIC conversion from atelierbywatson.com.
+  const allow = text.match(/'Access-Control-Allow-Headers'\s*:\s*'([^']*)'/)
+  if (allow && !/\bauthorization\b/i.test(allow[1])) {
+    failures.push(`${file}: gated, but CORS Allow-Headers ('${allow[1]}') omits Authorization - browsers block the signed-in call`)
+    continue
+  }
   gated.push(file)
 }
 
@@ -62,7 +70,7 @@ console.log(
 )
 
 if (failures.length) {
-  console.error('\nFAIL - a service-role endpoint answers anonymous callers:')
+  console.error('\nFAIL - a service-role endpoint is ungated, or gated in a way browsers cannot call:')
   for (const f of failures) console.error(`  - ${f}`)
   console.error("\nAdd: const caller = await requireStaff(req, res); if (!caller) return")
   process.exit(1)
