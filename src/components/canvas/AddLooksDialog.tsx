@@ -4,6 +4,7 @@ import type { LookRow } from '@/hooks/useLooks'
 import { lookImageUrl } from '@/lib/lookImage'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
+import { searchByName } from '@/lib/lookSearch'
 
 /**
  * Pick any number of looks to put on the capsule. ADR-0152.
@@ -27,9 +28,9 @@ export function AddLooksDialog({ looks, onBoard, startsCapsule, adding, error, o
   const [q, setQ] = useState('')
   const on = useMemo(() => new Set(onBoard), [onBoard])
   const addable = looks.filter((l) => l.canvas_state)
-  const shown = q.trim()
-    ? addable.filter((l) => l.name.toLowerCase().includes(q.trim().toLowerCase()))
-    : addable
+  // The same look-name rule as the Looks list (ADR-0155): every word, any order, accents folded.
+  // This box matched the whole phrase, so "fall plaid" missed a look named "Plaid Fall".
+  const shown = searchByName(addable, q)
 
   const toggle = (id: string) => setPicked((prev) => {
     const next = new Set(prev)

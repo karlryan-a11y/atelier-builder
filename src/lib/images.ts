@@ -5,6 +5,10 @@ export interface ClosetItemRaw {
   image?: string
   processed_image?: string
   images?: string[]
+  /** GoodPix's material, where it had one. Searched (ADR-0155). */
+  material?: string
+  /** GoodPix's description: mostly retailer sales copy, often the string "[]". Team search only. */
+  description?: string
 }
 
 export interface ClosetItem {
@@ -26,6 +30,9 @@ export interface ClosetItem {
   category?: string | null
   custom_categories?: string[] | null
   brand: string
+  /** Where it was bought, where known (4,294 pieces). Searched (ADR-0155). */
+  retailer?: string | null
+  size?: string | null
   color: string | null
   /** Normalized primary/dominant color (palette term). Written by the pipeline + the Colors audit. */
   color_family?: string | null

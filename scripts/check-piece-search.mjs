@@ -34,13 +34,22 @@
  *
  * Then the rules themselves, over real cases including the Margaret query.
  *
+ *
+ * ADR-0155 (Maegan, 2026-09-25, Peyton Wheeler: "plaid rosie dress" showed 2 and hid 13; the audit
+ * over 88,742 pieces that followed) adds: every possible match shown, closest first, in one list;
+ * a colour word reads every colour field and the name; accents fold; filler words drop; synonyms,
+ * compounds and one typo; retailer and material searched; a category tap clears the search.
+ *
  * Exits non-zero on failure and on inspecting nothing (ADR-0106).
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { matchPiece, searchPieces, pieceTokens, wordHitsToken } from '../src/lib/pieceSearch.ts'
 
 const ROOT = new URL('..', import.meta.url).pathname
-const SIBLING = `${process.env.HOME}/Downloads/atelier-looks/`
+// PIECE_SEARCH_SIBLING: the other app's checkout, when it is not the usual folder (a worktree).
+const SIBLING = process.env.PIECE_SEARCH_SIBLING
+  ? process.env.PIECE_SEARCH_SIBLING.replace(/\/?$/, '/')
+  : `${process.env.HOME}/Downloads/atelier-looks/`
 const problems = []
 const fail = (m) => { problems.push(m); if (problems.length <= 14) console.error(`   ❌ ${m}`) }
 let checks = 0
@@ -49,7 +58,11 @@ const strip = (s) => s
   .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
-const read = (rel, root = ROOT) => strip(readFileSync(root + rel, 'utf8'))
+// A missing file is a failure to report, not a crash that hides every other finding.
+const read = (rel, root = ROOT) => {
+  if (!existsSync(root + rel)) { fail(`${rel}: file not found`); return '' }
+  return strip(readFileSync(root + rel, 'utf8'))
+}
 
 // ── 1. the matcher is shared, byte for byte ───────────────────────────────────────────────
 checks++
@@ -81,13 +94,58 @@ for (const [rel, audience, what] of SURFACES) {
     fail(`${rel}: ${what} does not name its audience as '${audience}'.`)
   }
   checks++
-  if (!/description: i\.description/.test(src)) {
-    fail(`${rel}: ${what} does not put the description in the token set, so the field Maegan asked for is not searchable there.`)
+  if (!/closetSearchFields\(/.test(src)) {
+    fail(`${rel}: ${what} builds its own search fields instead of closetSearchFields, so a field added to the piece can be searchable on one stylist screen and not another (ADR-0155).`)
   }
   checks++
-  if (audience === 'team' && !/internalNote: i\.style_note/.test(src)) {
-    fail(`${rel}: ${what} is a stylist surface and does not search the internal note.`)
+  if (!/\.ranked/.test(src)) {
+    fail(`${rel}: ${what} does not show the ranked list. Every possible match, closest first, in one list (ADR-0155).`)
   }
+  checks++
+  if (/Nearly/.test(src)) {
+    fail(`${rel}: ${what} still splits results under a "Nearly" heading. Karl, 2026-09-28: one list, closest first (ADR-0155).`)
+  }
+}
+
+// Everything on the piece reaches search, through the one builder of fields.
+const FIELDS = 'src/lib/closetSearchFields.ts'
+const fieldsSrc = read(FIELDS)
+for (const [needle, what] of [
+  [/description: item\.description/, 'the description Maegan asked for'],
+  [/internalNote: item\.style_note/, 'the internal note (team)'],
+  [/colorFamilies:/, 'the colour families'],
+  [/color: item\.color/, 'the colour text'],
+  [/retailer: item\.retailer/, 'the retailer'],
+  [/material: item\.raw\?\.material/, 'the material'],
+  [/labelForCategory/, 'the category labels'],
+]) {
+  checks++
+  if (!needle.test(fieldsSrc)) fail(`${FIELDS}: ${what} is not searched on stylist screens (ADR-0155).`)
+}
+const HOOK = 'src/hooks/useClosetItems.ts'
+checks++
+if (!/retailer, size, raw_material:raw->>material, raw_description:raw->>description/.test(read(HOOK))) {
+  fail(`${HOOK}: the closet read does not select retailer, size and material, so searching them reads undefined for every piece (ADR-0103).`)
+}
+
+// A category tap starts a new search, on both stylist screens (Maegan, 2026-09-26).
+const RAIL = read('src/components/layout/ClosetPanel.tsx')
+checks++
+if (!/function toggleCategory\(slug: string\) \{\s*setSearch\(''\)/.test(RAIL)) {
+  fail('ClosetPanel.tsx: tapping a category chip keeps the search, so every category she taps is filtered by what she searched before (ADR-0155).')
+}
+checks++
+if (!/onClick=\{\(\) => \{ setSearch\(''\); setActiveCategories\(new Set\(\)\) \}\}/.test(RAIL)) {
+  fail('ClosetPanel.tsx: "All" keeps the search (ADR-0155).')
+}
+checks++
+if (!/useEffect\(\(\) => \{ setQ\(''\) \}, \[filterKey\]\)/.test(read('src/components/categorize/CollectionTab.tsx'))) {
+  fail('CollectionTab.tsx: choosing a category in the Categorize rail keeps the search (ADR-0155).')
+}
+// The capsule's "add looks" box searched the whole phrase; it uses the Looks list's rule now.
+checks++
+if (!/searchByName\(addable, q\)/.test(read('src/components/canvas/AddLooksDialog.tsx'))) {
+  fail('AddLooksDialog.tsx: the add-looks box matches the whole phrase, so "fall plaid" misses "Plaid Fall" (ADR-0155).')
 }
 
 // ── 5 + 6. the two boxes, and what each says about itself ─────────────────────────────────
@@ -140,8 +198,7 @@ const CASES = [
   // [fields, query, audience, expect]  expect: 'full' | 'near' | 'miss'
   [MARGARET, 'margaret satin sheath', 'client', 'full'],
   [MARGARET, 'margaret satin sheath midi', 'client', 'near'],   // THE INCIDENT
-  // 4 of 5: "shirt" IS in "Belted Shirt Dress", so this is a near miss and not a miss. My first
-  // expectation here was simply wrong about her data.
+  // 4 of 5: "shirt" IS in "Belted Shirt Dress", so this is a near miss and not a miss.
   [MARGARET, 'margaret satin sheath midi shirt', 'client', 'near'],
   [MARGARET, 'margaret satin sheath midi shirt zebra', 'client', 'miss'],
   [MARGARET, '', 'client', 'full'],
@@ -156,20 +213,56 @@ const CASES = [
   [MARGARET, 'resale', 'client', 'miss'],
   [MARGARET, 'hates', 'client', 'miss'],
   [MARGARET, 'neckline', 'client', 'miss'],
-  // plurals, both directions — the silent loss this replaces
+  // plurals and tenses, both directions
   [MARGARET, 'dresses', 'client', 'full'],
   [MARGARET, 'dress', 'client', 'full'],
   [{ name: 'Suede Boot' }, 'boots', 'client', 'full'],
   [{ name: 'Suede Boots' }, 'boot', 'client', 'full'],
+  [{ name: 'Blue Stripe Shirt' }, 'striped', 'client', 'full'],
   // brand, colour, category and tag all still count
   [MARGARET, 'lena hoschek', 'client', 'full'],
   [MARGARET, 'whiskey', 'client', 'full'],
   [MARGARET, 'dresses lena', 'client', 'full'],
-  // a one-word miss on a TWO word query is not "nearly" — it would answer with everything
-  [MARGARET, 'lena houndstooth', 'client', 'miss'],
+  // ADR-0155: on a TWO word search, one word found is IN the results (ranked below both words)
+  [MARGARET, 'lena houndstooth', 'client', 'near'],
   [MARGARET, 'zebra', 'client', 'miss'],
   // a short token must not swallow a long query
   [{ name: 'Fran Skirt' }, 'france', 'client', 'miss'],
+
+  // ── ADR-0155, every one measured on live data before it was written ──
+  // A colour word reads the NAME and the colour text, not only the families (13,831 of 20,018
+  // black pieces had no family and never came up for "black").
+  [{ name: 'Black Leather Knee Boot', colorFamilies: [] }, 'black', 'client', 'full'],
+  [{ name: 'Silk Blouse', color: 'Blue, Red, Plaid' }, 'plaid', 'client', 'full'],
+  [{ name: 'Silk Blouse', colorFamilies: ['Navy'] }, 'navy', 'client', 'full'],
+  // accents fold (537 pieces: Chloé, Hermès, Larroudé, Alaïa ...)
+  [{ name: 'Cleia Heeled Sandal', brand: 'Chloé' }, 'chloe', 'client', 'full'],
+  [{ name: 'Kelly Bag', brand: 'Hermès' }, 'hermes', 'client', 'full'],
+  [{ name: 'Cleia Heeled Sandal', brand: 'Chloe' }, 'chloé', 'client', 'full'],
+  // filler words are not words she needs the piece to contain
+  [{ name: 'Black Bow Mini Dress' }, 'black dress with bow', 'client', 'full'],
+  // synonyms: the plaid family, tee / t-shirt, pants / trousers
+  [{ name: 'Sleeveless Belted Checkered Cotton Dress', brand: 'Rosie Assoulin' }, 'plaid rosie dress', 'client', 'full'],
+  [{ name: 'Gingham Midi Skirt' }, 'plaid', 'client', 'full'],
+  [{ name: 'Tartan Wool Scarf' }, 'check', 'client', 'full'],
+  [{ name: 'Classic Crew T-Shirt' }, 'tee', 'client', 'full'],
+  [{ name: 'Pima Cotton Tee' }, 't-shirt', 'client', 'full'],
+  [{ name: 'Wool Trousers' }, 'pants', 'client', 'full'],
+  // a garment word finds the compound it ends; an open suffix rule would not be safe
+  [{ name: 'Midi Plaid Shirtdress' }, 'dress', 'client', 'full'],
+  [{ name: 'Leather Handbag' }, 'bag', 'client', 'full'],
+  [{ name: 'Cashmere Turtleneck' }, 'neck', 'client', 'full'],
+  [{ name: 'Gold Hoop Earring' }, 'ring', 'client', 'miss'],
+  // one typo on a long word, graded alone
+  [{ name: 'Houndstooth Check Midi Skirt' }, 'houndstoth', 'client', 'full'],
+  [{ name: 'Red Dress' }, 'rde', 'client', 'miss'],
+  // retailer and material are hers to search; size and the old GoodPix blurb are the team's
+  [{ name: 'Slip Dress', retailer: 'Net-a-Porter' }, 'net a porter', 'client', 'full'],
+  [{ name: 'Slip Dress', material: '100% Silk' }, 'silk', 'client', 'full'],
+  [{ name: 'Slip Dress', size: 'XS' }, 'xs', 'client', 'miss'],
+  [{ name: 'Slip Dress', size: 'XS' }, 'xs', 'team', 'full'],
+  [{ name: 'Slip Dress', legacyDescription: 'Members receive free shipping' }, 'shipping', 'client', 'miss'],
+  [{ name: 'Slip Dress', legacyDescription: 'Members receive free shipping' }, 'shipping', 'team', 'full'],
 ]
 
 let ran = 0
@@ -190,13 +283,51 @@ if (!wordHitsToken('dress', 'dresses') || !wordHitsToken('dresses', 'dress')) fa
 ran++
 if (wordHitsToken('france', 'fran')) fail('a 4-character token swallowed a longer query')
 
-// order is preserved within each group
+const names = (xs) => (xs ?? []).map((x) => x.name).join(' / ')
+// an empty query filters nothing and reorders nothing
 ran++
 const list = [{ name: 'A Dress' }, { name: 'B Dress' }, { name: 'C Dress' }]
-const out = searchPieces(list, 'dress', (x) => x, 'client')
-if (out.full.map((x) => x.name).join(',') !== 'A Dress,B Dress,C Dress') fail('the search re-ordered the list')
+if (names(searchPieces(list, 'dress', (x) => x, 'client').ranked) !== 'A Dress / B Dress / C Dress') fail('equally good matches were re-ordered; ties must keep her wardrobe order')
 ran++
-if (searchPieces(list, '', (x) => x, 'client').full.length !== 3) fail('an empty query filtered the list')
+if ((searchPieces(list, '', (x) => x, 'client').ranked ?? []).length !== 3) fail('an empty query filtered the list')
+
+// THE PEYTON WHEELER CASE, 2026-09-25: "plaid rosie dress" in Dresses. The page showed 2 and hid
+// the rest. Every possible match now shows, closest first, in ONE list.
+ran++
+const PEYTON = [
+  { name: 'Cotton Halter Gown with Asymmetric Hem', brand: 'Rosie Assoulin', categories: ['dresses'] },
+  { name: 'Longsleeve Belted Plaid Dress', brand: 'Lena Hoschek', categories: ['dresses'] },
+  { name: 'Plaid Print Halter Cotton Long Dress', brand: 'Rosie Assoulin', categories: ['dresses'] },
+  { name: 'Floral Wrap Dress', brand: 'Dior', categories: ['dresses'] },
+  { name: 'Sleeveless Belted Checkered Cotton Dress', brand: 'Rosie Assoulin', categories: ['dresses'] },
+  { name: 'Midi Plaid Shirtdress', brand: 'Rosie Assoulin', categories: ['dresses'] },
+]
+const peyton = searchPieces(PEYTON, 'plaid rosie dress', (x) => x, 'client')
+const top3 = new Set((peyton.ranked ?? []).slice(0, 3).map((x) => x.name))
+if (!top3.has('Plaid Print Halter Cotton Long Dress') || !top3.has('Midi Plaid Shirtdress') || !top3.has('Sleeveless Belted Checkered Cotton Dress')) {
+  fail(`"plaid rosie dress": the three Rosie Assoulin plaid dresses are not the first three: ${names(peyton.ranked)}`)
+}
+ran++
+if ((peyton.ranked ?? []).length !== 5) fail(`"plaid rosie dress": expected 5 shown (every piece with two of the three words), got ${(peyton.ranked ?? []).length}: ${names(peyton.ranked)}`)
+ran++
+if ((peyton.ranked ?? []).some((x) => x.name === 'Floral Wrap Dress')) fail('"plaid rosie dress" showed a Dior floral dress: one word of three is not a match')
+ran++
+if ((peyton.ranked ?? []).at(-1)?.name === 'Longsleeve Belted Plaid Dress' || (peyton.ranked ?? []).at(-1)?.name === 'Cotton Halter Gown with Asymmetric Hem') {
+  // both near matches rank below every full match, in either order
+} else fail(`"plaid rosie dress": a near match outranked a full match: ${names(peyton.ranked)}`)
+
+// "blue" means the colour before the brand ("Skarlett Blue")
+ran++
+const blue = searchPieces([{ name: 'Silk Cami', brand: 'Skarlett Blue' }, { name: 'Blue Silk Cami' }], 'blue', (x) => x, 'client').ranked
+if ((blue ?? [])[0]?.name !== 'Blue Silk Cami') fail(`"blue" ranked the brand "Skarlett Blue" above a blue piece: ${names(blue)}`)
+
+// a typo is only forgiven when the word finds nothing as typed: "plaid" must not bring in "plain"
+ran++
+const plaid = searchPieces([{ name: 'Plaid Skirt' }, { name: 'Plain White Tee' }], 'plaid', (x) => x, 'client').ranked
+if (names(plaid) !== 'Plaid Skirt') fail(`"plaid" pulled in a typo match although plaid pieces exist: ${names(plaid)}`)
+ran++
+const typo = searchPieces([{ name: 'Houndstooth Skirt' }, { name: 'Plain White Tee' }], 'houndstoth', (x) => x, 'client').ranked
+if (names(typo) !== 'Houndstooth Skirt') fail(`"houndstoth" (one letter off) did not find the houndstooth skirt: ${names(typo)}`)
 
 console.log(`   rules: ${ran} case(s) run`)
 if (ran === 0 || checks === 0) { console.error('\n❌ piece-search: inspected nothing.\n'); process.exit(1) }
