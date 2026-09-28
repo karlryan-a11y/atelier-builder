@@ -69,6 +69,12 @@ export async function clearTransitionBlock(
  * original composed image. That decision stands — so a rebuilt replacement cannot simply
  * un-transition the original, because the original is not the look the stylist fixed.
  *
+ * SINCE ADR-0148 THIS ALSO SERVES REBUILD IN CANVAS, on looks that were never transitioned at
+ * all. The behaviour is right for both and the name is now half the story: clearing
+ * `transitioned_at` is simply a no-op on a look that carries none. Cynthia Dada, 2026-09-23:
+ * "it acts like I'm saving a new look, not updating a look" — it did, because Rebuild used to
+ * duplicate.
+ *
  * Instead the new look TAKES THE ORIGINAL'S PLACE: it inherits the published state, the display
  * order and the category filing, and the original is archived and lifted out of the Transitions
  * queue. Nothing is overwritten, so 0076's zero-data-loss property holds — the original row is

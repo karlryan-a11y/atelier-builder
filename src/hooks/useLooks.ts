@@ -20,6 +20,7 @@ export interface LookRow {
   tags: string[] | null
   notes_internal: string | null
   notes_client: string | null
+  to_try_at: string | null
   created_by: string | null
   source: string
   raw: Record<string, unknown> | null
@@ -100,6 +101,8 @@ export function useLooks(clientId: string | null) {
     tags?: string[]
     notesInternal?: string
     notesClient?: string
+    /** ADR-0153. true marks it as not-yet-tried; false clears it. Undefined leaves it alone. */
+    toTry?: boolean
     imageBase64?: string  // High-res canvas render (PNG base64, no data: prefix)
     createdBy?: string
   }) => {
@@ -181,6 +184,23 @@ export function useLooks(clientId: string | null) {
     if (error) {
       console.error('Save look error:', error.message, error.code, error.details, error.hint)
       return { error, data: null }
+    }
+
+    // ── To be tried (ADR-0153) ───────────────────────────────────────────────────────────
+    // A SECOND, EXPLICIT WRITE TO gp_looks, for the same reason the transition columns need one:
+    // useLooks saves through the `looks` VIEW and the view does not expose to_try_at (checked on
+    // production 2026-09-24 — it carries notes_client but neither to_try_at nor transitioned_at).
+    // Folding it into `row` above would silently drop it.
+    //
+    // Only written when the caller said something. `undefined` means "leave it alone", so a save
+    // from a surface that has no opinion about this cannot clear a stylist's mark.
+    if (opts.toTry !== undefined) {
+      const { error: tErr } = await supabase
+        .from('gp_looks')
+        .update({ to_try_at: opts.toTry ? new Date().toISOString() : null })
+        .eq('id', id)
+        .eq('client_id', opts.clientId)
+      if (tErr) console.error('to_try write failed (look saved):', tErr.message)
     }
 
     // ── Bring the look back if this save fixed a transition (migration 014) ──────────────

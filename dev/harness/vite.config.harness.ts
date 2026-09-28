@@ -44,9 +44,11 @@ function instrument(): Plugin {
         out = out.replace('= useDraggable(', '= (globalThis.__count("tile"), useDraggable)(')
       }
       if (/src\/components\/canvas\/LookGallery\.tsx$/.test(id)) {
-        const a = 'export function LookGallery({ looks, loading, error, onRetry, currentLookId, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {'
-        if (!out.includes(a)) throw new Error('harness: LookGallery anchor not found')
-        out = out.replace(a, `${a} globalThis.__count("lookGallery");`)
+        // Anchor on the signature's END, not its full text: the props list grows (onBoardIds and
+        // addMode were added 9/24) and a verbatim anchor broke the whole harness build.
+        const a = out.match(/export function LookGallery\([\s\S]*?\}: LookGalleryProps\) \{/)
+        if (!a) throw new Error('harness: LookGallery anchor not found')
+        out = out.replace(a[0], `${a[0]} globalThis.__count("lookGallery");`)
       }
       if (/src\/main\.tsx$/.test(id)) {
         out += `

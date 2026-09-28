@@ -100,6 +100,14 @@ interface CanvasStoreState {
    * replacesCapsuleId means "insert a row that takes this one's place".
    */
   replacesCapsuleId: string | null
+  /**
+   * The board is a capsule she is putting together from looks and has not saved yet. ADR-0152.
+   * Set the moment a look is ADDED to a board that was not already a capsule; from then on a
+   * click on a look adds it rather than replacing the board, and Save Look is off, because
+   * saving several looks as one look is never what she means. Cleared by every other load, and
+   * by the first save, which makes it an ordinary capsule (currentCapsuleId).
+   */
+  buildingCapsule: boolean
   isDirty: boolean
   // When a text node is added, we ask the canvas to open its inline editor immediately so the
   // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
@@ -209,6 +217,9 @@ interface CanvasStoreActions {
   // The board now corresponds to the saved replacement, so a second Save updates that row
   // rather than inserting a third capsule and re-retiring an already-retired original.
   noteSavedCapsuleAs: (id: string) => void
+  // Put a capsule board in place (looks added to it). `startsCapsule` turns a look or loose board
+  // into an unsaved capsule: no look id to update, so Update Look can never write it over one.
+  applyCapsuleBoard: (state: LookCanvasState, imageUrls: Record<string, string>, startsCapsule: boolean) => void
   markClean: () => void
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
@@ -237,6 +248,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   restyleReference: null,
   currentCapsuleId: null,
   replacesCapsuleId: null,
+  buildingCapsule: false,
   isDirty: false,
   pendingEditTextId: null,
   lastTextStyle: null,
@@ -595,6 +607,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
+      buildingCapsule: false,
       isDirty: false,
     })
     saveDraft(fresh)
@@ -614,6 +627,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
+      buildingCapsule: false,
       isDirty: false,
     })
     saveDraft(lookState)
@@ -635,6 +649,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
+      buildingCapsule: false,
       isDirty: true,
     })
     saveDraft(lookState)
@@ -658,6 +673,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
+      buildingCapsule: false,
       isDirty: true,
     })
     saveDraft(lookState)
@@ -682,6 +698,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       currentCapsuleId: id,
       replacesCapsuleId: null,
+      buildingCapsule: false,
       isDirty: false,
     })
     saveDraft(capsuleState)
@@ -707,13 +724,44 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId,
+      buildingCapsule: false,
       isDirty: true,
     })
     saveDraft(capsuleState)
     saveImageUrls(capsuleImageUrls)
   },
 
-  noteSavedCapsuleAs: (id) => set({ currentCapsuleId: id, replacesCapsuleId: null }),
+  // After ANY capsule save, first or replacement: the board IS that capsule now, so the next Save
+  // updates it. Before ADR-0152 only a replacement adopted its row, so a fresh "Save as Capsule"
+  // saved again inserted another: Janet Foutty's Denver capsule was five rows by 11:27 on
+  // 2026-09-24. The look id goes too, or Update Look would write the whole capsule over the look
+  // she started from.
+  noteSavedCapsuleAs: (id) => set({ currentCapsuleId: id, replacesCapsuleId: null, buildingCapsule: false, currentLookId: null, replacesLookId: null, replacesSiblingLookIds: [] }),
+
+  applyCapsuleBoard: (newState, newUrls, startsCapsule) => {
+    const { state: current, past } = get()
+    set({
+      // A board that just stopped being a look starts a fresh history: undoing back into the
+      // look while the board thinks it is a capsule would be neither.
+      past: startsCapsule ? [] : pushHistory(past, current),
+      future: [],
+      state: newState,
+      imageUrls: newUrls,
+      selectedNodeIds: [],
+      isDirty: true,
+      ...(startsCapsule ? {
+        buildingCapsule: true,
+        currentLookId: null,
+        replacesLookId: null,
+        replacesSiblingLookIds: [],
+        restyleReference: null,
+        currentCapsuleId: null,
+        replacesCapsuleId: null,
+      } : {}),
+    })
+    saveDraft(newState)
+    saveImageUrls(newUrls)
+  },
 
   markClean: () => set({ isDirty: false }),
 

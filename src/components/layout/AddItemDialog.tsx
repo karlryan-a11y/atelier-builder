@@ -72,6 +72,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   const [colorSet, setColorSet] = useState<string[]>([])
   const [category, setCategory] = useState('')
   const [styleNote, setStyleNote] = useState('')
+  const [description, setDescription] = useState('')
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
   // "Also in" — additional categories beyond the primary garment one (stored in custom_categories[]).
@@ -123,11 +124,14 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
         toPrefillDataUri(f).then(uri => api({ action: 'prefill', image: uri }).then(d => d?.fields || {})).catch(() => ({})),
       ])
       if (imgUrl) setProcessedUrl(imgUrl)
-      if (fields.name && !name) setName(fields.name)
-      if (fields.brand && !brand) setBrand(fields.brand)
-      if (fields.color && !color) setColor(fields.color)
-      if (Array.isArray(fields.colors) && fields.colors.length && !colorSet.length) setColorSet(fields.colors)
-      if (fields.category && !category) setCategory(fields.category)
+      // Fill only what is STILL empty now. `name` etc. here are the values from when the photo was
+      // picked, so reading them overwrote anything typed while it processed (Cynthia, 2026-09-25).
+      // The functional form sees the latest. check-additem-keeps-typing.mjs.
+      if (fields.name) setName(cur => cur.trim() ? cur : fields.name)
+      if (fields.brand) setBrand(cur => cur.trim() ? cur : fields.brand)
+      if (fields.color) setColor(cur => cur.trim() ? cur : fields.color)
+      if (Array.isArray(fields.colors) && fields.colors.length) setColorSet(cur => cur.length ? cur : fields.colors)
+      if (fields.category) setCategory(cur => cur ? cur : fields.category)
     } catch {
       alert('Could not process that photo — try again.')
     } finally { setProcessing(false) }
@@ -158,7 +162,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
       const d = await api({
         action: 'publish', item_id: draftId, name: name.trim(), brand, color,
         colors: colorSet,
-        category: finalCategory, style_note: styleNote,
+        category: finalCategory, style_note: styleNote, description,
         custom_categories: alsoInFinal.filter(s => s && s !== finalCategory),
       })
       if (!d?.ok) { alert(d?.error || 'Could not add the item.'); return }
@@ -278,10 +282,21 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
 
           <ColorSetField value={colorSet} onChange={setColorSet} />
 
+          {/* Hers, then ours — the same pair as the Edit dialog, in the same order, with the same
+              two captions. A stylist meets this field for the first time here. ADR-0151. */}
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Styling Note</label>
-            <textarea value={styleNote} onChange={e => setStyleNote(e.target.value)} rows={2} placeholder="Optional (stylist-only)"
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+              placeholder='e.g. "Whiskey houndstooth wool, three-quarter sleeve"'
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none" />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client, and searchable by you both</p>
+          </div>
+
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Internal Note</label>
+            <textarea value={styleNote} onChange={e => setStyleNote(e.target.value)} rows={2} placeholder="Optional"
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none" />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Team only — never shown to the client, and never in her search</p>
           </div>
         </div>
 

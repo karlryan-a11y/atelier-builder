@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
+import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
 import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
@@ -28,7 +29,7 @@ const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', c
 // Each item's garment category is resolved with the SAME resolver as the lookbook + Style canvas
 // (override → tag → name), so GoodPix carry-overs categorize too. Reports counts up for the rail
 // filter and accepts a garment-category filter.
-export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned }: {
+export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned, onOpenLook }: {
   clientId: string | null
   filterCategories?: Set<string>
   /**
@@ -41,6 +42,18 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   onCategoryCoverage?: (coverage: Map<string, StyledCoverage>) => void
   /** Called after a stylist transitions a piece out, so the Transitions tab + badge refresh live. */
   onTransitioned?: () => void
+  /**
+   * Open one of the looks in the "Styled in N looks" list on the canvas, ready to change.
+   * ADR-0150. Cynthia Dada, 2026-09-24: "If we can edit looks from the back end where we click
+   * on the garment and it shows what looks they're styled in, that would be even better."
+   *
+   * Half of that has existed since ADR-0103: the piece card already says "Styled in 4 looks" and
+   * opens a list of exactly those looks. The list was a dead end — pictures she could look at and
+   * not act on, so finding the look and then opening it were two different jobs in two tabs.
+   * The panel owns the rebuild (it needs the look's piece list and the canvas store), so it hands
+   * it down rather than this tab reaching for the store itself.
+   */
+  onOpenLook?: (lookId: string) => void
 }) {
   const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(clientId)
   const { activeClient } = useClientStore()
@@ -165,21 +178,31 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     onCategoryCounts(counts)
   }, [categoriesByItem, items, onCategoryCounts])
 
-  const baseVisible = useMemo(() => {
+  /**
+   * ONE MATCHER, TEAM AUDIENCE. ADR-0151. This used to read four fields with a substring test of
+   * its own; her Collection page read six with a different test; the canvas rail read four more.
+   * Now every surface asks the same question of the same fields, and this one also sees the
+   * internal note because a stylist may search her own notes.
+   */
+  const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => ({
+    name: i.name, nameOverride: i.name_override, brand: i.brand, color: i.color,
+    description: i.description, internalNote: i.style_note,
+    categories: categoriesByItem.get(i.id) ?? [],
+    tags: (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
+  }), [categoriesByItem, tagNameById])
+
+  const searched = useMemo(() => {
     let live = items.filter((i) => !i.is_deleted)
     if (filterCategories && filterCategories.size > 0) {
       live = live.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => filterCategories!.has(c)))
     }
-    const term = q.trim().toLowerCase()
-    if (!term) return live
-    return live.filter((i) =>
-      displayName(i).toLowerCase().includes(term) ||
-      (i.category ?? '').toLowerCase().includes(term) ||
-      (i.brand ?? '').toLowerCase().includes(term) ||
-      // Color lives in the free-text `color` field (the normalized color_family column is empty),
-      // so "silver"/"black"/"gold" match the descriptive color text.
-      (i.color ?? '').toLowerCase().includes(term))
-  }, [items, q, filterCategories, categoriesByItem])
+    return searchPieces(live, q, fieldsOf, 'team')
+  }, [items, q, filterCategories, categoriesByItem, fieldsOf])
+  // NEAR matches are kept OUT of the main list and shown under their own heading. Folding them in
+  // would mean "Search" quietly returning things that do not match what she typed; leaving them
+  // out entirely is the empty page that made Cynthia add a second Margaret dress.
+  const baseVisible = searched.full
+  const nearMisses = searched.near
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
   // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
@@ -592,7 +615,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         </div>
       )}
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && nearMisses.length === 0 ? (
         <p className="text-[#888] text-sm">{q ? 'No items match your search.' : 'This client has no collection items yet.'}</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -644,6 +667,11 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                   })()}
                   <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
                   <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(primaryCategoryByItem.get(item.id) ?? 'other')}</p>
+                  {/* One truncated line, so a stylist can see at a glance which pieces are
+                      described and which are not. ADR-0151. */}
+                  {item.description?.trim() && (
+                    <p className="text-[10px] leading-snug text-[#9a9289] mt-1 line-clamp-2" title={item.description}>{item.description}</p>
+                  )}
                   {/* Level 1: badge when the CLIENT set one of these fields, so the stylist can tell
                       client edits from ours before touching them (migration 015). */}
                   {(item.client_edited_fields?.length ?? 0) > 0 && (() => {
@@ -695,6 +723,43 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         </div>
       )}
 
+      {/* NEARLY. The Margaret dress was in her closet the whole time; "margaret satin sheath midi"
+          returned an empty page because one word of four was missing, so it was added a second
+          time. A near miss is shown, under its own line, never folded in. ADR-0151. */}
+      {nearMisses.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-[#aaa] flex-none">
+              Nearly · {nearMisses.length} {nearMisses.length === 1 ? 'piece matches' : 'pieces match'} all but one word
+            </span>
+            <span className="h-px bg-[#E8E4DF] flex-1" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+            {nearMisses.map((item) => {
+              const img = resolveItemImage(item)
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setEditing(item)}
+                  title="Edit this piece"
+                  className="group text-left border border-[#E8E4DF] rounded-sm overflow-hidden bg-white hover:border-[#1A1A1A] transition-colors"
+                >
+                  <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
+                    {img
+                      ? <TileImage src={img} width={PIECE_TILE_WIDTH} alt={displayName(item)} className="max-w-full max-h-full object-contain" loading="lazy" />
+                      : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No photo</span>}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] truncate">{item.brand || '\u00a0'}</p>
+                    <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
       {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
 
@@ -742,19 +807,38 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
             </div>
             <div className="overflow-y-auto p-5">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {looksModal.looks.map((lk) => (
-                  <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">
-                    <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
-                      {lk.image
-                        ? <TileImage src={lk.image} width={LOOK_TILE_WIDTH} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
-                        : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
-                    </div>
-                    <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2">
-                      {lk.name}
-                      {!lk.published && <span className="ml-1.5 text-[10px] tracking-[0.14em] uppercase text-[#9a6b3f]">Draft</span>}
-                    </p>
-                  </div>
-                ))}
+                {looksModal.looks.map((lk) => {
+                  const body = (
+                    <>
+                      <div className="aspect-[3/4] bg-[#F8F7F5] flex items-center justify-center overflow-hidden">
+                        {lk.image
+                          ? <TileImage src={lk.image} width={LOOK_TILE_WIDTH} alt={lk.name} className="max-w-full max-h-full object-contain" loading="lazy" />
+                          : <span className="text-[10px] tracking-[0.2em] uppercase text-[#bbb]">No preview</span>}
+                      </div>
+                      <p className="text-[12px] text-[#1A1A1A] truncate px-2.5 py-2 text-left">
+                        {lk.name}
+                        {!lk.published && <span className="ml-1.5 text-[10px] tracking-[0.14em] uppercase text-[#9a6b3f]">Draft</span>}
+                      </p>
+                    </>
+                  )
+                  if (!onOpenLook) {
+                    return <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">{body}</div>
+                  }
+                  return (
+                    <button
+                      key={lk.id}
+                      type="button"
+                      onClick={() => { setLooksModal(null); onOpenLook(lk.id) }}
+                      title={`Open "${lk.name}" on the canvas to change it`}
+                      className="group block w-full border border-[#E8E4DF] rounded-sm overflow-hidden bg-white text-left hover:border-[#1A1A1A] focus:outline-none focus:border-[#1A1A1A] transition-colors cursor-pointer"
+                    >
+                      {body}
+                      <span className="block px-2.5 pb-2 text-[9px] tracking-[0.16em] uppercase text-[#bbb] group-hover:text-[#1A1A1A] transition-colors">
+                        Open on canvas
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>

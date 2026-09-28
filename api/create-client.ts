@@ -18,7 +18,7 @@ const WSG_TEAM_ID = '687fb860df4ad4912bc0abc5' // same team the scraper writes u
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 const TIERS = ['A-la-carte', 'Signature', 'White Glove', 'Elève']

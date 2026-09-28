@@ -12,13 +12,17 @@ interface LookGalleryProps {
   error?: string | null
   onRetry?: () => void
   currentLookId: string | null
+  /** Looks already on the capsule on the board (ADR-0152): marked, and a click does nothing. */
+  onBoardIds?: string[]
+  /** The board is a capsule, so a click ADDS the look. Each tile says so. */
+  addMode?: boolean
   onSelect: (look: LookRow) => void
   onDuplicate: (look: LookRow) => void
   onDelete: (id: string) => void
   onNew: () => void
 }
 
-export function LookGallery({ looks, loading, error, onRetry, currentLookId, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {
+export function LookGallery({ looks, loading, error, onRetry, currentLookId, onBoardIds = [], addMode = false, onSelect, onDuplicate, onDelete, onNew }: LookGalleryProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-3 gap-2 p-3">
@@ -54,12 +58,15 @@ export function LookGallery({ looks, loading, error, onRetry, currentLookId, onS
         <div className="grid grid-cols-3 gap-2">
           {looks.map((look) => {
             const image = lookImageUrl(look.raw)
+            const onBoard = onBoardIds.includes(look.id)
             return (
             <div
               key={look.id}
               onClick={() => onSelect(look)}
+              title={addMode ? (onBoard ? 'Already on this capsule' : 'Add to this capsule') : undefined}
               className={`group cursor-pointer rounded-sm border transition-colors ${
-                currentLookId === look.id
+                onBoard ? 'border-blush ring-1 ring-blush opacity-60'
+                : currentLookId === look.id
                   ? 'border-blush ring-1 ring-blush'
                   : 'border-border hover:border-blush/50'
               }`}
@@ -79,6 +86,11 @@ export function LookGallery({ looks, loading, error, onRetry, currentLookId, onS
                       No preview
                     </span>
                   </div>
+                )}
+                {addMode && (
+                  <span className="absolute bottom-1 left-1 right-1 text-center text-[8px] tracking-[0.2em] uppercase bg-white/90 rounded-sm py-0.5 text-text">
+                    {onBoard ? 'On capsule' : '+ Add'}
+                  </span>
                 )}
                 <button
                   onClick={(e) => {

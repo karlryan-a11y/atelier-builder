@@ -8,6 +8,19 @@ export interface LookCanvasState {
   nodes: CanvasNode[]
 }
 
+/**
+ * WHICH LOOK A NODE ARRIVED WITH, on a capsule board. ADR-0152.
+ *
+ * A capsule is a set of looks (Cynthia Dada, 2026-09-24: "When I try to add another look to a
+ * capsule, it thinks I want to discard and load a new look"). When a look is added to a capsule
+ * board, every node it brings is stamped with the look's id, so the saved capsule can say which
+ * looks it holds (raw.look_ids) and the picker can tell her which ones are already on it.
+ * Absent on ordinary looks and on anything placed by hand.
+ */
+export interface LookMembership {
+  from_look_id?: string
+}
+
 export type CanvasNode =
   | ClosetItemNode
   | TextNode
@@ -15,7 +28,7 @@ export type CanvasNode =
   | ShapeNode
   | PictureNode
 
-export interface ClosetItemNode {
+export interface ClosetItemNode extends LookMembership {
   id: string
   type: 'closet_item'
   closet_item_id: string
@@ -51,7 +64,7 @@ export interface ClosetItemNode {
   hidden?: boolean
 }
 
-export interface TextNode {
+export interface TextNode extends LookMembership {
   id: string
   type: 'text'
   content: string
@@ -81,7 +94,7 @@ export interface TextNode {
  * size on the board. A flip mirrors inside that box (the render sets offset = size), so flipping
  * never moves it — unlike a closet piece, whose flip is anchored on its right edge.
  */
-export interface PictureNode {
+export interface PictureNode extends LookMembership {
   id: string
   type: 'picture'
   src: string
@@ -98,7 +111,7 @@ export interface PictureNode {
   product_id?: string | null
 }
 
-export interface StickerNode {
+export interface StickerNode extends LookMembership {
   id: string
   type: 'sticker'
   sticker_id: string
@@ -109,7 +122,7 @@ export interface StickerNode {
   z_index: number
 }
 
-export interface ShapeNode {
+export interface ShapeNode extends LookMembership {
   id: string
   type: 'shape'
   shape: 'rect' | 'circle' | 'line'

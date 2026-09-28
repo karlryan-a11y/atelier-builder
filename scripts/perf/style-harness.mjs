@@ -37,6 +37,10 @@ const JSON_OUT = arg('--json', null)
 const SHOT = arg('--shot', null)      // write a WebKit screenshot of the closet rail and exit
 const SELECT_SHOT = arg('--select-shot', null)   // drive Categorize's card checkbox and exit
 const HIDE_SHOT = arg('--hide-shot', null)       // hide a piece on the board and exit (ADR-0146)
+const FILING_SHOT = arg('--filing-shot', null)   // drive the Save box's categories and exit (ADR-0149)
+const SEARCH_SHOT = arg('--search-shot', null)   // drive Categorize's look search and exit (ADR-0150)
+const DESC_SHOT = arg('--desc-shot', null)       // drive the piece description + search and exit (ADR-0151)
+const STEADY = args.includes('--steady-board')   // the board must not move when she selects something, and exit
 const TAPS = Number(arg('--taps', 24))
 // Per-request latency. 150 ms: measured 2026-09-19 from Denver, curl to the project's REST
 // endpoint took 220-355 ms with a fresh TLS handshake each time (connect 34-92 ms); a browser
@@ -80,8 +84,11 @@ const hex = (n) => n.toString(16).padStart(24, '0')
 const FILLER = 'x'.repeat(2400)
 const items = Array.from({ length: N_ITEMS }, (_, i) => ({
   id: hex(0xa0000 + i), client_id: CLIENT.id, name: `Piece ${i + 1}`, name_override: null,
-  style_note: i % 17 === 0 ? 'wear with heels' : null,
+  style_note: i === 5 ? 'she hates the neckline, keep for resale' : (i % 17 === 0 ? 'wear with heels' : null),
   category: HEAVY_CATEGORIES[i % HEAVY_CATEGORIES.length], custom_categories: i % 9 === 0 ? ['travel'] : [],
+  // ADR-0151: one piece carries the word only in its DESCRIPTION and one only in the TEAM note,
+  // so the two audiences can be told apart by what they can find.
+  description: i === 3 ? 'Whiskey houndstooth wool, three-quarter sleeve, ruffled hem at mid-calf' : null,
   category_suggested: null, brand: ['Chanel', 'Loro Piana', 'The Row', 'Khaite'][i % 4], color: ['Black', 'Ivory', 'Navy'][i % 3],
   color_family: null, color_families: null, color_audit: null, content_tag_ids: [TAGS[i % TAGS.length].id],
   is_deleted: false, transitioned_at: null, transition_reason: null, transition_source: null,
@@ -121,7 +128,16 @@ const cats = ['Office', 'Weekend', 'Travel', 'Evening', 'Aspen', 'Palm Beach'].m
   id: hex(0xd0000 + i), client_id: CLIENT.id, slug: label.toLowerCase().replace(/\s+/g, '-'), label, sort_order: i,
   is_hidden: false, is_residence: false, description: null, parent_slug: null,
 }))
-const TABLES = { gp_closet_items: items, gp_content_tags: TAGS, gp_looks: looks, looks, gp_boards: boards, look_categories: cats }
+// ADR-0149: where a look is FILED. Harness Look 1 sits in Office and Travel, so the Save box has
+// something real to open with and something real to take away.
+const assignments = [
+  { look_id: looks[0].id, category_id: cats[0].id },   // Office
+  { look_id: looks[0].id, category_id: cats[2].id },   // Travel
+]
+const TABLES = { gp_closet_items: items, gp_content_tags: TAGS, gp_looks: looks, looks, gp_boards: boards, look_categories: cats, look_category_assignments: assignments }
+
+/** Every write the app made, in order. Filled by handleRest; read by --filing-shot. */
+const writes = []
 
 // ── a tiny PostgREST ─────────────────────────────────────────────────────────
 function splitTop(s) {
@@ -168,9 +184,44 @@ function matches(row, key, val) {
   if (op === 'cs') return true
   return true
 }
-function handleRest(url, method, headers) {
+function handleRest(url, method, headers, body) {
   const table = url.pathname.split('/').pop()
   const rows = TABLES[table] ?? []
+  // WRITES. The mock used to answer every non-GET with `[]`, which meant a save returned no row
+  // and nothing downstream of it could be driven at all. It now applies the write and echoes it,
+  // the way PostgREST does with `return=representation`, and records it for the assertions.
+  if (method === 'POST' || method === 'PATCH' || method === 'DELETE') {
+    let parsed = null
+    try { parsed = body ? JSON.parse(body) : null } catch { /* not JSON */ }
+    const list = Array.isArray(parsed) ? parsed : parsed ? [parsed] : []
+    const eqOf = (k) => { const v = url.searchParams.get(k); return v?.startsWith('eq.') ? v.slice(3) : null }
+    if (method === 'DELETE') {
+      const keep = rows.filter((r) => {
+        for (const [k, v] of url.searchParams) {
+          if (['select', 'order', 'offset', 'limit', 'columns', 'on_conflict'].includes(k)) continue
+          if (!matches(r, k, v)) return true      // not matched by the filter: keep it
+        }
+        return false
+      })
+      const removed = rows.length - keep.length
+      if (TABLES[table]) TABLES[table].splice(0, rows.length, ...keep)
+      writes.push({ table, method, removed, query: url.search })
+    } else {
+      for (const r of list) {
+        const idKey = 'id' in r ? 'id' : null
+        const i = idKey ? rows.findIndex((x) => x[idKey] === r[idKey])
+          : rows.findIndex((x) => x.look_id === r.look_id && x.category_id === r.category_id)
+        if (i >= 0) rows[i] = { ...rows[i], ...r }
+        else if (method === 'POST') rows.push({ ...r })
+        else { const j = rows.findIndex((x) => x.id === eqOf('id')); if (j >= 0) rows[j] = { ...rows[j], ...r } }
+      }
+      writes.push({ table, method, rows: list.length, ids: list.map((r) => r.id ?? `${r.look_id}:${r.category_id}`) })
+    }
+    const h = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' }
+    const echo = method === 'DELETE' ? [] : list.map((r) => ({ ...(rows.find((x) => x.id === r.id) ?? r) }))
+    if (/vnd\.pgrst\.object/.test(headers.accept ?? '')) return { status: 200, headers: h, body: JSON.stringify(echo[0] ?? null) }
+    return { status: 200, headers: h, body: JSON.stringify(echo) }
+  }
   const params = url.searchParams
   let result = rows.filter((r) => {
     for (const [k, v] of params) {
@@ -188,7 +239,6 @@ function handleRest(url, method, headers) {
     'content-range': `${result.length ? offset : '*'}-${result.length ? offset + result.length - 1 : ''}/${/count=/.test(headers.prefer ?? '') ? total : '*'}`.replace('*-/', '*/'),
   }
   if (method === 'HEAD') return { status: 200, headers: h, body: '' }
-  if (method !== 'GET') return { status: 200, headers: h, body: '[]' }
   if (/vnd\.pgrst\.object/.test(headers.accept ?? '')) return { status: 200, headers: h, body: JSON.stringify(result[0] ?? null) }
   return { status: 200, headers: h, body: JSON.stringify(result) }
 }
@@ -247,7 +297,7 @@ await page.route('**/*', async (route) => {
     let res
     if (url.pathname === '/auth/v1/user') res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify(USER) }
     else if (url.pathname === '/rest/v1/users') res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ id: 'harness-user', email: USER.email, display_name: 'Harness', role: 'admin' }) }
-    else if (url.pathname.startsWith('/rest/v1/')) res = handleRest(url, r.method(), headers)
+    else if (url.pathname.startsWith('/rest/v1/')) res = handleRest(url, r.method(), headers, r.postData())
     else res = { status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: '{}' }
     const bytes = Buffer.byteLength(res.body ?? '')
     net.requests++
@@ -262,6 +312,17 @@ await page.route('**/*', async (route) => {
   // never touches the network.
   return route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: '{}' })
 })
+
+async function nodeCenterOf(id) {
+  return page.evaluate((nid) => {
+    const st = globalThis.__Konva.stages.find((s) => s.findOne('#' + nid))
+    const kn = st?.findOne('#' + nid)
+    if (!kn) return null
+    const r = kn.getClientRect()
+    const c = st.container().getBoundingClientRect()
+    return { x: c.left + r.x + r.width / 2, y: c.top + r.y + r.height / 2 }
+  }, id)
+}
 
 await page.goto(`http://localhost:${PORT}/`)
 await page.waitForFunction(() => !!globalThis.__stores && !!document.querySelector('button') && [...document.querySelectorAll('button')].some((b) => b.textContent?.trim().toLowerCase() === 'categorize'), null, { timeout: 30000 })
@@ -489,6 +550,383 @@ if (SELECT_SHOT) {
   process.exit(0)
 }
 
+// ADR-0151: one matcher, every field — and the team's note is the team's alone.
+//
+// Maegan Watson, 2026-09-24: "we have to be able to search houndstooth and the dress shows up."
+// Driven on the real rail because the whole claim is "type a word and it finds it whichever
+// field the word is in", and only the running app can answer that.
+if (DESC_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+
+  const box = await page.$('input[placeholder="Search pieces..."]')
+  const names = () => page.evaluate(() => {
+    const rail = document.querySelector('input[placeholder="Search pieces..."]')?.closest('aside, div[class*="w-"]')
+    const scope = rail ?? document
+    return [...scope.querySelectorAll('p')].map((e) => e.textContent.trim()).filter((t) => /^Piece \d+$/.test(t))
+  })
+  const type = async (q) => {
+    await box.click({ clickCount: 3 }); await page.keyboard.press('Backspace')
+    if (q) await box.type(q, { delay: 25 })
+    await page.waitForTimeout(650)
+    return names()
+  }
+
+  const all = await names()
+  const byName = await type('Piece 4')
+  const byBrand = await type('khaite')
+  const byColour = await type('ivory')
+  const byCategory = await type('denim')
+  const byDescription = await type('houndstooth')     // ONLY in Piece 4's description
+  const byDescription2 = await type('mid-calf')
+  const byInternal = await type('resale')             // ONLY in Piece 6's team note
+  const nearMiss = await type('houndstooth wool zebra')
+  const nothing = await type('zzzz')
+  await type('')
+
+  await page.screenshot({ path: DESC_SHOT })
+  const n = (a) => a.length
+  console.log(`\n  the canvas rail, ${n(all)} pieces in view:`)
+  console.log(`    "Piece 4"                -> ${n(byName)}   (name)`)
+  console.log(`    "khaite"                 -> ${n(byBrand)}   (brand)`)
+  console.log(`    "ivory"                  -> ${n(byColour)}   (colour)`)
+  console.log(`    "denim"                  -> ${n(byCategory)}   (category)`)
+  console.log(`    "houndstooth"            -> ${n(byDescription)}   ${byDescription.join(', ')}   (DESCRIPTION only)`)
+  console.log(`    "mid-calf"               -> ${n(byDescription2)}   ${byDescription2.join(', ')}   (description, hyphenated)`)
+  console.log(`    "resale"                 -> ${n(byInternal)}   ${byInternal.join(', ')}   (TEAM note only)`)
+  console.log(`    "houndstooth wool zebra" -> ${n(nearMiss)}   ${nearMiss.join(', ')}   (2 of 3 words: near)`)
+  console.log(`    "zzzz"                   -> ${n(nothing)}`)
+
+  const ok = n(all) > 20
+    && n(byName) >= 1 && n(byBrand) > 0 && n(byColour) > 0 && n(byCategory) > 0
+    && n(byDescription) === 1 && byDescription[0] === 'Piece 4'
+    && n(byDescription2) === 1 && byDescription2[0] === 'Piece 4'
+    && n(byInternal) === 1 && byInternal[0] === 'Piece 6'
+    && n(nearMiss) === 1 && nearMiss[0] === 'Piece 4'
+    && n(nothing) === 0
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - a word is found whichever field it is in, and a near miss is not an empty page.\n`)
+  console.log(`  ${DESC_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
+}
+
+// ADR-0150: she can find one look by name, and open it from a piece that is in it.
+//
+// Cynthia Dada, 2026-09-24: "Can we please add the ability to search for look names? I need to
+// search for 182 and 175 ... If we can edit looks from the back end where we click on the garment
+// and it shows what looks they're styled in, that would be even better."
+//
+// Driven rather than asserted, because "the grid narrows as I type" and "the tile opens the look"
+// are both things only a real browser can answer. The fixture's 40 looks are named Harness Look 1
+// to 40, which reproduces the shape of her problem exactly: typing 1, then 18, then 18 must
+// narrow 40 -> 13 -> 1 (Look 1/10-19, then 18, then 18 alone at "182" has no match, so the test
+// uses 1 -> 1x -> 18).
+if (SEARCH_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.evaluate(() => globalThis.__stores.view.getState().setStyleTab('categorize'))
+  await page.waitForTimeout(2500)
+
+  const box = await page.$('input[aria-label="Search look names"]')
+  if (!box) { console.log('\n  FAIL - no search box in Categorize.\n'); await browser.close(); stop(); process.exit(1) }
+
+  // Left on the default QUEUE view on purpose: the 20 drafts are what a stylist actually opens
+  // Categorize to work through, and the assertions below are relative, so they hold whatever the
+  // status pill is set to.
+  // SCOPED TO THE CATEGORIZE COLUMN. The canvas rail on the right lists all 40 looks too, and it
+  // stays mounted across a tab switch on purpose (check-style-tabs-mounted). Scraping the whole
+  // page therefore reads 40 whatever the grid is showing, which is how the first run of this
+  // said PASS-shaped numbers for a filter that was working perfectly.
+  const namesOnScreen = () => page.evaluate(() => {
+    const input = document.querySelector('input[aria-label="Search look names"]')
+    const col = input?.closest('div.flex-1.flex.flex-col')
+    if (!col) return []
+    return [...new Set([...col.querySelectorAll('p,div,span')]
+      .map((e) => e.textContent.trim())
+      .filter((t) => /^Harness Look \d+$/.test(t)))]
+  })
+
+  const type = async (q) => {
+    await box.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    if (q) await box.type(q, { delay: 40 })
+    await page.waitForTimeout(700)
+    return namesOnScreen()
+  }
+
+  const all = await namesOnScreen()
+  const one = await type('1')
+  const oneEight = await type('18')
+  const eighteen = await type('Harness Look 18')
+  const reordered = await type('18 harness')
+  void one
+  const nothing = await type('zzz')
+  const emptyMsg = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('p')].find((e) => /Nothing named/.test(e.textContent))
+    return el ? el.textContent.replace(/\s+/g, ' ').trim() : null
+  })
+  await type('')
+  const cleared = await namesOnScreen()
+
+  // Now the other half: Collection -> a piece -> "Styled in N looks" -> click a tile.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().toLowerCase() === 'collection')
+    b?.click()
+  })
+  await page.waitForTimeout(3000)
+  const usageBtn = await page.evaluateHandle(() =>
+    [...document.querySelectorAll('button')].find((b) => /Styled in \d+ look|In \d+ draft look/.test(b.textContent)) ?? null)
+  const hasUsage = await usageBtn.evaluate((e) => !!e)
+  let modalTiles = 0, opensOnCanvas = false, replaces = null
+  if (hasUsage) {
+    await usageBtn.asElement().click()
+    await page.waitForTimeout(900)
+    modalTiles = await page.evaluate(() =>
+      [...document.querySelectorAll('button')].filter((b) => /Open on canvas/.test(b.textContent)).length)
+    if (modalTiles > 0) {
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find((x) => /Open on canvas/.test(x.textContent))
+        b?.click()
+      })
+      await page.waitForTimeout(2500)
+      const st = await page.evaluate(() => {
+        const c = globalThis.__stores.canvas.getState()
+        return { replaces: c.replacesLookId, current: c.currentLookId, nodes: c.state.nodes.length, tab: globalThis.__stores.view.getState().styleTab }
+      })
+      opensOnCanvas = st.tab === 'canvas' && st.nodes > 0
+      replaces = st
+    }
+  }
+  await page.screenshot({ path: SEARCH_SHOT })
+
+  const n = (a) => a.length
+  console.log(`\n  searching the ${n(all)} looks in Categorize's queue:`)
+  console.log(`    ""                  -> ${n(all)}`)
+  console.log(`    "1"                 -> ${n(one)}`)
+  console.log(`    "18"                -> ${n(oneEight)}  ${oneEight.join(', ')}`)
+  console.log(`    "Harness Look 18"   -> ${n(eighteen)}  ${eighteen.join(', ')}`)
+  console.log(`    "18 harness"        -> ${n(reordered)}  ${reordered.join(', ')}   (word order must not matter)`)
+  console.log(`    "zzz"               -> ${n(nothing)}   message: ${emptyMsg ?? '(none)'}`)
+  console.log(`    cleared             -> ${n(cleared)}`)
+  console.log(`\n  a piece's "Styled in N looks" list: ${hasUsage ? 'found' : 'NOT FOUND'}, ${modalTiles} openable tile(s)`)
+  if (replaces) console.log(`    clicked one -> tab=${replaces.tab}, ${replaces.nodes} pieces on the board, replacesLookId=${replaces.replaces ? 'set' : 'NULL'}, currentLookId=${replaces.current ?? 'null'}`)
+
+  const ok = n(all) > 1                                  // there is a list to narrow
+    && n(one) < n(all)                                   // typing narrows
+    && n(oneEight) < n(one)                              // and narrows again
+    && n(eighteen) === 1 && eighteen[0] === 'Harness Look 18'   // down to the one she wanted
+    && n(reordered) === 1 && reordered[0] === eighteen[0]       // word order does not matter
+    && n(nothing) === 0 && !!emptyMsg                    // and an empty result says WHY
+    && /Clear the search/.test(emptyMsg)
+    && n(cleared) === n(all)                             // clearing puts every look back
+    && hasUsage && modalTiles > 0 && opensOnCanvas
+    && !!replaces?.replaces && !replaces?.current      // REPLACES, does not duplicate (ADR-0148)
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - the grid narrows as she types, and a piece's look opens on the canvas as a replacement.\n`)
+  console.log(`  ${SEARCH_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
+}
+
+// ADR-0149: the Save box's CATEGORIES pills mean the same thing as Categorize's pills.
+//
+// Cynthia Dada, 2026-09-24: "When I go to update, it asks me to add to a category. This look was
+// already in a category but I'm not sure what. Can it just stay in the categories it was in?"
+//
+// Driven, not asserted from the source, because the two halves that were broken are both things
+// you can only see by doing it: WHICH PILLS ARE ON when the box opens on a REBUILD, and WHICH
+// TABLE the save writes to. The board is loaded as a replacement — no currentLookId, exactly the
+// case she hit — of Harness Look 1, which is filed in Office and Travel.
+if (FILING_SHOT) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  await page.evaluate(({ board, url, lookId, name }) => {
+    const urls = Object.fromEntries(board.nodes.map((n) => [n.id, url]))
+    globalThis.__stores.canvas.getState().loadLookAsReplacement(lookId, [], board, urls)
+    // loadLookAsReplacement clears the reference, so set it after: this is what CategorizePanel
+    // does on a real Rebuild, and it is where the look's own NAME comes from (ADR-0132).
+    globalThis.__stores.canvas.getState().setRestyleReference({ lookId, lookName: name, imageUrl: null, omitted: [], notInPicture: [], fromLayout: false, covers: 1 })
+  }, { board, url: PIECE_URL, lookId: looks[0].id, name: looks[0].name })
+  await page.waitForTimeout(1800)
+
+  const openSave = async () => {
+    for (const b of await page.$$('button')) {
+      const t = (await b.innerText().catch(() => '')) ?? ''
+      if (/^(update look|save look)$/i.test(t.trim())) { await b.click(); return t.trim() }
+    }
+    return null
+  }
+  const buttonLabel = await openSave()
+  await page.waitForTimeout(900)
+
+  // What the box says, and which pills it opened with.
+  // Scoped to the dialog, and to its round pills only: the app behind it has a Travel chip on the
+  // closet rail and a nav full of buttons, and grabbing those would grade the wrong thing.
+  const pillState = () => page.evaluate(() => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    if (!dlg) return null
+    const name = dlg.querySelector('input')?.value ?? ''
+    const pills = [...dlg.querySelectorAll('button.rounded-full')]
+      .map((b) => ({ label: b.textContent.trim(), on: b.className.includes('text-white') }))
+    return { name, pills }
+  })
+  const opened = await pillState()
+
+  const clickPill = (label) => page.evaluate((l) => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    const b = [...(dlg?.querySelectorAll('button.rounded-full') ?? [])].find((x) => x.textContent.trim() === l)
+    if (!b) return false
+    b.click(); return true
+  }, label)
+  // Take one away, add one that was never on. Both directions, in one save.
+  const unticked = await clickPill('Travel')
+  const ticked = await clickPill('Evening')
+  await page.waitForTimeout(300)
+  const edited = await pillState()
+
+  writes.length = 0
+  await page.evaluate(() => {
+    const dlg = [...document.querySelectorAll('div')].find((d) => d.querySelector(':scope > div > h2')?.textContent?.trim().toUpperCase() === 'SAVE LOOK')
+    const b = [...(dlg?.querySelectorAll('button') ?? [])].find((x) => x.textContent.trim().toUpperCase() === 'SAVE')
+    b?.click()
+  })
+  await page.waitForTimeout(2500)
+  await page.screenshot({ path: FILING_SHOT })
+
+  const filingWrites = writes.filter((w) => w.table === 'look_category_assignments')
+  const newLookId = TABLES.looks.find((l) => l.id !== looks[0].id && l.name === opened?.name)?.id ?? null
+  const filedNow = TABLES.look_category_assignments
+    .filter((a) => a.look_id === (newLookId ?? looks[0].id))
+    .map((a) => cats.find((c) => c.id === a.category_id)?.label)
+    .sort()
+
+  const onAtOpen = (opened?.pills ?? []).filter((p) => p.on).map((p) => p.label).sort()
+  const onAtSave = (edited?.pills ?? []).filter((p) => p.on).map((p) => p.label).sort()
+
+  console.log(`\n  the Save box on a REBUILD of "${looks[0].name}" (filed: Office, Travel):`)
+  console.log(`    button says:      ${buttonLabel}`)
+  console.log(`    name box:         "${opened?.name ?? '(none)'}"`)
+  console.log(`    pills ON at open: ${onAtOpen.join(', ') || '(none)'}`)
+  console.log(`    after unticking Travel and ticking Evening: ${onAtSave.join(', ') || '(none)'}`)
+  console.log(`    writes to look_category_assignments: ${filingWrites.length ? filingWrites.map((w) => `${w.method} ${w.rows ?? w.removed}`).join(', ') : '(none)'}`)
+  console.log(`    filed after save: ${filedNow.join(', ') || '(none)'}`)
+
+  const ok = buttonLabel?.toLowerCase() === 'update look'
+    && opened?.name === looks[0].name
+    && onAtOpen.join(',') === 'Office,Travel'          // THE POINT: it opens with its filing on
+    && unticked && ticked
+    && onAtSave.join(',') === 'Evening,Office'
+    && filingWrites.some((w) => w.method === 'POST')
+    && filingWrites.some((w) => w.method === 'DELETE' && w.removed === 1)
+    && filedNow.join(',') === 'Evening,Office'         // and the table says what the screen said
+  console.log(`\n  ${ok ? 'PASS' : 'FAIL'} - the box opens with the look's filing on, and saving writes it.\n`)
+  console.log(`  ${FILING_SHOT}`)
+  if (errors.length) console.log(`  page errors: ${errors.length}\n${errors.map((e) => '   ' + e).join('\n')}`)
+  await browser.close(); stop()
+  process.exit(ok && errors.length === 0 ? 0 : 1)
+}
+
+// THE BOARD HOLDS STILL. Cynthia Dada, 2026-09-25, #watson-atelier (Loom, no audio): "Can you
+// please fix this auto zoom that's happening? It messes up when I'm trying to move text." and
+// "It also does it when I select garments". The zoom never changed (125% throughout); the BOARD
+// did. Since 2026-09-18 (078b92c) the toolbar wraps, selecting a label or a piece adds its
+// controls, the toolbar grows a row, the space under it shrinks, and the board is re-fitted to
+// that space, so it shrinks under her cursor on the press and grows back when she lets go.
+//
+// Measured, not asserted from source: at three real screen sizes, the board's on-screen box in
+// every selection state, a drag of a text label, and whether every toolbar button is reachable.
+if (STEADY) {
+  await page.evaluate((c) => globalThis.__stores.client.getState().setActiveClient(c), CLIENT)
+  await page.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="draggable"]')].filter((el) => el.getClientRects().length).length >= 8, null, { timeout: 60000 })
+  const text = {
+    id: 'tx_harness_label', type: 'text', content: 'Daytime Workshops', font_family: 'Amalfi Coast', font_size: 48,
+    fill: '#1A1A1A', x: 300, y: 20, rotation: 0, z_index: 99,
+  }
+  const withText = { ...board, nodes: [...board.nodes, text] }
+  const SIZES = [
+    { name: 'MacBook Air 1440x900', width: 1440, height: 900 },
+    { name: 'laptop 1280x800', width: 1280, height: 800 },
+    { name: 'iPad 1024x1366', width: 1024, height: 1366 },
+  ]
+  const STATES = [
+    { name: 'nothing selected', ids: [] },
+    { name: 'a garment', ids: [boardNodes[0].id] },
+    { name: 'a text label', ids: [text.id] },
+    { name: 'two garments', ids: [boardNodes[0].id, boardNodes[1].id] },
+    { name: 'three garments', ids: [boardNodes[0].id, boardNodes[1].id, boardNodes[2].id] },
+    { name: 'a label and a garment', ids: [text.id, boardNodes[3].id] },
+    { name: 'nothing selected again', ids: [] },
+  ]
+  const boardBox = () => page.evaluate(() => {
+    const c = globalThis.__Konva.stages[0]?.container().getBoundingClientRect()
+    return c ? { x: Math.round(c.left), y: Math.round(c.top), w: Math.round(c.width), h: Math.round(c.height) } : null
+  })
+  // Every toolbar control must be on screen and inside the toolbar, never clipped or scrolled away.
+  const unreachable = () => page.evaluate(() => {
+    const bar = document.querySelector('[data-canvas-toolbar]')
+    if (!bar) return ['no toolbar']
+    const out = []
+    // The context strip's sizers are invisible and inert by design; only real controls count.
+    const controls = [...bar.querySelectorAll('button, select')].filter((el) => !el.closest('[inert], [aria-hidden="true"]'))
+    for (const el of controls) {
+      const b = el.getBoundingClientRect()
+      if (!b.width || !b.height) continue
+      // the element actually hit at its centre must be itself (or inside it)
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+      if (!hit || !(hit === el || el.contains(hit))) out.push(`${el.getAttribute('title') ?? el.tagName}${hit ? ' (under ' + (hit.getAttribute('title') ?? hit.tagName + '.' + String(hit.className).slice(0, 40)) + ')' : ' (off screen)'}`)
+    }
+    return { controls: controls.length, out }
+  })
+  let fails = 0, measured = 0
+  for (const size of SIZES) {
+    await page.setViewportSize({ width: size.width, height: size.height })
+    await page.evaluate(({ b, url }) => {
+      const urls = Object.fromEntries(b.nodes.map((n) => [n.id, url]))
+      globalThis.__stores.canvas.getState().loadLook('harness-board', b, urls)
+      globalThis.__stores.canvas.getState().setSelectedNodeIds([])
+    }, { b: withText, url: PIECE_URL })
+    await page.waitForTimeout(900)
+    const rest = await boardBox()
+    console.log(`\n  ${size.name}: board ${rest?.w}x${rest?.h} at (${rest?.x}, ${rest?.y}) with nothing selected`)
+    const SHOTDIR = arg('--shots', null)
+    for (const st of STATES) {
+      await page.evaluate((ids) => globalThis.__stores.canvas.getState().setSelectedNodeIds(ids), st.ids)
+      await page.waitForTimeout(400)
+      const b = await boardBox()
+      const r = await unreachable()
+      measured++
+      const moved = !b || b.w !== rest.w || b.h !== rest.h || b.x !== rest.x || b.y !== rest.y
+      const bad = moved || r.out.length > 0
+      if (bad) fails++
+      if (SHOTDIR) await page.screenshot({ path: `${SHOTDIR}/${size.width}x${size.height}-${st.name.replace(/\s+/g, '-')}.png` })
+      console.log(`    ${bad ? 'FAIL' : 'ok  '} ${st.name.padEnd(24)} board ${b?.w}x${b?.h} at (${b?.x}, ${b?.y})${moved ? '  <- MOVED' : ''}; ${r.controls} controls, ${r.out.length} unreachable${r.out.length ? ': ' + r.out.join(', ') : ''}`)
+    }
+    // The thing she was doing: press a label (which selects it and grows the toolbar) and drag it.
+    await page.evaluate(() => globalThis.__stores.canvas.getState().setSelectedNodeIds([]))
+    await page.waitForTimeout(400)
+    const start = await nodeCenterOf(text.id)
+    const before = await page.evaluate((id) => globalThis.__stores.canvas.getState().state.nodes.find((n) => n.id === id), text.id)
+    const scale = rest.w / withText.canvas.width
+    await page.mouse.move(start.x, start.y); await page.mouse.down()
+    for (let s = 1; s <= 10; s++) { await page.mouse.move(start.x + s * 6, start.y + s * 3); await page.waitForTimeout(20) }
+    await page.mouse.up(); await page.waitForTimeout(400)
+    const after = await page.evaluate((id) => globalThis.__stores.canvas.getState().state.nodes.find((n) => n.id === id), text.id)
+    const dx = Math.round((after.x - before.x) * scale), dy = Math.round((after.y - before.y) * scale)
+    const b = await boardBox()
+    measured++
+    // Her hand moved 60,30 on screen; the label must follow it to within a couple of pixels.
+    const dragBad = Math.abs(dx - 60) > 3 || Math.abs(dy - 30) > 3 || b.w !== rest.w || b.y !== rest.y
+    if (dragBad) fails++
+    console.log(`    ${dragBad ? 'FAIL' : 'ok  '} drag a label 60,30 on screen  it moved ${dx},${dy}; board after ${b.w}x${b.h} at (${b.x}, ${b.y})`)
+  }
+  await browser.close(); server.kill()
+  if (measured === 0) { console.error('FAIL - measured nothing'); process.exit(1) }
+  if (fails || errors.length) { console.error(`FAIL - ${fails} of ${measured} measurements moved the board or hid a control; ${errors.length} page errors`); process.exit(1) }
+  console.log(`\n  PASS - ${measured} measurements across ${SIZES.length} screen sizes: the board never moved and every toolbar control was reachable (WebKit)`)
+  process.exit(0)
+}
+
 // ADR-0146: hiding a piece takes it OFF the board and leaves it IN the look. Driven rather than
 // asserted, because the value is entirely in the second half: the client must still see the piece
 // under "Pieces in this look" and still be able to shop it.
@@ -524,7 +962,9 @@ if (HIDE_SHOT) {
   })
   await page.waitForTimeout(500)
   let pressed = false
-  for (const b of await page.$$('button')) {
+  // :not([inert] *) - the toolbar's context strip holds invisible, inert copies of every control
+  // to reserve its height; only the real one can be pressed.
+  for (const b of await page.$$('button:not([inert] *)')) {
     if (/hide on the board/i.test((await b.getAttribute('title')) ?? '')) { await b.click(); pressed = true; break }
   }
   await page.waitForTimeout(800)

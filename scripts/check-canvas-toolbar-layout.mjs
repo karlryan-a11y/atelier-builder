@@ -12,6 +12,15 @@
  * Rule: nothing in the toolbar row may be absolutely positioned, the zoom and grid groups must not
  * shrink, and the toolbar must be able to wrap rather than run under its neighbours.
  *
+ * Cynthia Dada, 25 Sep: "Can you please fix this auto zoom that's happening? It messes up when I'm
+ * trying to move text." / "It also does it when I select garments". The wrap above made the
+ * toolbar's HEIGHT depend on what was selected, and the board is fitted to the space under it, so
+ * the board shrank under her cursor on every press. Second rule: the toolbar's height depends on
+ * the width alone. The selection controls live in a strip that reserves the tallest set any
+ * selection can bring up (invisible, inert copies in the same grid cell), drawn by ONE component
+ * so a new button reserves its own room, and nothing else in the row changes size with state.
+ * The outcome itself is measured by `node scripts/perf/style-harness.mjs --steady-board`.
+ *
  * Exits non-zero on a break AND on inspecting nothing.
  */
 import { readFileSync } from 'node:fs'
@@ -46,7 +55,33 @@ if (start < 0 || end < 0 || end <= start) {
 }
 
 checked++
-if (!/data-canvas-toolbar[^>]*flex-wrap/.test(toolbar)) failures.push(`${TOOLBAR}: the toolbar cannot wrap, so a narrow column pushes buttons out of reach`)
+if (!/data-toolbar-base[^>]*flex-wrap/.test(toolbar)) failures.push(`${TOOLBAR}: the toolbar cannot wrap, so a narrow column pushes buttons out of reach`)
+
+// ---- the board holds still (25 Sep) ----
+const ctxStart = toolbar.indexOf('data-toolbar-context')
+checked++
+if (ctxStart < 0) {
+  failures.push(`${TOOLBAR}: no fixed selection strip (data-toolbar-context); selecting something changes the toolbar's height and re-fits the board under her cursor`)
+} else {
+  const ctx = toolbar.slice(ctxStart)
+  checked++
+  if (!/SIZERS\.map[\s\S]{0,200}inert[\s\S]{0,120}invisible \[grid-area:1\/1\][\s\S]{0,200}<SelectionControls nodes=\{nodes\}/.test(ctx)) failures.push(`${TOOLBAR}: the strip does not reserve room with invisible, inert <SelectionControls> sizers in its grid cell`)
+  checked++
+  if (!/\[grid-area:1\/1\][^>]*>\s*\{hasSelection \?\s*\(\s*<SelectionControls nodes=\{selectedNodes\}/.test(ctx)) failures.push(`${TOOLBAR}: the real selection controls are not drawn by <SelectionControls> in the same grid cell as the sizers`)
+}
+// Every set of controls a selection can show must have a sizer: one text label, one piece, three pieces.
+checked++
+if (!/const SIZERS[^=]*=\s*\[\s*\[SIZER_TEXT\],\s*\[SIZER_PIECE\],\s*\[SIZER_PIECE,[^\]]+,[^\]]+\]/.test(toolbar)) failures.push(`${TOOLBAR}: SIZERS must cover a text label, a single piece and three pieces (align + distribute)`)
+// No selection-dependent markup outside the strip.
+checked++
+const base = ctxStart < 0 ? toolbar : toolbar.slice(toolbar.indexOf('data-toolbar-base'), ctxStart)
+if (/hasSelection|singleNode|selectedNodes/.test(base)) failures.push(`${TOOLBAR}: the base row renders something that depends on the selection; its height would change with it`)
+checked++
+if (/\{styleRun && \(/.test(toolbar)) failures.push(`${TOOLBAR}: the Style result appears and disappears in the base row; it must sit in a fixed slot`)
+// The zoom readout ("100%" vs "400%") must not change the width the toolbar gets to wrap in.
+checked++
+if (start >= 0 && !/title="Fit the whole board"/.test(canvas)) failures.push(`${CANVAS}: zoom readout button not found`)
+else if (!/className="w-12[^"]*"\s*title="Fit the whole board"/.test(canvas)) failures.push(`${CANVAS}: the zoom readout has no fixed width, so zooming re-wraps the toolbar and re-fits the board`)
 checked++
 if (!/<Sparkles/.test(toolbar)) failures.push(`${TOOLBAR}: the Style (sparkles) button is gone`)
 
