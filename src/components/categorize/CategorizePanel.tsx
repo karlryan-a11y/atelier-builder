@@ -879,8 +879,9 @@ export function CategorizePanel() {
                     WHICH SEASON THIS IS, IF IT IS ONE. ADR-0147. One control cycling
                     none -> Spring/Summer -> Fall/Winter -> none, rather than two buttons: a
                     category is one season or neither, never both, and a cycle cannot express an
-                    impossible state. Shown only when it IS a season, or on hover, so 599 of the
-                    823 categories that are not seasonal stay quiet.
+                    impossible state. Full strength when it IS a season, faint otherwise. Never
+                    opacity-0: the stylists are on iPads, where hover does not exist, and a
+                    hover-only control is one Cynthia could not find (ADR-0108, 2026-09-24).
 
                     No confirm, unlike Home. Ticking Home can switch a client's whole front page
                     over. A season tag changes how her Looks page groups what is already there:
@@ -888,7 +889,7 @@ export function CategorizePanel() {
                   */}
                   <button
                     onClick={() => setCategorySeason(cat.id, cat.season === null || cat.season === undefined ? 'ss' : cat.season === 'ss' ? 'fw' : null)}
-                    className={`flex-none px-1 rounded text-[8px] tracking-[0.12em] uppercase transition-opacity ${cat.season ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                    className={`flex-none px-1 rounded text-[8px] tracking-[0.12em] uppercase transition-opacity ${cat.season ? 'opacity-100' : 'opacity-40 group-hover:opacity-80'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
                     aria-label={cat.season === 'ss'
                       ? `${cat.label} is a Spring/Summer category. Click to make it Fall/Winter.`
                       : cat.season === 'fw'

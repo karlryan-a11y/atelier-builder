@@ -88,10 +88,23 @@ UPDATE look_categories SET season = 'fw'
  WHERE season IS NULL
    AND slug ~ '^(fw|fall|winter|autumn)[0-9]{0,4}(-(fw|fall|winter|autumn)[0-9]{0,4})*$';
 
+-- THE CLIENT LOOKBOOK MUST BE ABLE TO READ IT. Since migration 020 anon reads look_categories
+-- column by column (so the stylist note stays private), and a column added later is NOT covered:
+-- migration 021 was exactly this incident with is_residence. atelier-looks getLookCategories
+-- selects `season`, so without this grant every client Looks page read by the anon key 42501s.
+-- Caught 2026-09-28 by check-category-description before anything shipped.
+GRANT SELECT (season) ON public.look_categories TO anon;
+GRANT SELECT (season), UPDATE (season) ON public.look_categories TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
 INSERT INTO schema_migrations (version, source, verified, note) VALUES
  ('027_category_season', 'atelier-builder/migrations',
   exists(select 1 from information_schema.columns
-         where table_name='look_categories' and column_name='season'),
+         where table_name='look_categories' and column_name='season')
+  and exists(select 1 from information_schema.column_privileges
+         where table_name='look_categories' and grantee='anon' and privilege_type='SELECT'
+           and column_name='season'),
   'sig: look_categories.season -- ADR-0147, a season is a tag a stylist sets')
 ON CONFLICT (version) DO UPDATE
   SET verified = excluded.verified, applied_at = now(), note = excluded.note;

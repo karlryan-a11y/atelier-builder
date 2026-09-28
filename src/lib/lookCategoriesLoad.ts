@@ -36,7 +36,7 @@ export async function loadLookCategories(
   try {
     ;[catsRes, looksRes, capsRes] = await Promise.all([
       db.from('look_categories')
-        .select('id, slug, label, sort_order, is_hidden, is_residence, description, parent_slug')
+        .select('id, slug, label, sort_order, is_hidden, is_residence, season, description, parent_slug')
         .eq('client_id', clientId)
         .order('sort_order').order('label'),
       db.from('gp_looks')
