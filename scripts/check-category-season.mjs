@@ -70,6 +70,15 @@ else {
   eq(switchState(looks, cats), { hasBothSeasons: true, needing: 1, suggestable: 1, canTurnOn: false }, 'one unfiled look keeps the switch locked')
   eq(switchState(looks.slice(0, 1), cats).canTurnOn, true, 'every look filed unlocks the switch')
   eq(switchState(looks.slice(0, 1), [cats[0], cats[2]]).canTurnOn, false, 'no FW category keeps it locked')
+  // Cynthia, 2026-09-29: clicking an already-tagged button cleared it with no warning.
+  const nsc = lib.nextSeasonClick
+  if (!nsc) { rules++; errors.push('lookSeasons: nextSeasonClick missing, so a tagged season clears on one click (2026-09-29)') }
+  else {
+    eq(nsc('Holiday', null), { next: 'ss', confirm: null }, 'tagging a blank category is one click, no question')
+    eq(!!nsc('Spring/Summer', 'ss').confirm, true, 'changing SS asks first')
+    eq(nsc('Fall/Winter', 'fw').next, null, 'FW clears to none')
+    eq(!!nsc('Fall/Winter', 'fw').confirm, true, 'clearing FW asks first')
+  }
 }
 const bar = readFileSync(join(ROOT, 'src/components/categorize/SeasonsPanel.tsx'), 'utf8')
 rules++
@@ -79,6 +88,8 @@ rules++
 // Karl, 2026-09-28: a look must never need a category to go live. The season row is optional.
 if (/disabled=\{[^}]*(needsSeason|noSeasonYet|inSeason)/.test(dialog)) errors.push('SaveLookDialog.tsx: Save is blocked until a season is picked. A season is optional; a look must never need a category to go live (Karl, 2026-09-28)')
 const panel2 = readFileSync(join(ROOT, 'src/components/categorize/CategorizePanel.tsx'), 'utf8')
+rules++
+if (!/nextSeasonClick\(cat\.label, cat\.season\)[^}]*confirm\(/.test(panel2)) errors.push('CategorizePanel.tsx: the season button does not ask before changing or clearing a tag that is set (2026-09-29)')
 rules++
 if (!/<SeasonsBar/.test(panel2)) errors.push('CategorizePanel.tsx: the Seasons bar is not mounted on the Looks tab')
 

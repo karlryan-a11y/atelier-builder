@@ -36,6 +36,7 @@ import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
 import { SeasonsBar, SeasonQueue } from '@/components/categorize/SeasonsPanel'
 import { useLooksSeasons } from '@/hooks/useLooksSeasons'
+import { nextSeasonClick } from '@/lib/lookSeasons'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'all'
@@ -893,7 +894,7 @@ export function CategorizePanel() {
                     nothing appears, nothing disappears, re-ticking puts it back.
                   */}
                   <button
-                    onClick={() => setCategorySeason(cat.id, cat.season === null || cat.season === undefined ? 'ss' : cat.season === 'ss' ? 'fw' : null)}
+                    onClick={() => { const c = nextSeasonClick(cat.label, cat.season); if (c.confirm && !confirm(c.confirm)) return; setCategorySeason(cat.id, c.next) }}
                     className={`flex-none px-1 rounded text-[8px] tracking-[0.12em] uppercase transition-opacity ${cat.season ? 'opacity-100' : 'opacity-40 group-hover:opacity-80'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
                     aria-label={cat.season === 'ss'
                       ? `${cat.label} is a Spring/Summer category. Click to make it Fall/Winter.`

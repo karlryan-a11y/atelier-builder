@@ -7,7 +7,7 @@
  *
  * The one other place a season is written down is GoodPix's own tag on the look, "ss office
  * casual". Atelier never filed by it. It is offered here as a SUGGESTION a stylist accepts with
- * one click, never applied behind her back. 19 of Janet Foutty's 36 unfiled looks carry one.
+ * one click, never applied behind her back. 16 of Janet Foutty's 36 unfiled looks carry one.
  *
  * Pure functions only, so the rules can be tested without a browser or a database.
  */
@@ -108,4 +108,20 @@ export function switchState(looks: SeasonLook[], categories: SeasonCategory[]): 
   const need = looksNeedingSeason(looks, categories)
   const suggestable = need.filter((l) => l.gpSeason).length
   return { hasBothSeasons, needing: need.length, suggestable, canTurnOn: hasBothSeasons && need.length === 0 }
+}
+
+/**
+ * WHAT ONE CLICK ON A CATEGORY'S SEASON BUTTON DOES, AND WHETHER TO ASK FIRST.
+ *
+ * Cynthia Dada, 2026-09-29, following SOP 14 on Janet Foutty: "I tried tagging the small FW and SS
+ * buttons and now they went away." Both were already tagged; the button cycles blank, SS, FW,
+ * blank, so her clicks cleared them. Setting a tag on a blank category stays one click. Changing
+ * or clearing one that is already set asks first, in words, because that is the click that undoes
+ * work and shows no sign of it.
+ */
+export function nextSeasonClick(label: string, current: Season | null | undefined): { next: Season | null; confirm: string | null } {
+  const name = (s: Season) => (s === 'ss' ? 'Spring/Summer (SS)' : 'Fall/Winter (FW)')
+  if (!current) return { next: 'ss', confirm: null }
+  if (current === 'ss') return { next: 'fw', confirm: `${label} is already tagged ${name('ss')}. Change it to ${name('fw')}?` }
+  return { next: null, confirm: `${label} is already tagged ${name('fw')}. Stop it being a season?` }
 }
