@@ -42,7 +42,7 @@ export async function loadLookCategories(
         .order('sort_order').order('label'),
       db.from('gp_looks')
         // thumbnail_url is never selected here: see lib/lookImage.ts.
-        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids, to_try_at')
+        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids, to_try_at, tried_at, tried_ok, tried_note')
         .eq('client_id', clientId)
         // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
         .is('transitioned_at', null)
@@ -114,6 +114,9 @@ export async function loadLookCategories(
         closetItemIds: (l.closet_item_ids as string[] | null) ?? [],
         gpSeason: seasonFromGoodPixRaw(l.raw),
         toTryAt: (l.to_try_at as string | null) ?? null,
+        triedAt: (l.tried_at as string | null) ?? null,
+        triedOk: (l.tried_ok as boolean | null) ?? null,
+        triedNote: (l.tried_note as string | null) ?? null,
       })),
       capsules: ((capsRes.data ?? []) as any[]).map((b) => ({
         id: b.id,

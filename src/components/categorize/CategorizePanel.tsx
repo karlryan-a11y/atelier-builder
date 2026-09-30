@@ -39,7 +39,7 @@ import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 import { nextSeasonClick } from '@/lib/lookSeasons'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
-type Status = 'draft' | 'published' | 'archived' | 'totry' | 'all'
+type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
 
 /**
  * One row of the Collection rail: the category, how much of it the client can actually see
@@ -460,6 +460,12 @@ export function CategorizePanel() {
       // ADR-0153. Her queue of looks the client has not tried on yet. Archived ones are out of it
       // by definition: a look nobody can see is not one anybody is being asked to try.
       if (status === 'totry') return !!(i as TaggableLook).toTryAt && !i.archived
+      // ADR-0156. She tried it and it did not work. Her worklist: restyle it or retire it.
+      // A look she has since been asked to try AGAIN is back in the To try queue, not here.
+      if (status === 'didntwork') {
+        const l = i as TaggableLook
+        return l.triedOk === false && !l.toTryAt && !i.archived
+      }
       if (status === 'archived') return i.archived
       if (status === 'published') return i.published && !i.archived
       return !i.published && !i.archived // queue
@@ -517,6 +523,22 @@ export function CategorizePanel() {
           look.toTryAt ? 'bg-[#1A1A1A] text-white hover:opacity-80' : 'text-[#888] hover:text-[#1A1A1A]'
         }`}
       >{look.toTryAt ? 'To try' : 'Mark to try'}</button>
+      {/* ADR-0156. HER WORDS, on the card. The Slack ping is how the stylist hears about it the
+          same day; this is how anyone opening the look in three weeks still knows what she said.
+          Shown whenever there is an answer, not only inside the Didn't work tab, so a look that
+          worked reads as a small win rather than nothing at all. */}
+      {look.triedAt && (
+        <div className={`mt-1.5 px-2 py-1.5 rounded text-left ${look.triedOk ? 'bg-[#e7f0ea]' : 'bg-[#F8E5E7]'}`}>
+          <p className="text-[9px] tracking-[0.14em] uppercase text-[#1A1A1A]/70">
+            {look.triedOk ? 'She tried it · it worked' : "She tried it · didn't work"}
+            {' · '}
+            {new Date(look.triedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          </p>
+          {look.triedNote?.trim() && (
+            <p className="text-[11px] leading-snug text-[#1A1A1A] mt-1">“{look.triedNote}”</p>
+          )}
+        </div>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); handleRenameLook(look) }}
         className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
@@ -699,7 +721,10 @@ export function CategorizePanel() {
     { key: 'draft', label: `Queue (${queueCount(items)})` },
     { key: 'published', label: 'On lookbook' },
     ...(mode === 'looks'
-      ? [{ key: 'totry' as Status, label: `To try (${looks.filter((l) => l.toTryAt && !l.archived).length})` }]
+      ? [
+          { key: 'totry' as Status, label: `To try (${looks.filter((l) => l.toTryAt && !l.archived).length})` },
+          { key: 'didntwork' as Status, label: `Didn't work (${looks.filter((l) => l.triedOk === false && !l.toTryAt && !l.archived).length})` },
+        ]
       : []),
     { key: 'archived', label: `Archived (${items.filter((i) => i.archived).length})` },
     { key: 'all', label: 'All' },

@@ -80,6 +80,10 @@ export interface TaggableLook {
    * timestamp, so the queue sorts oldest-first and the card can say how long it has waited.
    */
   toTryAt: string | null
+  /** When the CLIENT answered, and what she said. ADR-0156. Null until she answers. */
+  triedAt: string | null
+  triedOk: boolean | null
+  triedNote: string | null
 }
 export interface TaggableCapsule {
   id: string
