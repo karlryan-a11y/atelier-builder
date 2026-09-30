@@ -75,6 +75,11 @@ export interface TaggableLook {
   closetItemIds: string[]
   /** The season GoodPix's own tag names ("ss office casual"), offered as a suggestion only. ADR-0154. */
   gpSeason: 'ss' | 'fw' | null
+  /**
+   * Set when a stylist marked this as one the client has not tried on yet (ADR-0153). A
+   * timestamp, so the queue sorts oldest-first and the card can say how long it has waited.
+   */
+  toTryAt: string | null
 }
 export interface TaggableCapsule {
   id: string
@@ -324,6 +329,34 @@ export function useLookCategories(clientId: string | null) {
   }, [fetchAll, setCategories])
 
   // ── assignment (junction insert/delete) ──
+  /**
+   * Mark (or unmark) looks as ones the client has not tried on yet. ADR-0153.
+   *
+   * Takes a LIST, because the point of having it here as well as in the Save box is the 478 looks
+   * already carrying "to be tried" in their name across 34 clients: marking those one at a time is
+   * not a migration anybody performs. The Save box handles the look she is making now; this
+   * handles every look she made before.
+   *
+   * Chunked: a big `.in()` write fails silently on this database, which is how a "mark all" would
+   * report success over a selection it never touched.
+   *
+   * Optimistic, then reconciled. A failed write re-reads rather than leaving the screen claiming
+   * something the database does not agree with.
+   */
+  const setLooksToTry = useCallback(async (lookIds: string[], on: boolean) => {
+    if (!lookIds.length) return
+    const stamp = on ? new Date().toISOString() : null
+    const ids = new Set(lookIds)
+    setLooks((prev) => prev.map((l) => (ids.has(l.id) ? { ...l, toTryAt: stamp } : l)))
+    for (let i = 0; i < lookIds.length; i += 50) {
+      const { error } = await supabase
+        .from('gp_looks')
+        .update({ to_try_at: stamp })
+        .in('id', lookIds.slice(i, i + 50))
+      if (error) { console.error('setLooksToTry:', error.message); await fetchAll(); return }
+    }
+  }, [fetchAll, setLooks])
+
   const assignLook = useCallback(async (lookId: string, categoryId: string, on: boolean) => {
     setLooks((prev) => prev.map((l) => l.id !== lookId ? l : {
       ...l, categoryIds: on ? [...new Set([...l.categoryIds, categoryId])] : l.categoryIds.filter((c) => c !== categoryId),
@@ -439,7 +472,7 @@ export function useLookCategories(clientId: string | null) {
   return {
     loading, error, categories, looks, capsules, draftCount,
     createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
-    assignLook, assignCapsule,
+    assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,

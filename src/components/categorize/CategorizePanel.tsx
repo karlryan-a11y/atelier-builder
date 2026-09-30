@@ -39,7 +39,7 @@ import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 import { nextSeasonClick } from '@/lib/lookSeasons'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
-type Status = 'draft' | 'published' | 'archived' | 'all'
+type Status = 'draft' | 'published' | 'archived' | 'totry' | 'all'
 
 /**
  * One row of the Collection rail: the category, how much of it the client can actually see
@@ -110,7 +110,7 @@ export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
     loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
-    assignLook, assignCapsule,
+    assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
@@ -457,6 +457,9 @@ export function CategorizePanel() {
   const inStatus = useMemo(
     () => items.filter((i) => {
       if (status === 'all') return true
+      // ADR-0153. Her queue of looks the client has not tried on yet. Archived ones are out of it
+      // by definition: a look nobody can see is not one anybody is being asked to try.
+      if (status === 'totry') return !!(i as TaggableLook).toTryAt && !i.archived
       if (status === 'archived') return i.archived
       if (status === 'published') return i.published && !i.archived
       return !i.published && !i.archived // queue
@@ -503,6 +506,17 @@ export function CategorizePanel() {
         <Pencil className="w-3 h-3" />
         {openingLookId === look.id ? 'Opening…' : look.source === 'builder' ? 'Edit' : 'Rebuild in canvas'}
       </button>
+      {/* ADR-0153. The Save box marks the look she is making now; this marks the ones she made
+          before. Reads as a state, not a verb, so she can see at a glance which are waiting. */}
+      <button
+        onClick={(e) => { e.stopPropagation(); void setLooksToTry([look.id], !look.toTryAt) }}
+        title={look.toTryAt
+          ? `Marked to try on ${new Date(look.toTryAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Click to clear it.`
+          : 'Mark this as one she has not tried on yet. It appears in her To Try list and she can reply.'}
+        className={`mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase rounded transition-colors ${
+          look.toTryAt ? 'bg-[#1A1A1A] text-white hover:opacity-80' : 'text-[#888] hover:text-[#1A1A1A]'
+        }`}
+      >{look.toTryAt ? 'To try' : 'Mark to try'}</button>
       <button
         onClick={(e) => { e.stopPropagation(); handleRenameLook(look) }}
         className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
@@ -684,6 +698,9 @@ export function CategorizePanel() {
   const statuses: { key: Status; label: string }[] = [
     { key: 'draft', label: `Queue (${queueCount(items)})` },
     { key: 'published', label: 'On lookbook' },
+    ...(mode === 'looks'
+      ? [{ key: 'totry' as Status, label: `To try (${looks.filter((l) => l.toTryAt && !l.archived).length})` }]
+      : []),
     { key: 'archived', label: `Archived (${items.filter((i) => i.archived).length})` },
     { key: 'all', label: 'All' },
   ]
@@ -1109,6 +1126,25 @@ export function CategorizePanel() {
               <button onClick={() => publishSelected(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded bg-[#1A1A1A] text-white hover:opacity-80">
                 <Send className="w-3 h-3" /> Add to lookbook
               </button>
+              {/* ADR-0153. The reason this exists at all: 478 looks across 34 clients already say
+                  "to be tried" in their NAME. Marking those one at a time is not a migration
+                  anybody performs, so the selection she already makes can do it in one press. */}
+              {mode === 'looks' && (
+                <>
+                  <button
+                    onClick={() => { void setLooksToTry([...selected], true); setSelected(new Set()) }}
+                    className="px-2.5 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#1A1A1A] hover:bg-[#F8F7F5]"
+                    title="Mark these as ones she has not tried on yet"
+                  >Mark to try</button>
+                  {status === 'totry' && (
+                    <button
+                      onClick={() => { void setLooksToTry([...selected], false); setSelected(new Set()) }}
+                      className="px-2.5 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] text-[#888] hover:text-[#1A1A1A]"
+                      title="She has tried these. Take them out of her To Try list."
+                    >Tried</button>
+                  )}
+                </>
+              )}
               <button onClick={() => setSelected(new Set())} className="text-[11px] text-[#888] hover:text-[#1A1A1A]">Clear</button>
                 </>
               )}
