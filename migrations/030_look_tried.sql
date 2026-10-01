@@ -1,4 +1,4 @@
--- 030. HER ANSWER TO A LOOK SHE WAS ASKED TO TRY. ADR-0156.
+-- 030. HER ANSWER TO A LOOK SHE WAS ASKED TO TRY. ADR-0158.
 --
 -- ADR-0153 gave the stylist a way to say "try this on" and the client a box to write back in.
 -- Maegan Watson, 2026-09-30: "One key detail is that we wanted the client to be able to uncheck
@@ -31,7 +31,7 @@ ALTER TABLE gp_looks ADD COLUMN IF NOT EXISTS tried_ok boolean;
 ALTER TABLE gp_looks ADD COLUMN IF NOT EXISTS tried_note text;
 
 COMMENT ON COLUMN gp_looks.tried_at IS
-  'When the CLIENT answered a To Try look (ADR-0156). Null means she has not answered.';
+  'When the CLIENT answered a To Try look (ADR-0158). Null means she has not answered.';
 COMMENT ON COLUMN gp_looks.tried_ok IS
   'Her answer: true = it worked, false = it did not. Null until she answers.';
 COMMENT ON COLUMN gp_looks.tried_note IS

@@ -460,7 +460,7 @@ export function CategorizePanel() {
       // ADR-0153. Her queue of looks the client has not tried on yet. Archived ones are out of it
       // by definition: a look nobody can see is not one anybody is being asked to try.
       if (status === 'totry') return !!(i as TaggableLook).toTryAt && !i.archived
-      // ADR-0156. She tried it and it did not work. Her worklist: restyle it or retire it.
+      // ADR-0158. She tried it and it did not work. Her worklist: restyle it or retire it.
       // A look she has since been asked to try AGAIN is back in the To try queue, not here.
       if (status === 'didntwork') {
         const l = i as TaggableLook
@@ -523,7 +523,7 @@ export function CategorizePanel() {
           look.toTryAt ? 'bg-[#1A1A1A] text-white hover:opacity-80' : 'text-[#888] hover:text-[#1A1A1A]'
         }`}
       >{look.toTryAt ? 'To try' : 'Mark to try'}</button>
-      {/* ADR-0156. HER WORDS, on the card. The Slack ping is how the stylist hears about it the
+      {/* ADR-0158. HER WORDS, on the card. The Slack ping is how the stylist hears about it the
           same day; this is how anyone opening the look in three weeks still knows what she said.
           Shown whenever there is an answer, not only inside the Didn't work tab, so a look that
           worked reads as a small win rather than nothing at all. */}
