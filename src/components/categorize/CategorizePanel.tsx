@@ -39,6 +39,9 @@ import { CategorySortList, SortableCategoryRow } from '@/components/categorize/C
 import { planCategoryOrder } from '@/lib/categoryOrder'
 import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 import { nextSeasonClick } from '@/lib/lookSeasons'
+import type { ClosetItem } from '@/lib/images'
+import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
+import { useClosetItems } from '@/hooks/useClosetItems'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
@@ -119,6 +122,26 @@ export function CategorizePanel() {
     reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
   } = useLookCategories(activeClient?.id ?? null)
+  // Her pieces, so a look can be found by what is in it (ADR-0163). The closet hook is cached and
+  // shared with the Collection tab, so this is not a second read of her wardrobe.
+  const { items: closetPieces, tagNameById: closetTagNames } = useClosetItems(activeClient?.id ?? null)
+  const lookPieceFields = useMemo(() => {
+    const byId = new Map(closetPieces.map((p) => [p.id, p]))
+    return (l: { closetItemIds?: string[] }): PieceSearchFields => {
+      const ps = (l.closetItemIds ?? []).map((id) => byId.get(id)).filter((p): p is ClosetItem => !!p)
+      const join = (xs: (string | null | undefined)[]) => xs.filter(Boolean).join(' ')
+      return {
+        nameOverride: join(ps.map((p) => `${p.name_override ?? ''} ${p.name ?? ''}`)),
+        brand: join(ps.map((p) => p.brand)),
+        color: join(ps.map((p) => p.color)),
+        colorFamilies: ps.flatMap((p) => [p.color_family, ...(p.color_families ?? [])]),
+        description: join(ps.map((p) => p.description)),
+        material: join(ps.map((p) => p.raw?.material)),
+        retailer: join(ps.map((p) => p.retailer)),
+        tags: ps.flatMap((p) => (p.content_tag_ids ?? []).map((id) => closetTagNames.get(id) ?? '')),
+      }
+    }
+  }, [closetPieces, closetTagNames])
 
   // Transitioned pieces + looks for this client. Instantiated at the panel so the pink tab badge
   // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
@@ -478,8 +501,17 @@ export function CategorizePanel() {
   const visible = useMemo(
     // Search LAST, over whatever the status pills and the category rail left. The three compose:
     // "the drafts in Evening called 182" is one question, and she can ask it. (ADR-0150)
-    () => searchByName(filterByCategory(inStatus, activeBrush, categories, tagging), search),
-    [inStatus, activeBrush, categories, tagging, search],
+    // Then the looks with a PIECE that matches every word, after the name matches (ADR-0163): her
+    // Looks page finds "the look with the Margaret dress" and this list could not.
+    () => {
+      const base = filterByCategory(inStatus, activeBrush, categories, tagging)
+      const byName = searchByName(base, search)
+      if (!search.trim() || !closetPieces.length) return byName
+      const named = new Set(byName.map((l) => l.id))
+      const byPiece = searchPieces(base.filter((l) => !named.has(l.id)), search, lookPieceFields, 'team').full
+      return [...byName, ...byPiece]
+    },
+    [inStatus, activeBrush, categories, tagging, search, closetPieces.length, lookPieceFields],
   )
   // What search alone removed, so the empty state can tell her the search is why, rather than
   // leaving her looking at a blank grid wondering where her looks went.

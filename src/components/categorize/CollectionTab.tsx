@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
-import { searchInsideThenOutside, type PieceSearchFields } from '@/lib/pieceSearch'
+import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
@@ -17,6 +17,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { useClientStore } from '@/stores/clientStore'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
+import { useClientCategories } from '@/hooks/useClientCategories'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -57,6 +58,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   onOpenLook?: (lookId: string) => void
 }) {
   const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(clientId)
+  // HER CATEGORY MAP (ADR-0113 nesting + ADR-0163 same-as). This screen resolved categories with
+  // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
+  // this one. The same tree the lookbook reads, from the same rows.
+  const { parentBySlug: categoryTree } = useClientCategories(clientId)
   const { activeClient } = useClientStore()
   const clientFirst = (activeClient?.name ?? 'the client').split(' ')[0]
   const [adding, setAdding] = useState(false)
@@ -156,10 +161,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     const m = new Map<string, string[]>()
     for (const i of items) {
       const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, categoriesOf(i, tagNames))
+      m.set(i.id, categoriesOf(i, tagNames, categoryTree))
     }
     return m
-  }, [items, tagNameById])
+  }, [items, tagNameById, categoryTree])
 
   const customCats = useMemo(() => customCategoriesFromItems(items), [items])
 
@@ -202,22 +207,17 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   useEffect(() => { setQ('') }, [filterKey])
 
   /*
-   * EVERY POSSIBLE MATCH, CLOSEST FIRST, IN ONE LIST (ADR-0155), and a search inside a category
-   * never hides what matches outside it (2026-10-02: the Margaret dress was filed under Summer
-   * Dresses, so a search inside Dresses could not reach it). The category's matches come first; the
-   * rest follow, each saying which category it lives in. The counts and coverage stay on the
-   * category she is in.
+   * EVERY POSSIBLE MATCH, CLOSEST FIRST, IN ONE LIST (ADR-0155). A category is a filter and a
+   * search inside it searches that category (ADR-0163, Maegan 2026-10-02: "it should only pull the
+   * Chanel in that category"). `elsewhere` only feeds the empty message, never the grid.
    */
   const searched = useMemo(() => {
     const live = items.filter((i) => !i.is_deleted)
     const scoped = !!filterCategories && filterCategories.size > 0
     const inScope = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => filterCategories!.has(c))
-    return searchInsideThenOutside(live, inScope, scoped, q, fieldsOf, 'team')
+    return searchInCategory(live, inScope, scoped, q, fieldsOf, 'team')
   }, [items, q, filterCategories, categoriesByItem, fieldsOf])
-  const baseVisible = searched.inside
-  const outsideIds = useMemo(() => new Set(searched.outside.map((i) => i.id)), [searched])
-  // A piece from outside the category she is in says where it lives, under its name.
-  const homeLabelOf = (i: ClosetItem) => labelForCategory((categoriesByItem.get(i.id) ?? [])[0] ?? '')
+  const baseVisible = searched.ranked
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
   // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
@@ -237,12 +237,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   )
   useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
   const visible = useMemo(
-    () => (unconfirmedOnly ? searched.ranked.filter((i) => !i.drive_verified_at) : searched.ranked),
-    [searched, unconfirmedOnly],
+    () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
+    [baseVisible, unconfirmedOnly],
   )
-  // Select all takes the category she is in, never the matches shown from outside it: the bulk
-  // actions ("Set category", "Also in") would otherwise move pieces she did not mean to touch.
-  const selectable = useMemo(() => visible.filter((i) => !outsideIds.has(i.id)), [visible, outsideIds])
+  const selectable = visible
 
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
@@ -634,7 +632,11 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
       )}
 
       {visible.length === 0 ? (
-        <p className="text-[#888] text-sm">{q ? 'No items match your search.' : 'This client has no collection items yet.'}</p>
+        <p className="text-[#888] text-sm">
+          {q
+            ? `Nothing in this category matches "${q}".${searched.elsewhere > 0 ? ` ${searched.elsewhere} piece${searched.elsewhere === 1 ? '' : 's'} match in other categories.` : ''}`
+            : 'This client has no collection items yet.'}
+        </p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {visible.map((item) => {
@@ -685,9 +687,6 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                     )
                   })()}
                   <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
-                  {outsideIds.has(item.id) && (
-                    <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] truncate mt-0.5">In {homeLabelOf(item)}</p>
-                  )}
                   <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(primaryCategoryByItem.get(item.id) ?? 'other')}</p>
                   {/* One truncated line, so a stylist can see at a glance which pieces are
                       described and which are not. ADR-0151. */}

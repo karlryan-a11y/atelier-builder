@@ -6,6 +6,7 @@ import { categoriesOf, labelForCategory } from '@/lib/garmentCategory'
 import { parentMapFrom } from '@/lib/categoryNesting'
 import { pairingsFrom } from '@/lib/categoryPairings'
 import { NestingEditor, type NestingEntry } from './NestingEditor'
+import { CategoryMapPanel } from './CategoryMapPanel'
 
 /**
  * The "Nesting categories" tab. One screen, two taxonomies. (ADR-0113)
@@ -41,6 +42,8 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
     )),
     [items, tagNameById],
   )
+  // Raw categories per piece (no map applied), so the Category map lists every spelling she has.
+  const rawCatsByItem = useMemo(() => new Map(items.map((item, k) => [item.id, itemCatSets[k]])), [items, itemCatSets])
   const pieceEntries = useMemo<NestingEntry[]>(() => {
     const p = pairingsFrom(itemCatSets)
     const out = [...p.entries()].map(([slug, v]) => ({ slug, label: labelForCategory(slug), count: v.of, pairs: v.with }))
@@ -111,6 +114,18 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
             : `Office Casual on top, the seasonal ones inside it. On ${who}'s Looks page the group returns every look in it, and she can still tap one season on its own. Nothing is merged, so no look is re-tagged.`}
         </p>
       </div>
+
+      {which === 'collection' && (
+        <CategoryMapPanel
+          clientId={clientId}
+          who={who}
+          items={items}
+          catsByItem={rawCatsByItem}
+          rows={closet.rows}
+          setSameAs={closet.setSameAs}
+          setParent={closet.setParent}
+        />
+      )}
 
       {which === 'collection' ? (
         <NestingEditor

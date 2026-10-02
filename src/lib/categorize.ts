@@ -121,6 +121,9 @@ const PREFIX_MAP: Record<string, Category> = {
   hat: 'hats', cap: 'hats', beanie: 'hats', beret: 'hats', fedora: 'hats',
   sunglasses: 'sunglasses',
   swim: 'swim', swimsuit: 'swim', bikini: 'swim',
+  // ADR-0163 audit, 2026-10-02: 683 pieces named "jewelry-<brand>-<colour>" and the old
+  // "bathingsuit-<brand>-<colour>" GoodPix spelling resolved to Other, so no chip held them.
+  jewelry: 'jewelry', jewellery: 'jewelry', bathingsuit: 'swim', bathingsuits: 'swim', tankini: 'swim', swimwear: 'swim',
 }
 
 /** Keyword patterns matched against the full name when prefix fails. Order matters. */
@@ -137,12 +140,12 @@ const KEYWORD_PATTERNS: [RegExp, Category][] = [
   // KEEP IN STEP WITH THE TWIN: atelier-builder and atelier-looks each carry their own copy.
   [/\b([a-z]*boots?|booties?|[a-z]*heel(?:s|ed)?|sneakers?|sneakerinas?|sandals?|sanals?|loafers?|pumps?|flats?|mules?|slides?|espadrilles?|shoes?|wedges?|slingbacks?|oxfords?|derbys?|derbies|flip[- ]?flops?|kitten)\d*\b/i, 'shoes'],
   [/\b(bag|tote|clutch|purse|handbag|crossbody|cross-body|backpack|satchel|birkin|kelly|pochette|hobo|minaudiere|duffle|duffel|top handle)\b/i, 'bags'],
-  [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|ring)\b/i, 'jewelry'],
+  [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|ring|jewelry|jewellery)\b/i, 'jewelry'],
   [/\b(belt)\b/i, 'belts'],
   [/\b(scarf|shawl|stole|wrap|foulard)\b/i, 'scarves'],
   [/\b(hat|cap|beanie|beret|fedora|visor)\b/i, 'hats'],
   [/\b(sunglasses|sunnies)\b/i, 'sunglasses'],
-  [/\b(bikini|swimsuit|one[- ]piece|swim|swimwear)\b/i, 'swim'],
+  [/\b(bikini|swimsuit|one[- ]piece|swim|swimwear|bathing ?suits?|tankini)\b/i, 'swim'],
   [/\b(legging|leggings|sports bra|athletic)\b/i, 'activewear'],
   // Bottoms split into specifics; jeans/skirt/shorts before the generic "pants".
   [/\b(jeans?|denim)\b/i, 'jeans'],

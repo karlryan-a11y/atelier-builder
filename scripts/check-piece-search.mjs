@@ -46,7 +46,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import * as PS from '../src/lib/pieceSearch.ts'
 const { matchPiece, searchPieces, pieceTokens, wordHitsToken } = PS
 // Read off the namespace so a matcher that lacks it fails the cases below instead of the import.
-const searchInsideThenOutside = PS.searchInsideThenOutside ?? (() => undefined)
+const searchInCategory = PS.searchInCategory ?? (() => undefined)
 
 const ROOT = new URL('..', import.meta.url).pathname
 // PIECE_SEARCH_SIBLING: the other app's checkout, when it is not the usual folder (a worktree).
@@ -89,7 +89,7 @@ const SURFACES = [
 for (const [rel, audience, what] of SURFACES) {
   const src = read(rel)
   checks++
-  if (!/searchPieces\(|searchInsideThenOutside\(/.test(src)) {
+  if (!/searchPieces\(|searchInCategory\(/.test(src)) {
     fail(`${rel}: ${what} still filters with a search of its own. Five different field lists is why a piece findable on one screen was not findable on another (ADR-0151).`)
   }
   checks++
@@ -145,19 +145,30 @@ checks++
 if (!/useEffect\(\(\) => \{ setQ\(''\) \}, \[filterKey\]\)/.test(read('src/components/categorize/CollectionTab.tsx'))) {
   fail('CollectionTab.tsx: choosing a category in the Categorize rail keeps the search (ADR-0155).')
 }
-// A search inside a category never hides what is outside it, on both stylist screens (2026-10-02).
+// ADR-0163: a category is a filter on both stylist screens, and both apply her category map.
 for (const rel of ['src/components/layout/ClosetPanel.tsx', 'src/components/categorize/CollectionTab.tsx']) {
+  const src = read(rel)
   checks++
-  if (!/searchInsideThenOutside\(/.test(read(rel))) fail(`${rel}: a search inside a category hides matches filed elsewhere (the Margaret dress under Summer Dresses).`)
+  if (!/searchInCategory\(/.test(src) || /searchInsideThenOutside|In \{homeLabel/.test(src)) {
+    fail(`${rel}: a search inside a category shows pieces from other categories. Maegan, 2026-10-02: "it should only pull the Chanel in that category" (ADR-0163).`)
+  }
+  checks++
+  if (!/categoriesOf\(i, tagNames, categoryTree\)/.test(src) || !/useClientCategories\(/.test(src)) {
+    fail(`${rel}: resolves categories without her category map, so a stylist's Same as / Inside reaches her page and never this screen (ADR-0163).`)
+  }
 }
+const PANEL = read('src/components/categorize/CategorizePanel.tsx')
 checks++
-if (!/In \{homeLabelOf\(item\)\}/.test(read('src/components/categorize/CollectionTab.tsx')) || !/In \{homeLabel\}/.test(read('src/components/layout/ClosetPanel.tsx'))) {
-  fail('a piece shown from another category does not say which category it lives in, on the Collection tab or the canvas rail.')
+if (!/searchPieces\(base\.filter\(\(l\) => !named\.has\(l\.id\)\), search, lookPieceFields, 'team'\)\.full/.test(PANEL)) {
+  fail('CategorizePanel.tsx: the Looks list cannot find a look by a piece in it, which her Looks page can (ADR-0163).')
 }
+// The map itself: the panel, the save, and the stored column it writes.
 checks++
-if (!/const selectable = useMemo\(\(\) => visible\.filter\(\(i\) => !outsideIds\.has\(i\.id\)\)/.test(read('src/components/categorize/CollectionTab.tsx'))) {
-  fail('CollectionTab.tsx: Select all can sweep in the matches shown from OUTSIDE the category, and the bulk actions would then move pieces she never meant to touch.')
-}
+if (!/<CategoryMapPanel/.test(read('src/components/categorize/NestingTab.tsx'))) fail('NestingTab.tsx: the Category map is not on the screen stylists use to set it (ADR-0163).')
+checks++
+if (!/same_as: as, group_label: null/.test(read('src/hooks/useClientCategories.ts'))) fail('useClientCategories.ts: Same as is not saved, or does not clear Inside when it is (ADR-0163).')
+checks++
+if (!/select\('slug, label, group_label, sort_order, same_as'\)/.test(read('src/hooks/useClientCategories.ts'))) fail('useClientCategories.ts: same_as is not read, so the map is saved and then ignored (ADR-0103).')
 // The capsule's "add looks" box searched the whole phrase; it uses the Looks list's rule now.
 checks++
 if (!/searchByName\(addable, q\)/.test(read('src/components/canvas/AddLooksDialog.tsx'))) {
@@ -345,39 +356,74 @@ ran++
 const typo = searchPieces([{ name: 'Houndstooth Skirt' }, { name: 'Plain White Tee' }], 'houndstoth', (x) => x, 'client').ranked
 if (names(typo) !== 'Houndstooth Skirt') fail(`"houndstoth" (one letter off) did not find the houndstooth skirt: ${names(typo)}`)
 
-// ── 2026-10-02: a search inside a category never hides what is outside it ──
-// Peyton Wheeler: the Margaret dress was filed under "Summer Dresses"; inside Dresses, "lena
-// dresses" could not reach it.
+// ── ADR-0163: a category is a filter, and a search inside it searches that category ──
+// Maegan, Danielle York, 2026-10-02: Rings + "chanel" "should only pull the Chanel in that
+// category"; Coats + "mcqueen": "it's not just searching coats, that's the 1 issue".
 ran++
-const PEY = [
-  { name: 'Floral Margaret Satin Sheath Belted Shirt Dress', brand: 'Lena Hoschek', categories: ['summer-dresses', 'Summer Dresses'] },
-  { name: 'Vivienne Cotton Plaid A-line Midi Dress', brand: 'Lena Hoschek', categories: ['dresses', 'Dresses'] },
-  { name: 'Silk Cami', brand: 'Dior', categories: ['tops', 'Tops'] },
-  { name: 'Silk Slip Dress', brand: 'Dior', categories: ['dresses', 'Dresses'] },
+const DY = [
+  { name: 'Premiere Triple Chain Watch', brand: 'Chanel', categories: ['time-pieces'] },
+  { name: 'CC Logo Crystal Brooch', brand: 'Chanel', categories: ['brooches'] },
+  { name: 'Beaded Ball Stacking Ring', brand: 'Unknown', categories: ['rings'] },
+  { name: 'Logo Intarsia Colorblock Knit Cardigan', brand: 'Chanel', categories: ['sweaters', 'tops'] },
+  { name: 'Asymmetric Double-Breasted Slim-Fit Wool Coat', brand: 'Alexander McQueen', categories: ['coats', 'outerwear'] },
+  { name: 'Cropped Double-breasted Jacket', brand: 'Alexander McQueen', categories: ['jackets', 'outerwear'] },
+  { name: 'Skull Print Maxi Dress', brand: 'Alexander McQueen', categories: ['dresses'] },
 ]
-const inDresses = (x) => (x.categories ?? []).includes('dresses')
-const lena = searchInsideThenOutside(PEY, inDresses, true, 'lena dresses', (x) => x, 'client')
-if (names(lena?.outside) !== 'Floral Margaret Satin Sheath Belted Shirt Dress') {
-  fail(`inside Dresses, "lena dresses" did not reach the Summer Dresses piece: outside=[${names(lena?.outside)}]`)
-}
-// A full match outside the category beats a half match inside it. The first version listed all
-// 154 of Peyton's dresses (each matches "dresses") before the Margaret dress, four pages down.
+const inCat = (c) => (x) => (x.categories ?? []).includes(c)
+const rings = searchInCategory(DY, inCat('rings'), true, 'chanel', (x) => x, 'client')
+if ((rings?.ranked ?? ['x']).length !== 0) fail(`Rings + "chanel" showed pieces from other categories: ${names(rings?.ranked)}`)
 ran++
-if (names(lena?.ranked) !== 'Vivienne Cotton Plaid A-line Midi Dress / Floral Margaret Satin Sheath Belted Shirt Dress / Silk Slip Dress') {
-  fail(`"lena dresses" in Dresses: expected the Lena dress, then the Summer Dresses Lena dress, then the half match: ${names(lena?.ranked)}`)
-}
+if (rings?.elsewhere !== 3) fail(`Rings + "chanel" must count the 3 Chanel pieces elsewhere for the "See all" link, got ${rings?.elsewhere}`)
 ran++
-const browse = searchInsideThenOutside(PEY, inDresses, true, '', (x) => x, 'client')
-if (names(browse?.ranked) !== 'Vivienne Cotton Plaid A-line Midi Dress / Silk Slip Dress' || (browse?.outside ?? []).length) fail('with nothing typed, a category shows only itself')
+const sw = searchInCategory(DY, inCat('sweaters'), true, 'chanel', (x) => x, 'client')
+if (names(sw?.ranked) !== 'Logo Intarsia Colorblock Knit Cardigan') fail(`Sweaters + "chanel": expected only the Chanel cardigan, got ${names(sw?.ranked)}`)
 ran++
-const noCat = searchInsideThenOutside(PEY, inDresses, false, 'lena', (x) => x, 'client')
-if ((noCat?.outside ?? ['x']).length !== 0 || (noCat?.ranked ?? []).length !== 2) fail('with no category chosen, there is no "outside"')
+const coats = searchInCategory(DY, inCat('coats'), true, 'mcqueen', (x) => x, 'client')
+if (names(coats?.ranked) !== 'Asymmetric Double-Breasted Slim-Fit Wool Coat') fail(`Coats + "mcqueen": expected only the coat, got ${names(coats?.ranked)}`)
+ran++
+const ow = searchInCategory(DY, inCat('outerwear'), true, 'mcqueen', (x) => x, 'client')
+if ((ow?.ranked ?? []).length !== 2) fail(`Outerwear + "mcqueen": a parent holds its sub-categories, expected 2, got ${names(ow?.ranked)}`)
+ran++
+const browse = searchInCategory(DY, inCat('outerwear'), true, '', (x) => x, 'client')
+if ((browse?.ranked ?? []).length !== 2 || browse?.elsewhere !== 0) fail('with nothing typed, a category shows only itself')
+ran++
+const noCat = searchInCategory(DY, inCat('rings'), false, 'chanel', (x) => x, 'client')
+if ((noCat?.ranked ?? []).length !== 3 || noCat?.elsewhere !== 0) fail('All pieces searches everything and has no "elsewhere"')
 // A colour the piece IS outranks a colour named in passing in a long AI colour description
 // (Danielle York: 465 of 936 pieces carry one).
 ran++
 const LONG = 'Multi-color tartan: soft dusty sky blue and warm pale straw as dominant ground tones, overlaid with crimson red stripes and black crossing lines, matte finish'
 const black = searchPieces([{ name: 'Wool Scarf', color: LONG, colorFamilies: ['Blue'] }, { name: 'Wool Scarf', colorFamilies: ['Black'] }], 'black', (x) => x, 'client').ranked
 if ((black ?? [])[0]?.colorFamilies?.[0] !== 'Black') fail('"black": a scarf whose colour chip is Black did not outrank one that only mentions black in a long colour description')
+// SHOPPING WORDS (ADR-0163): the broad word finds the specific piece, one way only. Measured misses
+// on 2026-10-02: sweater 1,684, heels 1,484, jacket 620, swimsuit 222, coat 164, flats 124,
+// necklace 119, sneakers 79, bag 44.
+for (const [q, piece, expect] of [
+  ['heels', 'Hi Dolly Fabric Pumps With Floral Heel Detail', 'full'],
+  ['heels', 'Patent Pointed Toe Pump', 'full'],
+  ['heels', 'Ballyrina Slingback in Silver', 'full'],
+  ['sweater', 'Cashmere Open Front Cardigan', 'full'],
+  ['jacket', 'Linen Blend Blazer', 'full'],
+  ['coat', 'Camel Wool Trench', 'full'],
+  ['swimsuit', 'Veyra Shell Bikini Top', 'full'],
+  ['necklace', 'Gold Medallion Pendant', 'full'],
+  ['sneakers', 'High Top Glitter Trainer', 'full'],
+  ['bag', 'Shagreen Foldover Clutch', 'full'],
+  ['black heels', 'Black Patent Stiletto', 'full'],
+  // one way: the specific word never brings back the broad one
+  ['pump', 'Block Heel Sandal', 'miss'],
+  ['cardigan', 'Crewneck Wool Sweater', 'miss'],
+  // left out on purpose: "stud" is also a studded shoe, "ankle" also an ankle jean
+  ['earrings', 'Rock Stud Leather Flat', 'miss'],
+]) {
+  ran++
+  const m = matchPiece({ name: piece }, q, 'client')
+  const got = m.full ? 'full' : m.near ? 'near' : 'miss'
+  if (got !== expect) fail(`shopping word "${q}" on "${piece}": expected ${expect}, got ${got}`)
+}
+ran++
+const exactFirst = searchPieces([{ name: 'Patent Pointed Toe Pump' }, { name: 'Leather Heel Mule' }], 'heels', (x) => x, 'client').ranked
+if ((exactFirst ?? [])[0]?.name !== 'Leather Heel Mule') fail('"heels": a piece named heel must rank above a pump found through the shopping words')
 
 console.log(`   rules: ${ran} case(s) run`)
 if (ran === 0 || checks === 0) { console.error('\n❌ piece-search: inspected nothing.\n'); process.exit(1) }

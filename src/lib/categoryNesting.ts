@@ -29,7 +29,16 @@ export interface NestingRow {
   label: string | null
   parent_slug: string | null
   sort_order: number
+  /** ADR-0163: this category is read AS that one ("handbags" -> "bags"). Wins over parent_slug. */
+  same_as?: string | null
 }
+
+/**
+ * A client's category map: slug -> parent (INSIDE), plus `sameAs`, slug -> the category it is
+ * read as (SAME AS). Carried on the parent map so every caller that already passes the tree gets
+ * the map too, with no second argument to forget (ADR-0163).
+ */
+export type CategoryTree = Map<string, string> & { sameAs?: Map<string, string> }
 
 /**
  * How deep a chain may go before we stop walking it.
@@ -42,16 +51,38 @@ export interface NestingRow {
  */
 const MAX_DEPTH = 8
 
-/** slug -> parent slug, from stored rows. Self-parents and blanks are dropped. */
-export function parentMapFrom(rows: NestingRow[]): Map<string, string> {
-  const m = new Map<string, string>()
+/**
+ * The key a category is matched on: lowercase, accents folded, every run of non-letters one dash.
+ * The two apps spell the same category two ways ("summer dresses" as a primary, "summer-dresses"
+ * as an Also in; 849 primaries on 33 clients carry spaces or symbols), and a map row a stylist
+ * saves must apply to every spelling, in both apps. Only LOOKUPS use this key; the slugs pieces
+ * resolve to are not changed, because homes are recognised by their exact spellings (ADR-0163).
+ */
+export function categoryKey(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+/** key -> parent slug, from stored rows, carrying the SAME AS map. Self-references are dropped. */
+export function parentMapFrom(rows: NestingRow[]): CategoryTree {
+  const m: CategoryTree = new Map<string, string>()
+  const sameAs = new Map<string, string>()
   for (const r of rows) {
-    const child = (r.slug ?? '').trim().toLowerCase()
+    const child = categoryKey(r.slug)
+    if (!child) continue
+    const as = (r.same_as ?? '').trim().toLowerCase()
+    if (as && categoryKey(as) !== child) { sameAs.set(child, as); continue }
     const parent = (r.parent_slug ?? '').trim().toLowerCase()
-    if (!child || !parent || child === parent) continue
+    if (!parent || categoryKey(parent) === child) continue
     m.set(child, parent)
   }
+  m.sameAs = sameAs
   return m
+}
+
+/** Does this tree change anything? Nesting or a SAME AS row. */
+export function treeIsEmpty(tree: CategoryTree | undefined | null): boolean {
+  return !tree || (tree.size === 0 && !(tree.sameAs?.size))
 }
 
 /**
@@ -65,7 +96,7 @@ export function ancestorsOf(slug: string, parentBySlug: Map<string, string>): st
   const seen = new Set<string>([slug])
   let cur = slug
   for (let i = 0; i < MAX_DEPTH; i++) {
-    const parent = parentBySlug.get(cur)
+    const parent = parentBySlug.get(categoryKey(cur))
     if (!parent || seen.has(parent)) break
     out.push(parent)
     seen.add(parent)
@@ -83,12 +114,16 @@ export function ancestorsOf(slug: string, parentBySlug: Map<string, string>): st
  * With an empty map this returns its input unchanged. That is what makes the
  * feature opt-in: a client with no tree gets byte-identical behaviour.
  */
-export function withAncestors(slugs: string[], parentBySlug: Map<string, string>): string[] {
-  if (parentBySlug.size === 0) return slugs
+export function withAncestors(slugs: string[], parentBySlug: CategoryTree): string[] {
+  if (treeIsEmpty(parentBySlug)) return slugs
+  // SAME AS first, one hop: "handbags" becomes "bags" before the tree is walked, so the piece is
+  // counted, filtered and searched as Handbags and the stylist's spelling no longer has a chip.
+  const as = parentBySlug.sameAs
+  const mapped = as?.size ? slugs.map((s) => as.get(categoryKey(s)) ?? s) : slugs
   const out: string[] = []
   const seen = new Set<string>()
   const push = (s: string) => { if (s && !seen.has(s)) { seen.add(s); out.push(s) } }
-  for (const s of slugs) {
+  for (const s of mapped) {
     push(s)
     for (const a of ancestorsOf(s, parentBySlug)) push(a)
   }
@@ -139,7 +174,7 @@ export function buildTree(
 
   for (const [slug, count] of counts) {
     if (count <= 0) continue
-    const parent = parentBySlug.get(slug)
+    const parent = parentBySlug.get(categoryKey(slug))
     // Promote rather than drop: a parent with nothing in it is not rendered, so
     // hanging its children off it would take them off the page with it.
     if (parent && parent !== slug && live(parent)) {

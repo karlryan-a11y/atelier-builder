@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
-import { wouldCycle } from '@/lib/categoryNesting'
+import { categoryKey, wouldCycle } from '@/lib/categoryNesting'
 
 /**
  * Nesting categories: a main category with other categories inside it. (ADR-0113)
@@ -90,7 +90,7 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
   const nests = entries.filter((c) => (members.get(c.slug)?.length ?? 0) > 0)
   // An empty brand-new group belongs in the pool so she can fill it. It never reaches
   // the client that way: the lookbook drops a category with nothing published under it.
-  const loose = entries.filter((c) => !parentBySlug.has(c.slug) && !(members.get(c.slug)?.length))
+  const loose = entries.filter((c) => !parentBySlug.has(categoryKey(c.slug)) && !(members.get(c.slug)?.length))
 
   const mark = (slug: string, on: boolean) =>
     setBusy((s) => { const n = new Set(s); if (on) n.add(slug); else n.delete(slug); return n })
@@ -117,7 +117,7 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
     const co = pairsOf.get(group) ?? new Map<string, number>()
     return entries
       .filter((c) => c.slug !== group)
-      .filter((c) => parentBySlug.get(c.slug) !== group)
+      .filter((c) => parentBySlug.get(categoryKey(c.slug)) !== group)
       .filter((c) => !(members.get(c.slug)?.length))
       .filter((c) => !wouldCycle(c.slug, group, parentBySlug))
       .map((c) => ({ ...c, shared: co.get(c.slug) ?? 0 }))

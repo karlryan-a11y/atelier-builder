@@ -12,9 +12,10 @@ import { EditItemDialog } from './EditItemDialog'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useItemLookUsage } from '@/hooks/useItemLookUsage'
-import { searchInsideThenOutside, type PieceSearchFields } from '@/lib/pieceSearch'
+import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
+import { useClientCategories } from '@/hooks/useClientCategories'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
 const CATS_EXPANDED_KEY = 'atelier.closetCategoriesExpanded'
@@ -34,12 +35,9 @@ const DraggableItem = memo(function DraggableItem({
   onAdd,
   onEdit,
   onZoom,
-  homeLabel,
 }: {
   item: ClosetItem
   index: number
-  /** Set when the piece comes from outside the chips she has on: the category it lives in. */
-  homeLabel?: string
   /** Where this piece stands: styled / draft / none. A PRIMITIVE, see the note above. */
   styled: PieceStyledState
   onAdd: (item: ClosetItem) => void
@@ -146,7 +144,6 @@ const DraggableItem = memo(function DraggableItem({
         {item.brand}
         {item.color ? <span className="text-text-muted/60">{item.brand ? ' · ' : ''}{item.color}</span> : null}
       </p>
-      {homeLabel ? <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/60 truncate">In {homeLabel}</p> : null}
     </div>
   )
 })
@@ -266,6 +263,10 @@ export function ClosetPanel() {
   // with it the whole closet grid, on every tap, drag and nudge on the board.
   const activeClient = useClientStore((s) => s.activeClient)
   const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(activeClient?.id ?? null)
+  // HER CATEGORY MAP (ADR-0113 nesting + ADR-0163 same-as). This screen resolved categories with
+  // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
+  // this one. The same tree the lookbook reads, from the same rows.
+  const { parentBySlug: categoryTree } = useClientCategories(activeClient?.id ?? null)
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
@@ -349,10 +350,10 @@ export function ClosetPanel() {
     const m = new Map<string, string[]>()
     for (const i of items) {
       const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, categoriesOf(i, tagNames))
+      m.set(i.id, categoriesOf(i, tagNames, categoryTree))
     }
     return m
-  }, [items, tagNameById])
+  }, [items, tagNameById, categoryTree])
 
   const customCats = useMemo(() => customCategoriesFromItems(items), [items])
 
@@ -417,19 +418,17 @@ export function ClosetPanel() {
     (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
   ), [categoriesByItem, tagNameById])
 
-  const { filtered, outsideIds } = useMemo(() => {
+  const filtered = useMemo(() => {
     // ONE MATCHER, TEAM AUDIENCE (ADR-0151). Every possible match, closest first (ADR-0155).
-    // Chips multi-select as a union: a piece shows if ANY of its categories is selected. A search
-    // with chips on shows the chips' matches first, then matches from outside them under a line,
-    // so a dress filed under "Summer Dresses" is still found from Dresses (2026-10-02).
+    // Chips multi-select as a union: a piece shows if ANY of its categories is selected, and a
+    // search with chips on searches those chips only (ADR-0163).
     const inChips = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c))
-    const searched = searchInsideThenOutside(items, inChips, activeCategories.size > 0, search, fieldsOf, 'team')
-    let result = searched.ranked
+    let result = searchInCategory(items, inChips, activeCategories.size > 0, search, fieldsOf, 'team').ranked
     // "Still to style" is the whole point of the marks: it narrows the rail to the pieces that
     // have never been in a look. A piece in a draft look is NOT still to style — it is styled and
     // unpublished, which is a different job, so it stays out of this list (ADR-0134).
     if (unstyledOnly) result = result.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none')
-    return { filtered: result, outsideIds: new Set(searched.outside.map((i) => i.id)) }
+    return result
   }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage, fieldsOf])
 
   // The line under the grid, over whatever she has filtered to.
@@ -621,7 +620,6 @@ export function ClosetPanel() {
                       onAdd={addPiece}
                       onEdit={setEditingItem}
                       onZoom={setZoomIndex}
-                      homeLabel={outsideIds.has(item.id) ? labelForCategory((categoriesByItem.get(item.id) ?? [])[0] ?? '') : undefined}
                     />
                   </Fragment>
                 ))}

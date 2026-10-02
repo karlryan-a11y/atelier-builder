@@ -42,7 +42,7 @@ export function useClientCategories(clientId: string | null) {
     setLoading(true)
     const { data, error: e } = await supabase
       .from('client_categories')
-      .select('slug, label, group_label, sort_order')
+      .select('slug, label, group_label, sort_order, same_as')
       .eq('client_id', clientId)
       .order('sort_order')
       .order('slug')
@@ -58,6 +58,7 @@ export function useClientCategories(clientId: string | null) {
     setError(null)
     setRows((data ?? []).map((r: any) => ({
       slug: r.slug, label: r.label, parent_slug: r.group_label ?? null, sort_order: r.sort_order ?? 0,
+      same_as: r.same_as ?? null,
     })))
   }, [clientId])
 
@@ -91,6 +92,9 @@ export function useClientCategories(clientId: string | null) {
           slug: child,
           label: label ?? child,
           group_label: next,
+          // INSIDE and SAME AS are exclusive: putting a category inside another clears its same-as
+          // (ADR-0163).
+          same_as: null,
           // `kind` is NOT NULL with a default of 'garment' (migration 006). Sent
           // explicitly so an upsert that INSERTS does not depend on the default
           // surviving a future schema edit.
@@ -134,5 +138,31 @@ export function useClientCategories(clientId: string | null) {
     return { ok: true as const, slug }
   }, [clientId, fetchAll])
 
-  return { rows, parentBySlug, loading, error, setParent, createGroup, refetch: fetchAll }
+  /**
+   * SAME AS (ADR-0163): read this category as another one for this client ("handbags" as Handbags).
+   * `target` null clears it, and the category is itself again. Clears any INSIDE placement, since a
+   * category that IS another one cannot also sit under a third. Nothing on any piece is rewritten.
+   */
+  const setSameAs = useCallback(async (slug: string, target: string | null, label?: string) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    const child = slug.trim().toLowerCase()
+    const as = target ? target.trim().toLowerCase() : null
+    if (!child) return { ok: false as const, message: 'No category given.' }
+    if (as === child) return { ok: false as const, message: 'A category cannot be the same as itself.' }
+    const { data, error: e } = await supabase
+      .from('client_categories')
+      .upsert(
+        { client_id: clientId, slug: child, label: label ?? child, same_as: as, group_label: null, kind: 'garment' },
+        { onConflict: 'client_id,slug' },
+      )
+      .select('slug, same_as')
+    if (e) return { ok: false as const, message: e.message }
+    if (!data?.length) {
+      return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
+    }
+    await fetchAll()
+    return { ok: true as const }
+  }, [clientId, fetchAll])
+
+  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, refetch: fetchAll }
 }

@@ -124,6 +124,38 @@ const SYNONYM_GROUPS: string[][] = [
 const SYNONYMS = new Map<string, string[]>()
 for (const g of SYNONYM_GROUPS) for (const w of g) SYNONYMS.set(w, g.filter((x) => x !== w))
 
+/**
+ * SHOPPING WORDS: the broad word she types finds the specific pieces it covers (ADR-0163).
+ *
+ * ONE WAY ONLY. "heels" finds a pump; "pump" does not find every heel. Measured over all 88,819
+ * live pieces on 2026-10-02, typing the broad word missed these because the piece is named only
+ * by the specific one: sweater 1,684 (cardigan, pullover, turtleneck), heels 1,484 (pump,
+ * stiletto, slingback), jacket 620 (blazer, bomber), swimsuit 222 (bikini), coat 164 (trench,
+ * puffer, parka), flats 124 (ballerina), necklace 119 (pendant, choker), sneakers 79 (trainer),
+ * bag 44 (clutch, pouch). Words that are only sometimes the broad thing are left out on purpose:
+ * "stud" is also a studded shoe, "ankle" is also an ankle jean, "denim" is also a jacket.
+ * Keys are matched on the typed word or its stem, so "heel" and "heels" both work.
+ */
+const BROADER: Record<string, string[]> = {
+  heel: ['pump', 'stiletto', 'slingback'],
+  sweater: ['cardigan', 'pullover', 'turtleneck', 'jumper'],
+  jacket: ['blazer', 'bomber', 'shacket'],
+  coat: ['trench', 'parka', 'puffer', 'overcoat', 'peacoat'],
+  swimsuit: ['bikini', 'tankini', 'swimwear', 'bathingsuit'],
+  swim: ['bikini', 'tankini', 'swimsuit', 'swimwear', 'bathingsuit'],
+  flat: ['ballerina', 'ballet'],
+  necklace: ['pendant', 'choker', 'lariat'],
+  sneaker: ['trainer'],
+  bag: ['clutch', 'tote', 'crossbody', 'satchel', 'pouch', 'purse', 'handbag', 'backpack'],
+  dress: ['gown', 'kaftan', 'caftan'],
+  top: ['blouse', 'tank', 'cami', 'camisole', 'tee', 'tshirt', 'bodysuit'],
+  earring: ['hoop', 'huggie'],
+}
+function narrowerOf(word: string): string[] {
+  for (const w of [word, ...stems(word)]) if (BROADER[w]) return BROADER[w]
+  return []
+}
+
 /** Spellings that are one word to her and two to a tokenizer. Joined on both sides. */
 const PHRASES: [RegExp, string][] = [
   [/\bt[\s-]?shirts?\b/g, 'tshirt'],
@@ -226,6 +258,7 @@ function oneEditApart(a: string, b: string): boolean {
 function wordStrength(word: string, token: string, typos: boolean): number {
   if (wordHitsToken(word, token)) return 1
   for (const s of SYNONYMS.get(word) ?? []) if (wordHitsToken(s, token)) return 0.9
+  for (const n of narrowerOf(word)) if (wordHitsToken(n, token)) return 0.85
   const base = stems(word)[0] ?? word
   for (const head of [word, base]) {
     if (COMPOUND_HEADS.has(head) && token.length > head.length && token.endsWith(head)) return 0.9
@@ -331,37 +364,31 @@ export function searchPieces<T>(
 }
 
 /**
- * A SEARCH INSIDE A CATEGORY NEVER HIDES WHAT IS OUTSIDE IT (ADR-0155, 2026-10-02).
+ * A CATEGORY IS A FILTER, AND A SEARCH INSIDE IT SEARCHES THAT CATEGORY (ADR-0163).
  *
- * Maegan, Peyton Wheeler: "it still doesn't explain why we couldn't find the dress when we
- * searched through all lena dresses". The Margaret dress was filed under "Summer Dresses", a
- * category of its own, so inside Dresses no search could reach it. 73 clients have 1,600 pieces
- * in custom garment categories like that (Summer Dresses, Work Dress, Tops/Blouses).
+ * Maegan Watson, 2026-10-02, Danielle York, her clip "Fashion Collection Search Function Issues":
+ * in Rings, "chanel" "should only pull the Chanel in that category"; in Coats, "mcqueen": "even in
+ * coats, it's not just searching coats, so that's the 1 issue". Earlier the same day a search inside
+ * a category had been made to also show matches from every other category (so the Margaret dress,
+ * filed under Summer Dresses, could be reached from Dresses). Live, Rings + "chanel" returned 65
+ * pieces from everywhere and 0 rings. That was reverted here. A piece filed under a sibling
+ * category is reached by the stylist's category map for that client (Summer Dresses inside
+ * Dresses), not by search leaking across categories.
  *
- * ORDER, closest first: every word matched inside the category, then every word matched outside
- * it, then the partial matches inside, then the partial matches outside. A first version put ALL
- * of the category's matches first; measured in WebKit on Peyton, "lena dresses" inside Dresses
- * then listed all 154 dresses (each matches "dresses") before the Margaret dress, four pages
- * down. A full match outside the category beats a half match inside it.
- *
- * `outside` holds the pieces from other categories so a surface can say where each one lives.
- * With no category, or nothing typed, it is plain searchPieces over the scope.
+ * `ranked` is the category's matches, closest first. `elsewhere` counts what matches outside the
+ * category, so a surface whose category returns nothing can offer "See all N in All pieces" in one
+ * tap rather than a dead end. It is never mixed into the results.
  */
-export function searchInsideThenOutside<T>(
+export function searchInCategory<T>(
   items: T[],
   inScope: (item: T) => boolean,
   scoped: boolean,
   query: string,
   fieldsOf: (item: T) => PieceSearchFields,
   audience: SearchAudience,
-): { ranked: T[]; inside: T[]; outside: T[] } {
-  const scope = scoped ? items.filter(inScope) : items
-  const inside = searchPieces(scope, query, fieldsOf, audience)
-  if (!scoped || queryWords(query).length === 0) return { ranked: inside.ranked, inside: inside.ranked, outside: [] }
-  const outside = searchPieces(items.filter((i) => !inScope(i)), query, fieldsOf, audience)
-  return {
-    ranked: [...inside.full, ...outside.full, ...inside.near, ...outside.near],
-    inside: inside.ranked,
-    outside: outside.ranked,
-  }
+): { ranked: T[]; elsewhere: number } {
+  const ranked = searchPieces(scoped ? items.filter(inScope) : items, query, fieldsOf, audience).ranked
+  if (!scoped || queryWords(query).length === 0) return { ranked, elsewhere: 0 }
+  const elsewhere = searchPieces(items.filter((i) => !inScope(i)), query, fieldsOf, audience).ranked.length
+  return { ranked, elsewhere }
 }
