@@ -12,6 +12,7 @@
     "deploy": "npm run guard && vercel deploy --prod --yes",
     "ship": "npm run guard && git push && vercel deploy --prod --yes",
     "check:closet-chips": "node scripts/check-closet-chips.mjs",
+    "check:look-numbering": "node scripts/check-look-numbering.mjs",
     "check:card-select": "node scripts/check-card-select.mjs",
     "check:hidden-piece": "node scripts/check-hidden-piece.mjs",
     "check:rebuild-replaces": "node scripts/check-rebuild-replaces.mjs",
