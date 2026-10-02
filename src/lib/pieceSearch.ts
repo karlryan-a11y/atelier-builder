@@ -87,11 +87,13 @@ export interface PieceSearchFields {
 /** How much a hit in each field is worth. The name and designer are what she means. */
 const WEIGHT = {
   name: 3, brand: 3,
-  color: 2, description: 2, material: 2, retailer: 2,
+  colorChip: 2.5, color: 2, colorLong: 1, description: 2, material: 2, retailer: 2,
   category: 1.5, tag: 1.5,
   note: 1, size: 1, legacy: 0.5,
 } as const
 type FieldKind = keyof typeof WEIGHT
+/** Past this, a colour field is a description of the colours rather than a colour name. */
+const LONG_COLOR_TEXT = 60
 
 /** Words nobody means as a filter. Dropped from the query, unless they are all she typed. */
 const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'with', 'w', 'in', 'of', 'for', 'on', 'by', 'to', 'at', 'from'])
@@ -165,7 +167,12 @@ function weightedTokens(f: PieceSearchFields, audience: SearchAudience): Token[]
     for (const t of tokenize(text)) out.push({ t, w: WEIGHT[kind], kind })
   }
   add(f.name, 'name'); add(f.nameOverride, 'name'); add(f.brand, 'brand')
-  add(f.color, 'color'); for (const c of f.colorFamilies ?? []) add(c, 'color')
+  // The colour CHIPS are what the piece is. The free text can be a 200-character AI description
+  // ("... overlaid with crimson red stripes, deep forest green, and black crossing lines") on half
+  // of some closets (Danielle York: 465 of 936), so a colour named in passing ranks below a
+  // colour the piece is (ADR-0155, measured 2026-10-02).
+  for (const c of f.colorFamilies ?? []) add(c, 'colorChip')
+  add(f.color, (f.color ?? '').length > LONG_COLOR_TEXT ? 'colorLong' : 'color')
   add(f.description, 'description'); add(f.material, 'material'); add(f.retailer, 'retailer')
   for (const c of f.categories ?? []) add(c, 'category')
   for (const t of f.tags ?? []) add(t, 'tag')
@@ -320,5 +327,41 @@ export function searchPieces<T>(
     ranked,
     full: graded.filter((g) => g.m.full).map((g) => g.item),
     near: graded.filter((g) => !g.m.full).map((g) => g.item),
+  }
+}
+
+/**
+ * A SEARCH INSIDE A CATEGORY NEVER HIDES WHAT IS OUTSIDE IT (ADR-0155, 2026-10-02).
+ *
+ * Maegan, Peyton Wheeler: "it still doesn't explain why we couldn't find the dress when we
+ * searched through all lena dresses". The Margaret dress was filed under "Summer Dresses", a
+ * category of its own, so inside Dresses no search could reach it. 73 clients have 1,600 pieces
+ * in custom garment categories like that (Summer Dresses, Work Dress, Tops/Blouses).
+ *
+ * ORDER, closest first: every word matched inside the category, then every word matched outside
+ * it, then the partial matches inside, then the partial matches outside. A first version put ALL
+ * of the category's matches first; measured in WebKit on Peyton, "lena dresses" inside Dresses
+ * then listed all 154 dresses (each matches "dresses") before the Margaret dress, four pages
+ * down. A full match outside the category beats a half match inside it.
+ *
+ * `outside` holds the pieces from other categories so a surface can say where each one lives.
+ * With no category, or nothing typed, it is plain searchPieces over the scope.
+ */
+export function searchInsideThenOutside<T>(
+  items: T[],
+  inScope: (item: T) => boolean,
+  scoped: boolean,
+  query: string,
+  fieldsOf: (item: T) => PieceSearchFields,
+  audience: SearchAudience,
+): { ranked: T[]; inside: T[]; outside: T[] } {
+  const scope = scoped ? items.filter(inScope) : items
+  const inside = searchPieces(scope, query, fieldsOf, audience)
+  if (!scoped || queryWords(query).length === 0) return { ranked: inside.ranked, inside: inside.ranked, outside: [] }
+  const outside = searchPieces(items.filter((i) => !inScope(i)), query, fieldsOf, audience)
+  return {
+    ranked: [...inside.full, ...outside.full, ...inside.near, ...outside.near],
+    inside: inside.ranked,
+    outside: outside.ranked,
   }
 }

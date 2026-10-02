@@ -43,7 +43,10 @@
  * Exits non-zero on failure and on inspecting nothing (ADR-0106).
  */
 import { readFileSync, existsSync } from 'node:fs'
-import { matchPiece, searchPieces, pieceTokens, wordHitsToken } from '../src/lib/pieceSearch.ts'
+import * as PS from '../src/lib/pieceSearch.ts'
+const { matchPiece, searchPieces, pieceTokens, wordHitsToken } = PS
+// Read off the namespace so a matcher that lacks it fails the cases below instead of the import.
+const searchInsideThenOutside = PS.searchInsideThenOutside ?? (() => undefined)
 
 const ROOT = new URL('..', import.meta.url).pathname
 // PIECE_SEARCH_SIBLING: the other app's checkout, when it is not the usual folder (a worktree).
@@ -86,7 +89,7 @@ const SURFACES = [
 for (const [rel, audience, what] of SURFACES) {
   const src = read(rel)
   checks++
-  if (!/searchPieces\(/.test(src)) {
+  if (!/searchPieces\(|searchInsideThenOutside\(/.test(src)) {
     fail(`${rel}: ${what} still filters with a search of its own. Five different field lists is why a piece findable on one screen was not findable on another (ADR-0151).`)
   }
   checks++
@@ -141,6 +144,19 @@ if (!/onClick=\{\(\) => \{ setSearch\(''\); setActiveCategories\(new Set\(\)\) \
 checks++
 if (!/useEffect\(\(\) => \{ setQ\(''\) \}, \[filterKey\]\)/.test(read('src/components/categorize/CollectionTab.tsx'))) {
   fail('CollectionTab.tsx: choosing a category in the Categorize rail keeps the search (ADR-0155).')
+}
+// A search inside a category never hides what is outside it, on both stylist screens (2026-10-02).
+for (const rel of ['src/components/layout/ClosetPanel.tsx', 'src/components/categorize/CollectionTab.tsx']) {
+  checks++
+  if (!/searchInsideThenOutside\(/.test(read(rel))) fail(`${rel}: a search inside a category hides matches filed elsewhere (the Margaret dress under Summer Dresses).`)
+}
+checks++
+if (!/In \{homeLabelOf\(item\)\}/.test(read('src/components/categorize/CollectionTab.tsx')) || !/In \{homeLabel\}/.test(read('src/components/layout/ClosetPanel.tsx'))) {
+  fail('a piece shown from another category does not say which category it lives in, on the Collection tab or the canvas rail.')
+}
+checks++
+if (!/const selectable = useMemo\(\(\) => visible\.filter\(\(i\) => !outsideIds\.has\(i\.id\)\)/.test(read('src/components/categorize/CollectionTab.tsx'))) {
+  fail('CollectionTab.tsx: Select all can sweep in the matches shown from OUTSIDE the category, and the bulk actions would then move pieces she never meant to touch.')
 }
 // The capsule's "add looks" box searched the whole phrase; it uses the Looks list's rule now.
 checks++
@@ -328,6 +344,40 @@ if (names(plaid) !== 'Plaid Skirt') fail(`"plaid" pulled in a typo match althoug
 ran++
 const typo = searchPieces([{ name: 'Houndstooth Skirt' }, { name: 'Plain White Tee' }], 'houndstoth', (x) => x, 'client').ranked
 if (names(typo) !== 'Houndstooth Skirt') fail(`"houndstoth" (one letter off) did not find the houndstooth skirt: ${names(typo)}`)
+
+// ── 2026-10-02: a search inside a category never hides what is outside it ──
+// Peyton Wheeler: the Margaret dress was filed under "Summer Dresses"; inside Dresses, "lena
+// dresses" could not reach it.
+ran++
+const PEY = [
+  { name: 'Floral Margaret Satin Sheath Belted Shirt Dress', brand: 'Lena Hoschek', categories: ['summer-dresses', 'Summer Dresses'] },
+  { name: 'Vivienne Cotton Plaid A-line Midi Dress', brand: 'Lena Hoschek', categories: ['dresses', 'Dresses'] },
+  { name: 'Silk Cami', brand: 'Dior', categories: ['tops', 'Tops'] },
+  { name: 'Silk Slip Dress', brand: 'Dior', categories: ['dresses', 'Dresses'] },
+]
+const inDresses = (x) => (x.categories ?? []).includes('dresses')
+const lena = searchInsideThenOutside(PEY, inDresses, true, 'lena dresses', (x) => x, 'client')
+if (names(lena?.outside) !== 'Floral Margaret Satin Sheath Belted Shirt Dress') {
+  fail(`inside Dresses, "lena dresses" did not reach the Summer Dresses piece: outside=[${names(lena?.outside)}]`)
+}
+// A full match outside the category beats a half match inside it. The first version listed all
+// 154 of Peyton's dresses (each matches "dresses") before the Margaret dress, four pages down.
+ran++
+if (names(lena?.ranked) !== 'Vivienne Cotton Plaid A-line Midi Dress / Floral Margaret Satin Sheath Belted Shirt Dress / Silk Slip Dress') {
+  fail(`"lena dresses" in Dresses: expected the Lena dress, then the Summer Dresses Lena dress, then the half match: ${names(lena?.ranked)}`)
+}
+ran++
+const browse = searchInsideThenOutside(PEY, inDresses, true, '', (x) => x, 'client')
+if (names(browse?.ranked) !== 'Vivienne Cotton Plaid A-line Midi Dress / Silk Slip Dress' || (browse?.outside ?? []).length) fail('with nothing typed, a category shows only itself')
+ran++
+const noCat = searchInsideThenOutside(PEY, inDresses, false, 'lena', (x) => x, 'client')
+if ((noCat?.outside ?? ['x']).length !== 0 || (noCat?.ranked ?? []).length !== 2) fail('with no category chosen, there is no "outside"')
+// A colour the piece IS outranks a colour named in passing in a long AI colour description
+// (Danielle York: 465 of 936 pieces carry one).
+ran++
+const LONG = 'Multi-color tartan: soft dusty sky blue and warm pale straw as dominant ground tones, overlaid with crimson red stripes and black crossing lines, matte finish'
+const black = searchPieces([{ name: 'Wool Scarf', color: LONG, colorFamilies: ['Blue'] }, { name: 'Wool Scarf', colorFamilies: ['Black'] }], 'black', (x) => x, 'client').ranked
+if ((black ?? [])[0]?.colorFamilies?.[0] !== 'Black') fail('"black": a scarf whose colour chip is Black did not outrank one that only mentions black in a long colour description')
 
 console.log(`   rules: ${ran} case(s) run`)
 if (ran === 0 || checks === 0) { console.error('\n❌ piece-search: inspected nothing.\n'); process.exit(1) }

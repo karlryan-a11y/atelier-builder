@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react'
+import { Fragment, useState, useMemo, useEffect, useCallback, useRef, memo } from 'react'
 import { Search, Pencil, StickyNote, ZoomIn, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { categoriesOf, labelForCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
@@ -12,7 +12,7 @@ import { EditItemDialog } from './EditItemDialog'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useItemLookUsage } from '@/hooks/useItemLookUsage'
-import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
+import { searchInsideThenOutside, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 
@@ -34,9 +34,12 @@ const DraggableItem = memo(function DraggableItem({
   onAdd,
   onEdit,
   onZoom,
+  homeLabel,
 }: {
   item: ClosetItem
   index: number
+  /** Set when the piece comes from outside the chips she has on: the category it lives in. */
+  homeLabel?: string
   /** Where this piece stands: styled / draft / none. A PRIMITIVE, see the note above. */
   styled: PieceStyledState
   onAdd: (item: ClosetItem) => void
@@ -143,6 +146,7 @@ const DraggableItem = memo(function DraggableItem({
         {item.brand}
         {item.color ? <span className="text-text-muted/60">{item.brand ? ' · ' : ''}{item.color}</span> : null}
       </p>
+      {homeLabel ? <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/60 truncate">In {homeLabel}</p> : null}
     </div>
   )
 })
@@ -413,19 +417,19 @@ export function ClosetPanel() {
     (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
   ), [categoriesByItem, tagNameById])
 
-  const filtered = useMemo(() => {
-    let result = items
+  const { filtered, outsideIds } = useMemo(() => {
     // ONE MATCHER, TEAM AUDIENCE (ADR-0151). Every possible match, closest first (ADR-0155).
-    if (search) result = searchPieces(result, search, fieldsOf, 'team').ranked
-    if (activeCategories.size > 0) {
-      // Multi-select unions: show an item if ANY of its categories is selected.
-      result = result.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c)))
-    }
+    // Chips multi-select as a union: a piece shows if ANY of its categories is selected. A search
+    // with chips on shows the chips' matches first, then matches from outside them under a line,
+    // so a dress filed under "Summer Dresses" is still found from Dresses (2026-10-02).
+    const inChips = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c))
+    const searched = searchInsideThenOutside(items, inChips, activeCategories.size > 0, search, fieldsOf, 'team')
+    let result = searched.ranked
     // "Still to style" is the whole point of the marks: it narrows the rail to the pieces that
     // have never been in a look. A piece in a draft look is NOT still to style — it is styled and
     // unpublished, which is a different job, so it stays out of this list (ADR-0134).
     if (unstyledOnly) result = result.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none')
-    return result
+    return { filtered: result, outsideIds: new Set(searched.outside.map((i) => i.id)) }
   }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage, fieldsOf])
 
   // The line under the grid, over whatever she has filtered to.
@@ -609,15 +613,17 @@ export function ClosetPanel() {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {filtered.map((item, idx) => (
-                  <DraggableItem
-                    key={item.id}
-                    item={item}
-                    index={idx}
-                    styled={styledStateOf(lookUsage.get(item.id))}
-                    onAdd={addPiece}
-                    onEdit={setEditingItem}
-                    onZoom={setZoomIndex}
-                  />
+                  <Fragment key={item.id}>
+                    <DraggableItem
+                      item={item}
+                      index={idx}
+                      styled={styledStateOf(lookUsage.get(item.id))}
+                      onAdd={addPiece}
+                      onEdit={setEditingItem}
+                      onZoom={setZoomIndex}
+                      homeLabel={outsideIds.has(item.id) ? labelForCategory((categoriesByItem.get(item.id) ?? [])[0] ?? '') : undefined}
+                    />
+                  </Fragment>
                 ))}
               </div>
             )}

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
-import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
+import { searchInsideThenOutside, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
 import { useClosetItems } from '@/hooks/useClosetItems'
@@ -201,16 +201,23 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   const filterKey = filterCategories ? [...filterCategories].sort().join('|') : ''
   useEffect(() => { setQ('') }, [filterKey])
 
+  /*
+   * EVERY POSSIBLE MATCH, CLOSEST FIRST, IN ONE LIST (ADR-0155), and a search inside a category
+   * never hides what matches outside it (2026-10-02: the Margaret dress was filed under Summer
+   * Dresses, so a search inside Dresses could not reach it). The category's matches come first; the
+   * rest follow, each saying which category it lives in. The counts and coverage stay on the
+   * category she is in.
+   */
   const searched = useMemo(() => {
-    let live = items.filter((i) => !i.is_deleted)
-    if (filterCategories && filterCategories.size > 0) {
-      live = live.filter((i) => (categoriesByItem.get(i.id) ?? []).some((c) => filterCategories!.has(c)))
-    }
-    return searchPieces(live, q, fieldsOf, 'team')
+    const live = items.filter((i) => !i.is_deleted)
+    const scoped = !!filterCategories && filterCategories.size > 0
+    const inScope = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => filterCategories!.has(c))
+    return searchInsideThenOutside(live, inScope, scoped, q, fieldsOf, 'team')
   }, [items, q, filterCategories, categoriesByItem, fieldsOf])
-  // EVERY POSSIBLE MATCH, CLOSEST FIRST, IN ONE LIST (ADR-0155). This used to put the near
-  // matches under a "Nearly" heading; Karl, 2026-09-28: no heading, ranked by closest match.
-  const baseVisible = searched.ranked
+  const baseVisible = searched.inside
+  const outsideIds = useMemo(() => new Set(searched.outside.map((i) => i.id)), [searched])
+  // A piece from outside the category she is in says where it lives, under its name.
+  const homeLabelOf = (i: ClosetItem) => labelForCategory((categoriesByItem.get(i.id) ?? [])[0] ?? '')
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
   // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
@@ -230,9 +237,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   )
   useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
   const visible = useMemo(
-    () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
-    [baseVisible, unconfirmedOnly],
+    () => (unconfirmedOnly ? searched.ranked.filter((i) => !i.drive_verified_at) : searched.ranked),
+    [searched, unconfirmedOnly],
   )
+  // Select all takes the category she is in, never the matches shown from outside it: the bulk
+  // actions ("Set category", "Also in") would otherwise move pieces she did not mean to touch.
+  const selectable = useMemo(() => visible.filter((i) => !outsideIds.has(i.id)), [visible, outsideIds])
 
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
@@ -557,11 +567,11 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
       {visible.length > 0 && (
         <div className="mb-4 flex items-center gap-3 text-[11px] flex-wrap">
           <button
-            onClick={() => (selected.size === visible.length ? setSelected(new Set()) : setSelected(new Set(visible.map((i) => i.id))))}
+            onClick={() => (selected.size === selectable.length ? setSelected(new Set()) : setSelected(new Set(selectable.map((i) => i.id))))}
             className="inline-flex items-center gap-1.5 text-[#666] hover:text-[#1A1A1A]"
           >
-            {selected.size === visible.length && visible.length > 0 ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-            Select all ({visible.length})
+            {selected.size === selectable.length && selectable.length > 0 ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+            Select all ({selectable.length})
           </button>
           {selected.size > 0 && (
             <button
@@ -632,7 +642,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
             const isSel = selected.has(item.id)
             const verified = !!item.drive_verified_at
             return (
-              <div key={item.id} className={`group relative border rounded-sm overflow-hidden bg-white ${isSel ? 'border-[#1A1A1A] ring-1 ring-[#1A1A1A]/15' : verified ? 'border-[#3f7d55]/50 ring-1 ring-[#3f7d55]/20' : 'border-[#E8E4DF]'}`}>
+              <Fragment key={item.id}>
+              <div className={`group relative border rounded-sm overflow-hidden bg-white ${isSel ? 'border-[#1A1A1A] ring-1 ring-[#1A1A1A]/15' : verified ? 'border-[#3f7d55]/50 ring-1 ring-[#3f7d55]/20' : 'border-[#E8E4DF]'}`}>
                 <button
                   title="Select for bulk category"
                   onClick={() => toggleSelect(item.id)}
@@ -674,6 +685,9 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                     )
                   })()}
                   <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
+                  {outsideIds.has(item.id) && (
+                    <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] truncate mt-0.5">In {homeLabelOf(item)}</p>
+                  )}
                   <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(primaryCategoryByItem.get(item.id) ?? 'other')}</p>
                   {/* One truncated line, so a stylist can see at a glance which pieces are
                       described and which are not. ADR-0151. */}
@@ -726,6 +740,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                   </button>
                 </div>
               </div>
+              </Fragment>
             )
           })}
         </div>
