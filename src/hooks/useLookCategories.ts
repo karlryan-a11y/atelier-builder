@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
 import { planResidenceToggle, type ResidenceTogglePlan } from '@/lib/residenceToggle'
+import { byCategoryOrder } from '@/lib/categoryOrder'
 import { loadLookCategories, type LookCategoriesData } from '@/lib/lookCategoriesLoad'
 
 /**
@@ -426,6 +427,30 @@ export function useLookCategories(clientId: string | null) {
     if (failed) { console.error('reorderLooks:', failed.error?.message); await fetchAll() }
   }, [fetchAll, setLooks])
 
+  // ── category order (drives the chip order on her Looks page) ── ADR-0162
+  // orderedIds is EVERY category, as planCategoryOrder returns it. Each row is asked back
+  // (.select) because an update RLS declines is a 200 with no rows and no error: without it a
+  // refused save looks like a saved one until the next refresh. Returns false when any row did
+  // not save, so the rail can say so instead of quietly snapping back.
+  const reorderCategories = useCallback(async (orderedIds: string[]): Promise<boolean> => {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]))
+    setCategories((prev) =>
+      prev
+        .map((c) => (pos.has(c.id) ? { ...c, sort_order: pos.get(c.id)! } : c))
+        .sort(byCategoryOrder),
+    )
+    const results = await Promise.all(
+      orderedIds.map((id, i) => supabase.from('look_categories').update({ sort_order: i }).eq('id', id).select('id')),
+    )
+    const failed = results.find((r) => r.error || !r.data || r.data.length !== 1)
+    if (failed) {
+      console.error('reorderCategories:', failed.error?.message ?? 'a row was not updated')
+      await fetchAll()
+      return false
+    }
+    return true
+  }, [fetchAll, setCategories])
+
   // Same as reorderLooks but for capsules → gp_boards.sort_order (the lookbook's
   // getBoards already orders by it, so this drives the client's Capsules gallery).
   const reorderCapsules = useCallback(async (orderedIds: string[]) => {
@@ -480,7 +505,7 @@ export function useLookCategories(clientId: string | null) {
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
-    reorderLooks, reorderCapsules,
+    reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
     refetch: fetchAll,
   }

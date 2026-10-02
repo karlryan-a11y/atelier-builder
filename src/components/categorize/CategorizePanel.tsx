@@ -35,6 +35,8 @@ import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
 import { SeasonsBar, SeasonQueue } from '@/components/categorize/SeasonsPanel'
+import { CategorySortList, SortableCategoryRow } from '@/components/categorize/CategorySortable'
+import { planCategoryOrder } from '@/lib/categoryOrder'
 import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 import { nextSeasonClick } from '@/lib/lookSeasons'
 
@@ -114,7 +116,7 @@ export function CategorizePanel() {
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule,
     restoreLook, restoreCapsule,
-    reorderLooks, reorderCapsules,
+    reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
   } = useLookCategories(activeClient?.id ?? null)
 
@@ -702,6 +704,17 @@ export function CategorizePanel() {
     void setCategoryResidence(cat.id, !cat.is_residence, (message) => window.confirm(message), activeClient?.name)
   }
 
+  // Drag a category in the rail (ADR-0162). The new order is her Looks page's chip order. A save
+  // that did not land is said out loud: the rail snaps back on the refetch, and a silent snap
+  // back reads as "dragging does not work" rather than "it was refused".
+  const visibleCategoryIds = useMemo(() => categories.filter((c) => !c.is_hidden).map((c) => c.id), [categories])
+  async function handleMoveCategory(activeId: string, overId: string) {
+    const next = planCategoryOrder(categories, activeId, overId)
+    if (!next) return
+    const ok = await reorderCategories(next)
+    if (!ok) window.alert("The new order didn't save. Refresh the page and try again.")
+  }
+
   async function handleDeleteCategory(cat: LookCategory) {
     // window.confirm both asks and, for a refused residence, is the only thing shown.
     const plan = await deleteCategory(cat.id, (message) => window.confirm(message), activeClient?.name)
@@ -888,7 +901,10 @@ export function CategorizePanel() {
             {categories.filter((c) => !c.is_hidden).length === 0 && (
               <span className="text-[11px] text-[#bbb]">No categories yet — create one below.</span>
             )}
-            {categories.filter((c) => !c.is_hidden).map((cat) => {
+            {/* Drag the grip to set the order her Looks page shows these in (ADR-0162). */}
+            <CategorySortList ids={visibleCategoryIds} onMove={handleMoveCategory}>
+            {categories.filter((c) => !c.is_hidden).map((cat) => (
+              <SortableCategoryRow key={cat.id} id={cat.id} disabled={editing === cat.id}>{(grip) => {
               const isActive = activeBrush === cat.id
               if (editing === cat.id) {
                 return (
@@ -914,6 +930,7 @@ export function CategorizePanel() {
                   }`}
                 >
                   <div className="group flex items-center justify-between">
+                  {grip}
                   <button onClick={() => setBrush(!tagging && activeBrush === cat.id ? null : cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
                     {cat.label}
                   </button>
@@ -1020,7 +1037,9 @@ export function CategorizePanel() {
                   ) : null}
                 </div>
               )
-            })}
+              }}</SortableCategoryRow>
+            ))}
+            </CategorySortList>
             {/* Hidden: a deleted category that still had looks filed under it lands here rather
                 than being destroyed, so a mis-click is recoverable. It is already gone from the
                 client's site — the lookbook filters is_hidden. */}
