@@ -18,6 +18,7 @@ import {
   canRecover, FLAG_META, type ReconRow, type ReconFlag, type FilterKey,
 } from '@/lib/reconcile'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { updateClosetItem } from '@/lib/teamNotes'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -392,7 +393,7 @@ export function ReconciliationPanel() {
   async function saveEdit(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
     setSaving(true)
-    const { error: e } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)
+    const { error: e } = await updateClosetItem(editing.id, editing.client_id, data)
     setSaving(false)
     if (e) { alert('Failed to save — ' + e.message); return }
     setEditing(null); refetch()

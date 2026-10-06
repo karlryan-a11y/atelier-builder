@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import type { ClosetItem } from '@/lib/images'
 import { styleKeys } from '@/lib/queryClient'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { fetchTeamNotes } from '@/lib/teamNotes'
 
 /**
  * The columns the client's closet is read with, for EVERY screen that shows it.
@@ -24,7 +25,7 @@ import { r2ImageUrl } from '@/lib/imageUrls'
 // field on the piece, not only the ones someone thought of. No comment inside the string below:
 // check-closet-raw-fields reads it as one run of quoted pieces.
 export const CLOSET_SELECT =
-  'id, client_id, name, name_override, style_note, description, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
+  'id, client_id, name, name_override, description, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
   'raw_image:raw->>image, raw_processed_image:raw->>processed_image, raw_image0:raw->images->>0, ' +
   'retailer, size, raw_material:raw->>material, raw_description:raw->>description, ' +
   'primary_image_hash, processed_image_hash, source, added_at'
@@ -158,9 +159,12 @@ async function readCloset(clientId: string): Promise<ClosetData> {
   const tagNameById = new Map<string, string>()
   const chunks: string[][] = []
   for (let i = 0; i < tagIds.length; i += TAG_CHUNK) chunks.push(tagIds.slice(i, i + TAG_CHUNK))
-  const tagPages = await Promise.all(
-    chunks.map((chunk) => supabase.from('gp_content_tags').select('id, name').in('id', chunk)),
-  )
+  // Team notes come from their own table (ADR-0165), read with the tags so it costs no extra wait.
+  const [tagPages, teamNotes] = await Promise.all([
+    Promise.all(chunks.map((chunk) => supabase.from('gp_content_tags').select('id, name').in('id', chunk))),
+    fetchTeamNotes(clientId),
+  ])
+  for (const item of items) item.style_note = teamNotes.get(item.id) ?? null
   for (const { data: tagRows } of tagPages) {
     for (const t of tagRows ?? []) tagNameById.set(t.id, String(t.name ?? ''))
   }

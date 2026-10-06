@@ -5,7 +5,6 @@ import { categoriesOf, labelForCategory, customCategoriesFromItems } from '@/lib
 import { useClientStore } from '@/stores/clientStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveItemImage, displayName, type ClosetItem } from '@/lib/images'
-import { supabase } from '@/lib/supabase'
 import { useDraggable } from '@dnd-kit/core'
 import type { ClosetItemNode } from '@/types/canvas'
 import { EditItemDialog } from './EditItemDialog'
@@ -16,6 +15,7 @@ import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 import { useClientCategories } from '@/hooks/useClientCategories'
+import { updateClosetItem } from '@/lib/teamNotes'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
 const CATS_EXPANDED_KEY = 'atelier.closetCategoriesExpanded'
@@ -311,9 +311,7 @@ export function ClosetPanel() {
     // This panel already FILTERS by categoriesOf (primary + "Also in"), so the chips it shows are
     // built from custom_categories — it has to be able to write the field it filters on. The key is
     // only present when the dialog manages it, so spreading it can never blank the column.
-    const { error } = await supabase
-      .from('gp_closet_items')
-      .update({
+    const { error } = await updateClosetItem(editingItem.id, editingItem.client_id, {
         name_override: data.name_override, brand: data.brand, color: data.color,
         style_note: data.style_note, category: data.category,
         ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
@@ -321,7 +319,6 @@ export function ClosetPanel() {
         // manages it, so spreading it can never blank the columns.
         ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
       })
-      .eq('id', editingItem.id)
     setSavingItem(false)
     if (error) {
       console.error('Failed to save item edits:', error)

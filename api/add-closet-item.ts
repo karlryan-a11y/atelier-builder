@@ -135,18 +135,27 @@ async function publish(body: any) {
       .map((c: unknown) => String(c || '').trim().toLowerCase())
       .filter((c: string) => c && c !== category),
   )]
+  // The team note goes to its own table, never onto the piece row or into raw (ADR-0165): a client
+  // may read every column of her own rows.
   const patch = {
-    name, brand, color, category, style_note: styleNote, description,
+    name, brand, color, category, description,
     custom_categories: customCategories,
     color_family: colors[0] ?? null,
     color_families: colors.slice(1),
     is_deleted: false, // now LIVE
-    raw: { item_name: name, brand, color, colors, category, style_note: styleNote, description, custom_categories: customCategories, manual_add: true },
+    raw: { item_name: name, brand, color, colors, category, description, custom_categories: customCategories, manual_add: true },
   }
   const resp = await rest(`gp_closet_items?id=eq.${id}&is_deleted=eq.true`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
   if (!resp.ok) throw new Error(`publish failed: ${await resp.text()}`)
   const rows = await resp.json()
   if (!rows.length) throw new Error('draft not found (already published or discarded)')
+  if (styleNote) {
+    const nr = await rest('closet_item_team_notes?on_conflict=item_id', {
+      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ item_id: id, client_id: rows[0].client_id, note: styleNote, updated_at: new Date().toISOString() }),
+    })
+    if (!nr.ok) throw new Error(`team note not saved: ${await nr.text()}`)
+  }
   return { item_id: id, live: true }
 }
 

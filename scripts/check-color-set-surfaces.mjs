@@ -113,7 +113,8 @@ for (const s of SURFACES) {
 for (const s of SURFACES) {
   checked++
   const ui = read(s.ui)
-  const spreads = /\.update\(data\)|\.update\(patch\)/.test(ui)
+  // updateClosetItem (ADR-0165) passes the whole payload on, taking only the team note out of it.
+  const spreads = /\.update\(data\)|\.update\(patch\)|updateClosetItem\([^)]*,\s*(data|patch)\)/.test(ui)
   const byHand = /'color_family' in data/.test(ui) || /color_family: /.test(ui)
   if (!spreads && !byHand) {
     failures.push(`${s.name}: its save neither spreads the dialog payload nor names color_family, so the colour set is edited and then dropped on the floor.`)

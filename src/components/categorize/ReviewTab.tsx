@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, Pencil } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useHiddenItems } from '@/hooks/useHiddenItems'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
@@ -9,6 +8,7 @@ import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { ColorAuditPanel } from './ColorAuditPanel'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
+import { updateClosetItem } from '@/lib/teamNotes'
 
 // The "Review" tab — one home for a client's data cleanup: HIDDEN pieces (recover ones hidden by
 // mistake), MISSING INFO (fill blanks so search works), and COLORS (the existing color audit, folded
@@ -62,7 +62,7 @@ export function ReviewTab({ clientId, clientName }: { clientId: string | null; c
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
     setSaving(true)
-    const { error } = await supabase.from('gp_closet_items').update(data).eq('id', editing.id)
+    const { error } = await updateClosetItem(editing.id, editing.client_id, data)
     setSaving(false)
     if (error) { alert('Could not save — ' + error.message); return }
     patchItems([editing.id], data as Partial<ClosetItem>)

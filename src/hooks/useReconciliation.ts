@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { ReconRow } from '@/lib/reconcile'
 import type { UploadedFingerprint } from '@/lib/driveReconcile'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { fetchTeamNotes } from '@/lib/teamNotes'
 
 
 const proxy = (key: string) => r2ImageUrl(key)
@@ -122,11 +123,13 @@ export function useReconciliation(clientId: string | null) {
     async function load() {
       const { data, error: qErr } = await supabase
         .from('gp_closet_items')
-        .select('id, client_id, name, name_override, brand, category, custom_categories, color, color_family, color_families, style_note, source, raw, primary_image_hash, processed_image_hash, original_garment_photo_r2_key, original_tag_photo_r2_key, intake_item_id, added_at')
+        .select('id, client_id, name, name_override, brand, category, custom_categories, color, color_family, color_families, source, raw, primary_image_hash, processed_image_hash, original_garment_photo_r2_key, original_tag_photo_r2_key, intake_item_id, added_at')
         .eq('client_id', clientId)
         .eq('is_deleted', false)
         .order('added_at', { ascending: false, nullsFirst: false })
 
+      // Team notes live in their own table (ADR-0165).
+      const teamNotes = clientId ? await fetchTeamNotes(clientId) : new Map<string, string>()
       if (cancelled) return
       if (qErr) {
         // Never collapse a failed query into "clean / empty" — surface it (ADR-0036 lesson).
@@ -164,7 +167,7 @@ export function useReconciliation(clientId: string | null) {
           color_family: d.color_family ?? null,
           color_families: d.color_families ?? null,
           color: d.color ?? null,
-          style_note: typeof d.style_note === 'string' ? d.style_note : null,
+          style_note: teamNotes.get(d.id) ?? null,
           description,
           source: d.source ?? null,
           intake_item_id: d.intake_item_id ?? null,

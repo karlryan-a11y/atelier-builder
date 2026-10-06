@@ -18,6 +18,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
+import { updateClosetItem } from '@/lib/teamNotes'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -265,7 +266,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
       })
       if (nextOwned.length !== owned.length) patch.client_edited_fields = nextOwned.length ? nextOwned : null
     }
-    const { error: e } = await supabase.from('gp_closet_items').update(patch).eq('id', editing.id)
+    const { error: e } = await updateClosetItem(editing.id, editing.client_id, patch)
     setSaving(false)
     if (e) { console.error('Failed to save item edits:', e); return }
     // Into the shared cache at once (every screen showing this piece), then a background re-read.
