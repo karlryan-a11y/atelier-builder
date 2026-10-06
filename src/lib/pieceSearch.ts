@@ -283,6 +283,8 @@ export interface PieceMatch {
   included: boolean
   /** Higher is closer. Only meaningful between pieces graded against the same query. */
   score: number
+  /** Which typed words were found, in query order (ADR-0164). */
+  hits?: boolean[]
 }
 
 export const NO_QUERY: PieceMatch = { matched: 0, total: 0, full: true, near: false, included: true, score: 0 }
@@ -313,6 +315,7 @@ export function matchPiece(
   const tokens = weightedTokens(f, audience)
   let matched = 0
   let score = 0
+  const hits: boolean[] = []
   for (const w of words) {
     let best = 0
     for (const { t, w: weight, kind } of tokens) {
@@ -323,11 +326,12 @@ export function matchPiece(
       if (s * weight > best) best = s * weight
     }
     if (best > 0) { matched++; score += best }
+    hits.push(best > 0)
   }
   const full = matched === words.length
   const included = matched >= required(words.length)
   // Every word found always outranks fewer words found, whatever the fields.
-  return { matched, total: words.length, full, near: included && !full, included, score: matched * 100 + score }
+  return { matched, total: words.length, full, near: included && !full, included, score: matched * 100 + score, hits }
 }
 
 /**
@@ -349,10 +353,30 @@ export function searchPieces<T>(
   // A word earns typo tolerance only if it matches nothing, spelled as typed, anywhere here.
   const typoWords = new Set(words.filter((w) => !fields.some((f) =>
     weightedTokens(f, audience).some(({ t }) => wordStrength(w, t, false) > 0))))
+  /*
+   * TWO RULES ON A PARTIAL MATCH (ADR-0164), measured in the search log on 2026-10-02: on Danielle
+   * York's Looks page, "Look 300" returned all 258 looks. She has no Look 300; every look is named
+   * "Look N", so the word "look" carried every one of them in as "one of two words".
+   *   1. A typed NUMBER must be found. A number is an identifier ("Look 300", "size 8"), never a
+   *      word that can be skipped.
+   *   2. A word that more than half of this list carries ("look" on her Looks, "dress" inside
+   *      Dresses) cannot by itself put a piece in the results. It still counts toward a piece that
+   *      matched something else, and a search made only of such words behaves as before.
+   * Full matches are untouched.
+   */
+  const scoped = words.map((w) => fields.filter((f) => weightedTokens(f, audience).some(({ t }) => wordStrength(w, t, false) > 0)).length)
+  const common = words.map((_, k) => items.length >= 10 && scoped[k] > items.length / 2)
+  const hasDistinct = common.some((c) => !c)
+  const isNumber = words.map((w) => /^\d+$/.test(w))
   const graded: { item: T; m: PieceMatch; i: number }[] = []
   items.forEach((item, i) => {
     const m = matchPiece(fields[i], query, audience, typoWords)
-    if (m.included) graded.push({ item, m, i })
+    if (!m.included) return
+    if (!m.full && m.hits) {
+      if (isNumber.some((n, k) => n && !m.hits![k])) return
+      if (hasDistinct && !m.hits.some((h, k) => h && !common[k])) return
+    }
+    graded.push({ item, m, i })
   })
   graded.sort((a, b) => b.m.score - a.m.score || a.i - b.i)
   const ranked = graded.map((g) => g.item)

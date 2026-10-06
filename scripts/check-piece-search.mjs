@@ -425,6 +425,25 @@ ran++
 const exactFirst = searchPieces([{ name: 'Patent Pointed Toe Pump' }, { name: 'Leather Heel Mule' }], 'heels', (x) => x, 'client').ranked
 if ((exactFirst ?? [])[0]?.name !== 'Leather Heel Mule') fail('"heels": a piece named heel must rank above a pump found through the shopping words')
 
+// ── ADR-0164: a number must be found, and a word in most of the list cannot carry a result ──
+// Danielle York's Looks, 2026-10-02: "Look 300" returned all 258 looks (she has no Look 300).
+ran++
+const LOOKS = Array.from({ length: 30 }, (_, k) => ({ name: `Look ${k + 1}` }))
+if ((searchPieces(LOOKS, 'Look 300', (x) => x, 'client').ranked ?? []).length !== 0) fail('"Look 300" returned looks that only match "look"; a typed number must be found')
+ran++
+if (names(searchPieces(LOOKS, 'look 17', (x) => x, 'client').ranked) !== 'Look 17') fail(`"look 17" must return exactly Look 17, got ${names(searchPieces(LOOKS, 'look 17', (x) => x, 'client').ranked)}`)
+ran++
+if ((searchPieces(LOOKS, '300', (x) => x, 'client').ranked ?? []).length !== 0) fail('"300" on its own returned looks')
+ran++
+const DRESSES = [
+  ...Array.from({ length: 12 }, (_, k) => ({ name: `Silk Dress ${String.fromCharCode(65 + k)}`, brand: 'Rotate' })),
+  { name: 'Plaid Belted Dress', brand: 'Lena Hoschek' }, { name: 'Wool Skirt', brand: 'Lena Hoschek' },
+]
+const lenaDress = searchPieces(DRESSES, 'lena dress', (x) => x, 'client').ranked
+if (names(lenaDress) !== 'Plaid Belted Dress / Wool Skirt') fail(`"lena dress" where every piece is a dress: only the Lena pieces may come back, got ${names(lenaDress)}`)
+ran++
+if ((searchPieces(DRESSES, 'dress', (x) => x, 'client').ranked ?? []).length !== 13) fail('a search made only of a common word must still return every piece that has it')
+
 console.log(`   rules: ${ran} case(s) run`)
 if (ran === 0 || checks === 0) { console.error('\n❌ piece-search: inspected nothing.\n'); process.exit(1) }
 

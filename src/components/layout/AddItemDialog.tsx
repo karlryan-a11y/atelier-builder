@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { authHeader } from '@/lib/authHeader'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { ColorSetField } from '@/components/common/ColorSetField'
+import { useClosetItems } from '@/hooks/useClosetItems'
+import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s]) => s !== 'other')
@@ -73,6 +75,12 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   const [category, setCategory] = useState('')
   const [styleNote, setStyleNote] = useState('')
   const [description, setDescription] = useState('')
+  // IS IT ALREADY IN HER CLOSET? (ADR-0164) The closet hook is cached and shared, so this is not a
+  // second read. The warning names the match; the stylist decides with one extra, deliberate click.
+  const { items: closetItems } = useClosetItems(clientId)
+  const dupes = useMemo(() => possibleDuplicates({ name, brand }, closetItems), [name, brand, closetItems])
+  const [dupeConfirmed, setDupeConfirmed] = useState(false)
+  useEffect(() => { setDupeConfirmed(false) }, [name, brand])
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
   // "Also in" — additional categories beyond the primary garment one (stored in custom_categories[]).
@@ -140,6 +148,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   async function addToCollection() {
     if (!draftId) { alert('Pick a photo first.'); return }
     if (!name.trim()) { alert('Give the item a name.'); return }
+    if (dupes.length && !dupeConfirmed) { setDupeConfirmed(true); return }
     let finalCategory = primarySlug
     let alsoInFinal = alsoIn
     // A home is not a garment type. Category replaces what the piece IS, so a coat filed under a
@@ -300,11 +309,23 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
           </div>
         </div>
 
+        {dupes.length > 0 && (
+          <div role="alert" className="mx-5 mb-1 mt-1 flex gap-2 rounded-sm border border-[#E5C07B] bg-[#FFF8E6] px-3 py-2 text-[12px] text-[#7A5A12]">
+            <AlertTriangle className="h-4 w-4 flex-none mt-0.5" />
+            <div>
+              <p>{clientName ? `${clientName.split(' ')[0]}'s` : 'This'} closet may already have this piece:</p>
+              <ul className="mt-1 list-disc pl-4">
+                {dupes.map((d) => <li key={d.id}>{describeDuplicate(d)}</li>)}
+              </ul>
+              <p className="mt-1">{dupeConfirmed ? 'Press Add anyway if it is a different piece.' : 'Search her Collection before adding a second one.'}</p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
           <button onClick={close} className="px-4 py-2 text-[11px] tracking-[0.15em] uppercase text-text-muted hover:text-text">Cancel</button>
           <button onClick={addToCollection} disabled={saving || !ready || !name.trim()}
             className="px-4 py-2 text-[11px] tracking-[0.15em] uppercase bg-text text-white rounded-sm disabled:opacity-40 flex items-center gap-1.5">
-            {saving && <Loader2 className="h-3 w-3 animate-spin" />} Add to Collection
+            {saving && <Loader2 className="h-3 w-3 animate-spin" />} {dupes.length && dupeConfirmed ? 'Add anyway' : 'Add to Collection'}
           </button>
         </div>
       </div>

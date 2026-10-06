@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Inbox, Check, X, Edit3, RefreshCw, RotateCw, Upload, Camera, Download, HardDrive, ChevronDown } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
@@ -25,6 +25,8 @@ import { slugifyCategory, labelForCategory, isFixedCategory } from '@/lib/garmen
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { r2ImageUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
+import { useClosetItems } from '@/hooks/useClosetItems'
+import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -55,6 +57,15 @@ export function IntakeInbox() {
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
   const hookFilter = filter === 'in_progress' ? 'pending_review' : filter
   const { items, loading, error, refresh, refreshBackground, counts } = useIntakeItems(hookFilter, selectedClientId)
+  // Approve All warns about pieces that look already in her closet (ADR-0164). Only with one client
+  // chosen: the closet it compares against is that client's.
+  const { items: bulkCloset } = useClosetItems(selectedClientId)
+  const bulkDupes = useMemo(
+    () => (selectedClientId
+      ? items.map((it) => ({ it, d: possibleDuplicates({ name: it.extracted_name ?? '', brand: it.extracted_brand }, bulkCloset, 1) })).filter((x) => x.d.length)
+      : []),
+    [items, bulkCloset, selectedClientId],
+  )
   const [showUpload, setShowUpload] = useState(false)
   const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([])
   const [_aiSpend, _setAiSpend] = useState<{ anthropic: number; openai: number; total: number } | null>(null)
@@ -565,6 +576,14 @@ export function IntakeInbox() {
                       ? ` ${items[0]?.client_name ?? 'this client'}'s`
                       : ' their respective clients\''} collection.
                   </p>
+                  {bulkDupes.length > 0 && (
+                    <div role="alert" className="mb-4 rounded-sm border border-[#E5C07B] bg-[#FFF8E6] px-3 py-2 text-[12px] text-[#7A5A12]">
+                      <p>{bulkDupes.length} may already be in her closet. Check these before approving all:</p>
+                      <ul className="mt-1 list-disc pl-4 max-h-40 overflow-y-auto">
+                        {bulkDupes.map(({ it, d }) => <li key={it.id}>{it.extracted_name ?? 'Untitled'}: looks like {describeDuplicate(d[0])}</li>)}
+                      </ul>
+                    </div>
+                  )}
                   <div className="flex gap-3">
                     <button
                       onClick={handleBulkApprove}
@@ -669,6 +688,11 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
   const [rejectionNote, setRejectionNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [actionResult, setActionResult] = useState<'approved' | 'rejected' | null>(null)
+  // IS IT ALREADY IN HER CLOSET? (ADR-0164) Same rule as Add Item. One extra, deliberate click.
+  const { items: closetItems } = useClosetItems(item.client_id)
+  const dupes = useMemo(() => possibleDuplicates({ name, brand }, closetItems), [name, brand, closetItems])
+  const [dupeConfirmed, setDupeConfirmed] = useState(false)
+  useEffect(() => { setDupeConfirmed(false) }, [name, brand])
 
   // Pieces a CLIENT digitized herself carry the designer/name/category SHE typed at upload
   // (lookbook api/intake/confirm.ts). Show them verbatim next to the item so the stylist reviews
@@ -842,6 +866,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
 
   const handleApprove = async () => {
     if (submitting) return
+    if (dupes.length && !dupeConfirmed) { setDupeConfirmed(true); return }
     setSubmitting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1235,6 +1260,13 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
             </div>
           )}
 
+          {(item.status === 'pending_review' || item.status === 'qc_passed') && !rejecting && dupes.length > 0 && (
+            <div role="alert" className="mb-2 rounded-sm border border-[#E5C07B] bg-[#FFF8E6] px-3 py-2 text-[12px] text-[#7A5A12]">
+              <p>Her closet may already have this piece:</p>
+              <ul className="mt-1 list-disc pl-4">{dupes.map((d) => <li key={d.id}>{describeDuplicate(d)}</li>)}</ul>
+              <p className="mt-1">{dupeConfirmed ? 'Press Approve anyway if it is a different piece.' : 'Check her Collection before approving.'}</p>
+            </div>
+          )}
           {/* Action buttons — Approve / Restyle / Reject */}
           {(item.status === 'pending_review' || item.status === 'qc_passed') && !rejecting && (
             <div className="flex gap-2">
@@ -1244,7 +1276,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
-                {submitting ? 'Approving...' : 'Approve'}
+                {submitting ? 'Approving...' : dupes.length && dupeConfirmed ? 'Approve anyway' : 'Approve'}
               </button>
               <button
                 onClick={() => setRejecting(true)}
