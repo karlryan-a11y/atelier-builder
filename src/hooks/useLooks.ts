@@ -7,6 +7,7 @@ import type { LookCanvasState } from '@/types/canvas'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
 import { authHeader } from '@/lib/authHeader'
+import { fetchTargetTeamNotes, saveTargetTeamNote } from '@/lib/teamNotes'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -18,8 +19,13 @@ export interface LookRow {
   // thumbnail_url is deliberately NOT here: it is a base64 2160x2160 JPEG, ~400 KB a look, and
   // selecting it made this list ~50 MB for Danielle York. Show a look with lookImageUrl(raw).
   tags: string[] | null
+  /** The team note, read from the team-only table (ADR-0166), never off the look row. */
   notes_internal: string | null
+  /** Her description, shown under the look's name. The client may edit it too (ADR-0166). */
   notes_client: string | null
+  /** What the client changed herself ('description', 'categories') and when (migration 036). */
+  client_edited_fields?: string[] | null
+  client_edited_at?: string | null
   to_try_at: string | null
   created_by: string | null
   source: string
@@ -48,7 +54,7 @@ export function useLooks(clientId: string | null) {
       // doesn't expose transitioned_at. Same columns; consistent with useLookCategories. (migration 014)
       const { data, error } = await supabase
         .from('gp_looks')
-        .select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at')
+        .select('id, client_id, name, canvas_state, tags, notes_client, client_edited_fields, client_edited_at, created_by, source, raw, created_at, updated_at')
         .eq('client_id', clientId!)
         .eq('source', 'builder')
         .is('transitioned_at', null)
@@ -57,7 +63,9 @@ export function useLooks(clientId: string | null) {
         console.error('useLooks:', error.message)
         throw new Error(error.message || 'load failed')
       }
-      return (data ?? []) as LookRow[]
+      // Team notes come from their own table (ADR-0166): the look row no longer carries one.
+      const notes = await fetchTargetTeamNotes(clientId!, 'look')
+      return ((data ?? []) as LookRow[]).map((l) => ({ ...l, notes_internal: notes.get(l.id) ?? null }))
     },
   })
   // A failed read keeps the looks already on screen for THIS client (the cache is per client, so
@@ -99,7 +107,10 @@ export function useLooks(clientId: string | null) {
     name: string
     canvasState: LookCanvasState
     tags?: string[]
+    /** The team note. Saved to the team-only table; undefined leaves it alone. */
     notesInternal?: string
+    /** Her description. Undefined leaves it alone, so a stylist who did not touch it can never
+     *  write over what the client typed since the look was opened (ADR-0166). */
     notesClient?: string
     /** ADR-0153. true marks it as not-yet-tried; false clears it. Undefined leaves it alone. */
     toTry?: boolean
@@ -144,8 +155,6 @@ export function useLooks(clientId: string | null) {
       name: opts.name,
       canvas_state: opts.canvasState,
       tags: opts.tags ?? [],
-      notes_internal: opts.notesInternal ?? null,
-      notes_client: opts.notesClient ?? null,
       // thumbnail_url is no longer written (it held a 2160px base64 JPEG no screen reads). An
       // UPDATE leaves the old value in place; scripts/copy-look-thumbnails.mjs copies those to R2.
       source: 'builder',
@@ -161,6 +170,11 @@ export function useLooks(clientId: string | null) {
         main_image_url: storedProxyUrl(r2ImageKey),
       }
     }
+
+    // Her description only when the stylist set it (or on a new look). The team note never goes
+    // on the row at all: a client's login can read every column of her own looks (ADR-0166).
+    if (opts.notesClient !== undefined) row.notes_client = opts.notesClient.trim() || null
+    else if (isNew) row.notes_client = null
 
     if (isNew) {
       row.created_by = opts.createdBy ?? null
@@ -178,12 +192,30 @@ export function useLooks(clientId: string | null) {
     }
 
     const { data, error } = isNew
-      ? await supabase.from('looks').insert(row).select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at').single()
-      : await supabase.from('looks').update(row).eq('id', id).select('id, client_id, name, canvas_state, tags, notes_internal, notes_client, created_by, source, raw, created_at, updated_at').single()
+      ? await supabase.from('looks').insert(row).select('id, client_id, name, canvas_state, tags, notes_client, created_by, source, raw, created_at, updated_at').single()
+      : await supabase.from('looks').update(row).eq('id', id).select('id, client_id, name, canvas_state, tags, notes_client, created_by, source, raw, created_at, updated_at').single()
 
     if (error) {
       console.error('Save look error:', error.message, error.code, error.details, error.hint)
       return { error, data: null }
+    }
+
+    // ── The team note, in the team-only table (ADR-0166) ─────────────────────────────────
+    // Never fatal: the look IS saved. Reported in the console, as the filing below is.
+    if (opts.notesInternal !== undefined) {
+      const r = await saveTargetTeamNote('look', opts.clientId, id, opts.notesInternal)
+      if (!r.ok) console.error('team note not saved (look saved):', r.error)
+    }
+
+    // ── A stylist who rewrote her description takes it back (same rule as pieces, migration 015) ─
+    // Written straight to gp_looks: the `looks` view does not expose client_edited_fields.
+    if (!isNew && opts.notesClient !== undefined) {
+      const { data: cur } = await supabase.from('gp_looks').select('client_edited_fields').eq('id', id).maybeSingle()
+      const owned: string[] = (cur as any)?.client_edited_fields ?? []
+      if (owned.includes('description')) {
+        const next = owned.filter((f) => f !== 'description')
+        await supabase.from('gp_looks').update({ client_edited_fields: next.length ? next : null }).eq('id', id)
+      }
     }
 
     // ── To be tried (ADR-0153) ───────────────────────────────────────────────────────────

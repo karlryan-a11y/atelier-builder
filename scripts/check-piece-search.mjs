@@ -198,12 +198,14 @@ for (const rel of ['src/components/layout/EditItemDialog.tsx', 'src/components/l
 const SAVE = 'src/components/canvas/SaveLookDialog.tsx'
 const save = read(SAVE)
 checks++
-if (!/Note for her/.test(save)) fail(`${SAVE}: a look still has no client-facing note. gp_looks.notes_client exists on 15,785 live looks and is filled on 0 (ADR-0151).`)
+// ADR-0166 renamed the box to Description (the same name the piece and the client page use).
+if (!/>Description</.test(save)) fail(`${SAVE}: a look still has no client-facing note. gp_looks.notes_client exists on 15,785 live looks and is filled on 0 (ADR-0151).`)
 checks++
 if (!/clientNote/.test(save)) fail(`${SAVE}: the client note is not carried out of the dialog.`)
 const CHAT = 'src/components/layout/ChatPanel.tsx'
 checks++
-if (!/notesClient: data\.clientNote/.test(read(CHAT))) fail(`${CHAT}: the look's client note is never saved.`)
+// ADR-0166: saved when the stylist changed it, so a client's own edit is not written over.
+if (!/notesClient: changedText\(data\.clientNote/.test(read(CHAT))) fail(`${CHAT}: the look's client note is never saved.`)
 
 console.log(`   source: ${checks} rule(s) checked`)
 

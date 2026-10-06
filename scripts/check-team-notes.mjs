@@ -54,6 +54,30 @@ for (const rel of ['src/components/categorize/CollectionTab.tsx', 'src/component
   if (!/updateClosetItem\(/.test(read(rel))) fail(`${rel}: saves a piece without updateClosetItem, so its note can land on the piece row.`)
 }
 
+// ── ADR-0166: looks and capsules. A look's note sat on gp_looks.notes_internal, which a client's
+// login read (Cynthia Lippe, 4 of 4, 2026-10-06). It now lives in team_notes.
+const looksHook = strip(read('src/hooks/useLooks.ts'))
+checks++
+if (/select\([^)]*notes_internal/.test(looksHook)) fail('useLooks.ts: reads notes_internal off the look row again (ADR-0166).')
+checks++
+if (/notes_internal:\s*opts|row\.notes_internal/.test(looksHook)) fail('useLooks.ts: writes the team note onto the look row (ADR-0166).')
+checks++
+if (!/fetchTargetTeamNotes\(clientId!?, 'look'\)/.test(looksHook)) fail('useLooks.ts: look team notes are not read from team_notes, so stylists see none.')
+checks++
+if (!/saveTargetTeamNote\('look'/.test(looksHook)) fail('useLooks.ts: Save Look drops the team note instead of saving it to team_notes.')
+checks++
+if (/notes_client:\s*opts\.notesClient\s*\?\?/.test(looksHook)) fail('useLooks.ts: every save rewrites her description, undoing what the client typed (ADR-0166).')
+const chat = strip(read('src/components/layout/ChatPanel.tsx'))
+checks++
+if ((chat.match(/saveTargetTeamNote\('capsule'/g) ?? []).length < 2) fail('ChatPanel.tsx: a capsule save path drops its team note (Create Capsule and Save as Capsule both need it).')
+checks++
+if (!/notesClient:\s*changedText\(/.test(chat)) fail('ChatPanel.tsx: Save Look sends her description back unchanged, which undoes a client edit (ADR-0166).')
+for (const f of files) {
+  checks++
+  const src = strip(readFileSync(f, 'utf8'))
+  if (/from\('(gp_looks|looks)'\)[\s\S]{0,120}?select\([^)]*notes_internal/.test(src)) fail(`${path.relative(ROOT, f)}: selects notes_internal off the look row (ADR-0166).`)
+}
+
 console.log(`check-team-notes: ${checks} rule(s) over ${files.length} source file(s)`)
 if (!checks || !files.length) { console.error('❌ inspected nothing'); process.exit(1) }
 if (problems.length) { console.error(`❌ team-notes: ${problems.length} failure(s)`); process.exit(1) }

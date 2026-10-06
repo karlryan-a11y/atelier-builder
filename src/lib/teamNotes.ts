@@ -55,3 +55,49 @@ export async function fetchTeamNotes(clientId: string): Promise<Map<string, stri
   }
   return out
 }
+
+/**
+ * LOOKS AND CAPSULES (ADR-0166, migration 036). One team-only table, `team_notes`, keyed by kind and
+ * id, under the same rule as the piece notes above. A look's "Internal Notes" used to sit on the
+ * look row (gp_looks.notes_internal), which a client's login could read: measured 2026-10-06 on
+ * Cynthia Lippe, 4 of 4. Capsules had no team note at all.
+ */
+export type TeamNoteKind = 'look' | 'capsule'
+
+export async function saveTargetTeamNote(kind: TeamNoteKind, clientId: string, targetId: string, note: string | null | undefined) {
+  const text = (note ?? '').trim()
+  if (!text) {
+    const { error } = await supabase.from('team_notes').delete().eq('kind', kind).eq('target_id', targetId)
+    return { ok: !error, error: error?.message }
+  }
+  const { data, error } = await supabase
+    .from('team_notes')
+    .upsert({ kind, target_id: targetId, client_id: clientId, note: text, updated_at: new Date().toISOString() }, { onConflict: 'kind,target_id' })
+    .select('target_id')
+  if (error) return { ok: false, error: error.message }
+  if (!data?.length) return { ok: false, error: 'The note was not saved (team accounts only).' }
+  return { ok: true }
+}
+
+/** Every look or capsule team note for one client, id -> note, paged past the 1,000-row cap. */
+export async function fetchTargetTeamNotes(clientId: string, kind: TeamNoteKind): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('team_notes').select('target_id, note').eq('client_id', clientId).eq('kind', kind)
+      .order('target_id').range(from, from + PAGE - 1)
+    if (error) { console.error('teamNotes: read failed —', error.message); break }
+    for (const r of data ?? []) out.set((r as any).target_id, (r as any).note)
+    if (!data || data.length < PAGE) break
+  }
+  return out
+}
+
+/** One look's or capsule's team note ('' when none). */
+export async function fetchTargetTeamNote(kind: TeamNoteKind, targetId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('team_notes').select('note').eq('kind', kind).eq('target_id', targetId).maybeSingle()
+  if (error) { console.error('teamNotes: read failed —', error.message); return '' }
+  return (data as any)?.note ?? ''
+}

@@ -320,13 +320,14 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
             />
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
-              Shown to the client on her piece, and searchable by you both
+              Shown to the client on her piece, and searchable by you both. She can edit it too
             </p>
+            <ClientNote field="description" />
           </div>
 
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
-              Internal Note
+              Team note
             </label>
             <textarea
               value={styleNote}

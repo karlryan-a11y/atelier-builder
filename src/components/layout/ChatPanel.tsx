@@ -9,6 +9,7 @@ import { useCapsules } from '@/hooks/useCapsules'
 import { supabase } from '@/lib/supabase'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { readLookFiling, applyLookFiling } from '@/lib/lookFiling'
+import { fetchTargetTeamNote, saveTargetTeamNote } from '@/lib/teamNotes'
 import { LookGallery } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
 import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
@@ -31,6 +32,14 @@ import type { LookCanvasState, ClosetItemNode } from '@/types/canvas'
 import type { LookRow } from '@/hooks/useLooks'
 
 type Tab = 'looks' | 'compose'
+
+/** The new text when it differs from what was there (or is non-empty on a new row); else undefined,
+ *  which every save path reads as "leave it alone" (ADR-0166). */
+function changedText(next: string, prev: string | null | undefined): string | undefined {
+  const a = (next ?? '').trim()
+  const b = (prev ?? '').trim()
+  return a === b ? undefined : a
+}
 
 export function ChatPanel() {
   const [tab, setTab] = useState<Tab>('looks')
@@ -77,6 +86,16 @@ export function ChatPanel() {
   // The GoodPix capsule this board is a rebuild OF (not a capsule being edited) — used for the
   // header, the button label and the name the Save dialog opens with.
   const replacedCapsule = capsules.find((c) => c.id === replacesCapsuleId) ?? null
+  // The capsule's team note (ADR-0166), read from the team-only table when the Save as Capsule box
+  // opens: the capsule being edited, or the GoodPix one being rebuilt (its note carries over).
+  const capsuleTeamNoteFor = currentCapsuleId ?? replacesCapsuleId ?? null
+  const [capsuleTeamNote, setCapsuleTeamNote] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    if (!showSaveAsCapsuleDialog || !capsuleTeamNoteFor) { setCapsuleTeamNote(''); return }
+    void fetchTargetTeamNote('capsule', capsuleTeamNoteFor).then((n) => { if (!cancelled) setCapsuleTeamNote(n) })
+    return () => { cancelled = true }
+  }, [showSaveAsCapsuleDialog, capsuleTeamNoteFor])
   // The look this board is a RESTYLE of. A GoodPix look is never edited in place (ADR-0076), so
   // the save inserts a new row and `currentLookId` is null — which left the name box empty and
   // made Paige Berndt retype the name from a second tab: "I have to go back and fourth between
@@ -161,8 +180,10 @@ export function ChatPanel() {
       name: data.name,
       canvasState: styledState,
       tags: data.tags,
-      notesInternal: data.notes,
-      notesClient: data.clientNote,
+      // Only what the stylist changed in the dialog (ADR-0166). Her description can be edited by
+      // the client while this board is open; sending the old text back would undo her edit.
+      notesInternal: changedText(data.notes, currentLookId ? currentLook?.notes_internal : null),
+      notesClient: changedText(data.clientNote, currentLookId ? currentLook?.notes_client : null),
       toTry: data.toTry,
       imageBase64,
       createdBy: authUserId ?? undefined,
@@ -181,7 +202,12 @@ export function ChatPanel() {
     const savedId = saved?.data?.id
     if (savedId) {
       try {
-        await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFiling : [], data.tags)
+        const change = await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFiling : [], data.tags)
+        // A stylist who re-filed a look the client had filed herself takes it back (ADR-0166).
+        if ((change.added.length || change.removed.length) && (currentLook?.client_edited_fields ?? []).includes('categories')) {
+          const next = (currentLook?.client_edited_fields ?? []).filter((f) => f !== 'categories')
+          await supabase.from('gp_looks').update({ client_edited_fields: next.length ? next : null }).eq('id', savedId)
+        }
         const f = await readLookFiling(savedId, activeClient.id)
         setLookFiling(f.labels)
         setLookFilingOk(f.ok)
@@ -193,9 +219,9 @@ export function ChatPanel() {
     markClean()
     setSaving(false)
     setShowSaveDialog(false)
-  }, [activeClient, currentLookId, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk])
+  }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk])
 
-  const handleCreateCapsule = useCallback(async (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => {
+  const handleCreateCapsule = useCallback(async (data: { name: string; description: string; teamNote: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
     setSavingCapsule(true)
 
@@ -209,7 +235,7 @@ export function ChatPanel() {
       )
     )]
 
-    await saveCapsule({
+    const created = await saveCapsule({
       clientId: activeClient.id,
       name: data.name,
       description: data.description,
@@ -217,6 +243,12 @@ export function ChatPanel() {
       closetItemIds: allItemIds,
       imageBase64: data.compositeBase64 || undefined,
     })
+    // The team note, in the team-only table (ADR-0166). Never fatal: the capsule IS saved.
+    const createdId = (created?.data as any)?.id
+    if (createdId && data.teamNote.trim()) {
+      const r = await saveTargetTeamNote('capsule', activeClient.id, createdId, data.teamNote)
+      if (!r.ok) console.error('capsule team note not saved (capsule saved):', r.error)
+    }
 
     setSavingCapsule(false)
     setShowCapsuleDialog(false)
@@ -230,7 +262,7 @@ export function ChatPanel() {
   // Edit), this UPDATES that same gp_boards row instead of inserting a new one — mirrors how
   // handleSave above passes currentLookId through to saveLook so re-saving a Look doesn't
   // duplicate it.
-  const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string }) => {
+  const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string; teamNote: string }) => {
     if (!activeClient) return
     setSavingCapsule(true)
 
@@ -275,11 +307,18 @@ export function ChatPanel() {
     if (saved?.data?.id) {
       noteSavedCapsuleAs(saved.data.id)
       markClean()
+      // The team note, in the team-only table (ADR-0166). Written when it changed, so a rebuild
+      // carries the original's note onto the new capsule. Never fatal: the capsule IS saved.
+      if (changedText(data.teamNote, saved.data.id === capsuleTeamNoteFor ? capsuleTeamNote : null) !== undefined
+          || (replacesCapsuleId && data.teamNote.trim())) {
+        const r = await saveTargetTeamNote('capsule', activeClient.id, saved.data.id, data.teamNote)
+        if (!r.ok) console.error('capsule team note not saved (capsule saved):', r.error)
+      }
     }
 
     setSavingCapsule(false)
     setShowSaveAsCapsuleDialog(false)
-  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs, markClean])
+  }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs, markClean, capsuleTeamNote, capsuleTeamNoteFor])
 
   const handleAddLooks = useCallback(async (picked: LookRow[]) => {
     if (picked.length === 0) return
@@ -762,6 +801,9 @@ export function ChatPanel() {
           initialClientNote={currentLook?.notes_client ?? ''}
           initialToTry={!!currentLook?.to_try_at}
           initialNotes={currentLook?.notes_internal ?? ''}
+          clientEditedFields={currentLook?.client_edited_fields ?? null}
+          clientEditedAt={currentLook?.client_edited_at ?? null}
+          clientFirst={activeClient?.name?.split(' ')[0] ?? ''}
           initialTags={lookFiling}
           saving={saving}
           onSave={handleSave}
@@ -834,6 +876,7 @@ export function ChatPanel() {
           isEditing={!!currentCapsuleId}
           initialName={currentCapsule?.name ?? replacedCapsule?.name ?? ''}
           initialDescription={currentCapsule?.description ?? replacedCapsule?.description ?? ''}
+          initialTeamNote={capsuleTeamNote}
           onSave={handleSaveAsCapsule}
           onClose={() => setShowSaveAsCapsuleDialog(false)}
         />

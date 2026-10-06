@@ -11,12 +11,19 @@ interface SaveLookDialogProps {
   initialToTry: boolean
   initialNotes: string
   initialTags: string[]
+  /** What the client changed on this look herself, and when (ADR-0166). */
+  clientEditedFields?: string[] | null
+  clientEditedAt?: string | null
+  clientFirst?: string
   saving: boolean
   onSave: (data: { name: string; notes: string; clientNote: string; tags: string[]; toTry: boolean }) => void
   onClose: () => void
 }
 
-export function SaveLookDialog({ initialName, initialClientNote, initialToTry, initialNotes, initialTags, saving, onSave, onClose }: SaveLookDialogProps) {
+export function SaveLookDialog({ initialName, initialClientNote, initialToTry, initialNotes, initialTags, clientEditedFields, clientEditedAt, clientFirst, saving, onSave, onClose }: SaveLookDialogProps) {
+  const who = clientFirst || 'The client'
+  const herEdits = (clientEditedFields ?? []).filter((f) => f === 'description' || f === 'categories')
+  const herWhen = clientEditedAt ? new Date(clientEditedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
   const [name, setName] = useState(initialName)
   const [notes, setNotes] = useState(initialNotes)
   const [clientNote, setClientNote] = useState(initialClientNote)
@@ -86,6 +93,13 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* ADR-0166. She can change her look's description and categories from her own page. Say
+              so before the stylist changes them back. */}
+          {herEdits.length > 0 && (
+            <p className="text-[9px] tracking-[0.12em] uppercase text-[#a98b5b]">
+              ✦ {who} changed {herEdits.map((f) => f === 'description' ? 'the description' : 'the categories').join(' and ')}{herWhen ? ` on ${herWhen}` : ''}. Change anyway?
+            </p>
+          )}
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Name</label>
             <input
@@ -195,7 +209,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
               as the piece's internal note being empty on all 1,077 of Peyton's. A field nobody
               can find anything with is a field nobody fills. ADR-0151. */}
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Note for her</label>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Description</label>
             <textarea
               value={clientNote}
               onChange={(e) => setClientNote(e.target.value)}
@@ -203,18 +217,19 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
               rows={2}
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
             />
-            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client under this look</p>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client under this look. She can edit it too</p>
           </div>
 
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Internal Notes</label>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Team note</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Styling notes (only visible to stylists)..."
+              placeholder="Styling notes for the team"
               rows={3}
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
             />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Team only. Never shown to the client</p>
           </div>
         </div>
 

@@ -302,7 +302,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
           </div>
 
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Internal Note</label>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Team note</label>
             <textarea value={styleNote} onChange={e => setStyleNote(e.target.value)} rows={2} placeholder="Optional"
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none" />
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Team only — never shown to the client, and never in her search</p>

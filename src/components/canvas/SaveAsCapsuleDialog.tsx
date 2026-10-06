@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { X, Package, Loader2 } from 'lucide-react'
 
 interface SaveAsCapsuleDialogProps {
@@ -10,7 +10,10 @@ interface SaveAsCapsuleDialogProps {
   isEditing?: boolean
   initialName?: string
   initialDescription?: string
-  onSave: (data: { name: string; description: string }) => void
+  /** The capsule's team note, read from the team-only table (ADR-0166). Arrives a moment after
+   *  the box opens, so it fills the field unless the stylist has already typed in it. */
+  initialTeamNote?: string
+  onSave: (data: { name: string; description: string; teamNote: string }) => void
   onClose: () => void
 }
 
@@ -20,14 +23,17 @@ interface SaveAsCapsuleDialogProps {
  * several already-saved looks into a grid), this captures the board itself as the
  * capsule image + its closet items as the packing list. No look selection.
  */
-export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName = '', initialDescription = '', onSave, onClose }: SaveAsCapsuleDialogProps) {
+export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName = '', initialDescription = '', initialTeamNote = '', onSave, onClose }: SaveAsCapsuleDialogProps) {
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
+  const [teamNote, setTeamNote] = useState(initialTeamNote)
+  const typedNote = useRef(false)
+  useEffect(() => { if (!typedNote.current) setTeamNote(initialTeamNote) }, [initialTeamNote])
 
   const handleSave = useCallback(() => {
     if (!name.trim()) return
-    onSave({ name: name.trim(), description: description.trim() })
-  }, [name, description, onSave])
+    onSave({ name: name.trim(), description: description.trim(), teamNote: teamNote.trim() })
+  }, [name, description, teamNote, onSave])
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
@@ -80,6 +86,19 @@ export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName 
               placeholder="Notes for the client..."
               className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none"
             />
+          </div>
+
+          {/* ADR-0166. The team's note on this capsule, in the team-only table. */}
+          <div>
+            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Team note</label>
+            <textarea
+              value={teamNote}
+              onChange={e => { typedNote.current = true; setTeamNote(e.target.value) }}
+              rows={2}
+              placeholder='e.g. "She wants to rewear the cream knit twice"'
+              className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none resize-none"
+            />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mt-1">Team only. Never shown to the client</p>
           </div>
         </div>
 

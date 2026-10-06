@@ -23,7 +23,7 @@ import { updateClosetItem } from '@/lib/teamNotes'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 // Human labels for the client-edit provenance keys (migration 015).
-const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category' }
+const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category', color: 'Colors', custom_categories: 'Also in', description: 'Description' }
 
 // COLLECTION tab inside Categorize: the stylist sees the client's collection the way the client
 // does (her lookbook's Collection grid) but with per-item edit — hover an item → pencil → edit
@@ -255,6 +255,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         if (f === 'name') return (data.name_override ?? null) === (editing.name_override ?? null)
         if (f === 'brand') return (data.brand ?? null) === (editing.brand ?? null)
         if (f === 'category') return (data.category ?? null) === (editing.category ?? null)
+        // ADR-0166: she can write the description now; a stylist who rewrites it takes it back.
+        if (f === 'description') return ((data as any).description ?? null) === (editing.description ?? null)
         // Colour was missing from this list, so a stylist could override a set the client chose and
         // the piece went on claiming she owned it — forever. The comparison is the SET (ADR-0115),
         // not the free-text shade note; the client only ever picks palette colours.

@@ -11,13 +11,14 @@ import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 interface CreateCapsuleDialogProps {
   looks: LookRow[]
   saving: boolean
-  onSave: (data: { name: string; description: string; lookIds: string[]; compositeBase64: string }) => void
+  onSave: (data: { name: string; description: string; teamNote: string; lookIds: string[]; compositeBase64: string }) => void
   onClose: () => void
 }
 
 export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCapsuleDialogProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [teamNote, setTeamNote] = useState('')
   const [selectedLookIds, setSelectedLookIds] = useState<Set<string>>(new Set())
   const [rendering, setRendering] = useState(false)
 
@@ -54,6 +55,7 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
       onSave({
         name: name.trim(),
         description: description.trim(),
+        teamNote: teamNote.trim(),
         lookIds: Array.from(selectedLookIds),
         compositeBase64,
       })
@@ -63,13 +65,14 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
       onSave({
         name: name.trim(),
         description: description.trim(),
+        teamNote: teamNote.trim(),
         lookIds: Array.from(selectedLookIds),
         compositeBase64: '',
       })
     } finally {
       setRendering(false)
     }
-  }, [name, description, selectedLookIds, looks, onSave])
+  }, [name, description, teamNote, selectedLookIds, looks, onSave])
 
   const isSaving = saving || rendering
 
@@ -110,6 +113,19 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
               placeholder="Notes for the client..."
               className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none"
             />
+          </div>
+
+          {/* ADR-0166. The team's note on this capsule, in the team-only table. */}
+          <div>
+            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Team note</label>
+            <textarea
+              value={teamNote}
+              onChange={e => setTeamNote(e.target.value)}
+              rows={2}
+              placeholder='e.g. "She wants to rewear the cream knit twice"'
+              className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none resize-none"
+            />
+            <p className="text-[9px] tracking-[0.15em] uppercase text-[#aaa] mt-1">Team only. Never shown to the client</p>
           </div>
 
           <div>
