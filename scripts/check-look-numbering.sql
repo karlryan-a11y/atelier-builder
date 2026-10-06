@@ -77,8 +77,10 @@ BEGIN
     RAISE EXCEPTION 'CHECK_FAIL 8: new look is %', (SELECT name FROM gp_looks WHERE id = cid||'-g');
   END IF; passed := passed + 1;
 
-  -- 9. The GoodPix sync writes back GoodPix's old title: the name is put right, the order holds.
-  UPDATE gp_looks SET name = 'ZZ Client To Be Tried Look 99' WHERE id = cid||'-d';
+  -- 9. The GoodPix sync writes back GoodPix's old title (it writes raw = the GoodPix look, so
+  --    raw->>'name' = name): the name is put right, the order holds, no title is invented.
+  UPDATE gp_looks SET name = 'ZZ Client To Be Tried Look 99', raw = '{"name":"ZZ Client To Be Tried Look 99"}'
+   WHERE id = cid||'-d';
   SELECT string_agg(name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid AND NOT archived;
   IF live_names <> 'Look 1|Look 2|To Be Tried Look 3|Look 4|Look 5|Look 6' THEN
     RAISE EXCEPTION 'CHECK_FAIL 9: after a sync overwrite %', live_names;
@@ -102,6 +104,69 @@ BEGIN
     RAISE EXCEPTION 'CHECK_FAIL 11b: renamed after undo: %', (SELECT name FROM gp_looks WHERE id = cid||'-f');
   END IF; passed := passed + 1;
 
-  RAISE EXCEPTION 'CHECK_OK % assertions, 7 looks, 1 throwaway client (rolled back)', passed;
+  -- TITLES AND SEASON-BY-SEASON ORDER (migration 034). A second throwaway client whose numbers
+  -- restart per season, created out of order, like Margaux Ellery's.
+  INSERT INTO gp_clients (id, name, raw) VALUES (cid||'2', 'Zelda Quill', '{}'::jsonb);
+  INSERT INTO gp_looks (id, client_id, name, raw, published, created_at) VALUES
+    (cid||'2-a', cid||'2', 'Zelda Quill SS25 Look 2',  '{}', true, now() - interval '9 days'),
+    (cid||'2-b', cid||'2', 'Zelda Quill SS25 Look 1',  '{}', true, now() - interval '8 days'),
+    (cid||'2-c', cid||'2', 'Zelda Quill SS25 Look 3',  '{}', true, now() - interval '7 days'),
+    (cid||'2-d', cid||'2', 'Zelda Quill FW25 Look 2',  '{}', true, now() - interval '6 days'),
+    (cid||'2-e', cid||'2', 'Zelda Quill FW25 Look 1',  '{}', true, now() - interval '5 days'),
+    (cid||'2-f', cid||'2', 'Zelda Quill FW25 Look 3',  '{}', true, now() - interval '4 days'),
+    (cid||'2-g', cid||'2', 'Aspen Day Look',           '{}', true, now() - interval '3 days');
+
+  -- 12. Season by season, each in its own order, and only the ticked look keeps its title.
+  PERFORM * FROM look_numbering_apply(cid||'2', 'check', ARRAY[cid||'2-g']);
+  SELECT string_agg(name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid||'2' AND NOT archived;
+  IF live_names <> 'Look 1|Look 2|Look 3|Look 4|Look 5|Look 6|Look 7 Aspen Day' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 12: titles/series gave %', live_names;
+  END IF;
+  IF (SELECT look_number FROM gp_looks WHERE id = cid||'2-b') <> 1 OR (SELECT look_number FROM gp_looks WHERE id = cid||'2-e') <> 4 THEN
+    RAISE EXCEPTION 'CHECK_FAIL 12b: SS25 Look 1 is %, FW25 Look 1 is %',
+      (SELECT look_number FROM gp_looks WHERE id = cid||'2-b'), (SELECT look_number FROM gp_looks WHERE id = cid||'2-e');
+  END IF; passed := passed + 1;
+
+  -- 13. A kept title moves with its look when an earlier look goes.
+  UPDATE gp_looks SET archived = true WHERE id = cid||'2-b';
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-g') <> 'Look 6 Aspen Day' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 13: titled look is %', (SELECT name FROM gp_looks WHERE id = cid||'2-g');
+  END IF; passed := passed + 1;
+
+  -- 14. A stylist types a title (builder Save Look): either shape works, the number is ours.
+  UPDATE gp_looks SET name = 'Bali Dinner' WHERE id = cid||'2-a';
+  UPDATE gp_looks SET name = 'Look 99 Hamptons Swim' WHERE id = cid||'2-c';
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1 Bali Dinner'
+     OR (SELECT name FROM gp_looks WHERE id = cid||'2-c') <> 'Look 2 Hamptons Swim' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 14: typed titles gave % / %',
+      (SELECT name FROM gp_looks WHERE id = cid||'2-a'), (SELECT name FROM gp_looks WHERE id = cid||'2-c');
+  END IF; passed := passed + 1;
+
+  -- 15. GoodPix writing back its own title does not touch a stylist's title. Typing a bare
+  --     "Look 1" clears it.
+  UPDATE gp_looks SET name = 'Zelda Quill SS25 Look 2', raw = '{"name":"Zelda Quill SS25 Look 2"}' WHERE id = cid||'2-a';
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1 Bali Dinner' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 15: sync overwrite left %', (SELECT name FROM gp_looks WHERE id = cid||'2-a');
+  END IF;
+  UPDATE gp_looks SET name = 'Look 1' WHERE id = cid||'2-a';
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 15b: clearing the title left %', (SELECT name FROM gp_looks WHERE id = cid||'2-a');
+  END IF; passed := passed + 1;
+
+  -- 16. A new look saved as "Paris Lunch" goes on the end with its title.
+  INSERT INTO gp_looks (id, client_id, name, raw, published) VALUES (cid||'2-h', cid||'2', 'Paris Lunch', '{}', false);
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-h') <> 'Look 7 Paris Lunch' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 16: new titled look is %', (SELECT name FROM gp_looks WHERE id = cid||'2-h');
+  END IF; passed := passed + 1;
+
+  -- 17. Undo puts every title and name back, kept title included.
+  PERFORM * FROM look_numbering_undo(cid||'2', 'check');
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-g') <> 'Aspen Day Look'
+     OR (SELECT look_title FROM gp_looks WHERE id = cid||'2-g') IS NOT NULL THEN
+    RAISE EXCEPTION 'CHECK_FAIL 17: undo left % / title %',
+      (SELECT name FROM gp_looks WHERE id = cid||'2-g'), (SELECT look_title FROM gp_looks WHERE id = cid||'2-g');
+  END IF; passed := passed + 1;
+
+  RAISE EXCEPTION 'CHECK_OK % assertions, 15 looks, 2 throwaway clients (rolled back)', passed;
 END
 $check$;

@@ -18,7 +18,7 @@ try {
   out = `${e.stdout ?? ''}${e.stderr ?? ''}`
 }
 const ok = out.match(/CHECK_OK (\d+) assertions[^"\\]*/)
-if (ok && Number(ok[1]) >= 11) {
+if (ok && Number(ok[1]) >= 17) {
   console.log(`check-look-numbering: PASS. ${ok[0]}`)
   process.exit(0)
 }
