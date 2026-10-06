@@ -139,7 +139,12 @@ export function useCapsules(clientId: string | null) {
       row.id = id
       row.is_deleted = false
       row.is_owned = true
-      row.sort_order = 0
+      // A new capsule has no place yet and a date, so it lands on top of her Capsules page and
+      // the newest wins among unarranged ones (atelier-looks lib/capsuleOrder.ts). It used to
+      // save sort_order 0 with no created_at: every new capsule tied at 0 and Postgres picked
+      // (Cynthia Dada, Peyton Wheeler's London capsule, 2026-10-05).
+      row.sort_order = null
+      row.created_at = new Date().toISOString()
     }
 
     const { data, error } = isNew

@@ -57,9 +57,13 @@ export async function loadLookCategories(
       db.from('gp_boards')
         .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids')
         .eq('client_id', clientId)
-        // Match the client lookbook's ordering so "On lookbook" == what she sees.
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
+        // Match the client lookbook's ordering so "On lookbook" == what she sees. Mirrors
+        // atelier-looks/src/lib/capsuleOrder.ts: never-arranged first, then newest, then a drag
+        // wins. Change both or the stylist arranges a list the client never sees in that order.
+        .order('sort_order', { ascending: true, nullsFirst: true })
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .order('extracted_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true }),
     ])
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'load failed', data: null }
