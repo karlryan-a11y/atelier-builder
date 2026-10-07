@@ -8,7 +8,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
-import { selectionOnPress, shouldClearSelection, ringOffsets } from '@/lib/canvasSelection'
+import { selectionOnPress, shouldClearSelection, ringOffsets, toBoardPoint, marqueeRect, boxesOverlap, type BoardRect } from '@/lib/canvasSelection'
 import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM } from '@/lib/canvasView'
 import type { CanvasNode, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 
@@ -719,78 +719,119 @@ export function LookCanvas() {
     [pickNodeNearPointer, handleNodeSelect]
   )
 
-  const handleStageMouseDown = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (!pressBeganOnEmptyBoard(e)) return
-      const stage = e.target.getStage()
-      if (!stage) return
-      const pos = stage.getPointerPosition()
-      if (!pos) return
-      const scale = stage.scaleX()
-      const stagePos = { x: pos.x / scale, y: pos.y / scale }
-      selectionStart.current = stagePos
-      isDraggingSelection.current = false
-      setSelectionRect(null)
-    },
-    [pressBeganOnEmptyBoard]
-  )
+  // ── The selection box (marquee), ADR-0169 ──────────────────────────────────────────────
+  // Cynthia Dada, 2026-10-07: "I can't select all of the text on the board to move it. This also
+  // happens when there is text and garments on a board." The box used to listen only while the
+  // pointer was over the white board (Konva's stage events): a drag begun in the grey margin did
+  // nothing, and a drag that left the board lost its release, selected nothing and left a pink
+  // box stuck to the cursor. Labels set against the edge, or a board covered in garments, left no
+  // empty board to start or finish on. Now: start on empty board OR in the margin, follow the
+  // pointer on the WINDOW, finish wherever the button comes up. scripts/check-marquee.mjs.
 
-  const handleStageMouseMove = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (!selectionStart.current) return
-      const stage = e.target.getStage()
-      if (!stage) return
-      const pos = stage.getPointerPosition()
-      if (!pos) return
-      const scale = stage.scaleX()
-      const current = { x: pos.x / scale, y: pos.y / scale }
-      const start = selectionStart.current
-      const dx = current.x - start.x
-      const dy = current.y - start.y
-      if (!isDraggingSelection.current && Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+  /** Board units for a point on screen, from the stage's live on-screen box and scale. */
+  const boardPointAt = useCallback((clientX: number, clientY: number) => {
+    const stage = stageRef.current
+    if (!stage) return null
+    const r = stage.container().getBoundingClientRect()
+    return toBoardPoint(clientX, clientY, r.left, r.top, stage.scaleX())
+  }, [])
+
+  // Select every node whose RENDERED box touches the selection box: the intuitive "drag a box
+  // over these items". getClientRect({relativeTo: stage}) gives the box in board units
+  // (scale/rotation/size included); the anchor point is the fallback only if the Konva node
+  // isn't found (e.g. its image hasn't loaded).
+  const selectInBox = useCallback((r: BoardRect) => {
+    const stage = stageRef.current
+    const hits = useCanvasStore.getState().state.nodes.filter((n) => {
+      const kn = stage?.findOne('#' + n.id)
+      const box = kn ? kn.getClientRect({ relativeTo: stage as Konva.Stage }) : { x: n.x, y: n.y, width: 0, height: 0 }
+      return boxesOverlap(r, box)
+    })
+    setSelectedNodeIds(hits.map((n) => n.id))
+  }, [setSelectedNodeIds])
+
+  const endMarquee = useRef<(() => void) | null>(null)
+  const beginMarquee = useCallback((clientX: number, clientY: number) => {
+    const start = boardPointAt(clientX, clientY)
+    if (!start) return
+    endMarquee.current?.()
+    selectionStart.current = start
+    isDraggingSelection.current = false
+    setSelectionRect(null)
+    let rect: BoardRect | null = null
+
+    const onMove = (ev: MouseEvent) => {
+      const stage = stageRef.current
+      const cur = boardPointAt(ev.clientX, ev.clientY)
+      if (!stage || !cur || !selectionStart.current) return
+      const next = marqueeRect(selectionStart.current, cur, stage.scaleX())
+      if (!next && !isDraggingSelection.current) return
       isDraggingSelection.current = true
-      setSelectionRect({
-        x: Math.min(start.x, current.x),
-        y: Math.min(start.y, current.y),
-        width: Math.abs(dx),
-        height: Math.abs(dy),
-      })
-    },
-    []
-  )
-
-  const handleStageMouseUp = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (isDraggingSelection.current && selectionRect) {
-        const r = selectionRect
-        const stage = e.target.getStage()
-        // Select any node whose RENDERED bounding box overlaps the marquee — the intuitive
-        // "drag a box over these items" behaviour. The old test only checked whether a node's
-        // top-left anchor point sat inside the box, so items the box clearly covered were missed
-        // whenever their anchor fell outside it (the flaky "sometimes works" bug). getClientRect
-        // ({relativeTo: stage}) gives the box in board coords (accounts for scale/rotation/size);
-        // fall back to the anchor point only if the Konva node isn't found (e.g. image not loaded).
-        const overlaps = (b: { x: number; y: number; width: number; height: number }) =>
-          !(b.x > r.x + r.width || b.x + b.width < r.x || b.y > r.y + r.height || b.y + b.height < r.y)
-        const hits = state.nodes.filter((n) => {
-          const kn = stage?.findOne('#' + n.id)
-          const box = kn ? kn.getClientRect({ relativeTo: stage as Konva.Stage }) : { x: n.x, y: n.y, width: 0, height: 0 }
-          return overlaps(box)
-        })
-        setSelectedNodeIds(hits.map((n) => n.id))
-      } else if (shouldClearSelection({
-        pressedEmpty: pressedEmpty.current,
-        releasedEmpty: e.target === e.target.getStage(),
-        marquee: false,
-      })) {
-        setSelectedNodeIds([])
+      rect = next ?? rect
+      setSelectionRect(rect)
+    }
+    const onUp = (ev: MouseEvent) => {
+      cleanup()
+      if (isDraggingSelection.current && rect) {
+        selectInBox(rect)
+      } else {
+        // A click, not a box. The 4 Sep rule (lib/canvasSelection): clear only when the press
+        // began on empty board and the release is on empty board (or off the board) too.
+        const stage = stageRef.current
+        let releasedEmpty = true
+        if (stage) {
+          const r = stage.container().getBoundingClientRect()
+          const onBoard = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom
+          if (onBoard) releasedEmpty = !stage.getIntersection({ x: ev.clientX - r.left, y: ev.clientY - r.top })
+        }
+        if (shouldClearSelection({
+          pressedEmpty: pressedEmpty.current,
+          releasedEmpty,
+          marquee: false,
+        })) setSelectedNodeIds([])
       }
       selectionStart.current = null
       isDraggingSelection.current = false
       setSelectionRect(null)
+    }
+    const cleanup = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      endMarquee.current = null
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    endMarquee.current = cleanup
+  }, [boardPointAt, selectInBox, setSelectedNodeIds])
+  useEffect(() => () => endMarquee.current?.(), [])
+
+  const handleStageMouseDown = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!pressBeganOnEmptyBoard(e)) return
+      if (e.evt.button !== 0) return
+      beginMarquee(e.evt.clientX, e.evt.clientY)
     },
-    [state.nodes, selectionRect, setSelectedNodeIds]
+    [pressBeganOnEmptyBoard, beginMarquee]
   )
+
+  // A press in the grey margin around the board starts a box too. On a board covered in garments,
+  // or with labels against its edge, the margin is the only empty place to start from.
+  useEffect(() => {
+    const el = fitRef.current
+    if (!el) return
+    const onDown = (ev: MouseEvent) => {
+      if (ev.button !== 0) return
+      const stage = stageRef.current
+      if (!stage || stage.container().contains(ev.target as Node)) return // the board handles its own
+      const r = el.getBoundingClientRect()
+      if (ev.clientX - r.left > el.clientWidth || ev.clientY - r.top > el.clientHeight) return // a scrollbar
+      pressedEmpty.current = true
+      ev.preventDefault() // no page text selection while she drags
+      beginMarquee(ev.clientX, ev.clientY)
+    }
+    el.addEventListener('mousedown', onDown)
+    return () => el.removeEventListener('mousedown', onDown)
+  }, [beginMarquee])
 
   // Group resize: when 2+ nodes are selected, ONE box wraps them all and scales/rotates them
   // together (uniform). Single selection keeps the per-node box (free resize + rotate).
@@ -1011,8 +1052,6 @@ export function LookCanvas() {
           scaleX={SCALE}
           scaleY={SCALE}
           onMouseDown={handleStageMouseDown}
-          onMouseMove={handleStageMouseMove}
-          onMouseUp={handleStageMouseUp}
           onTouchStart={(e) => { pressBeganOnEmptyBoard(e) }}
           onTap={(e) => {
             if (shouldClearSelection({

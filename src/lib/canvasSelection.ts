@@ -93,3 +93,41 @@ export function ringOffsets(maxRadius: number, step = 2, spokes = 16): { dx: num
   }
   return out
 }
+
+/**
+ * THE SELECTION BOX (marquee). ADR-0169.
+ *
+ * Cynthia Dada, 2026-10-07: "I can't select all of the text on the board to move it. This also
+ * happens when there is text and garments on a board." Reproduced on the live builder: the box
+ * only listened while the pointer was over the white board. A drag that began in the grey margin
+ * did nothing; a drag that left the board selected nothing and left a pink box stuck to the
+ * cursor until the next click. Labels set against the board's edge, or a board covered in
+ * garments, left no empty board to start or finish a box on.
+ *
+ * Now the box may start on empty board OR in the margin around it, is followed on the window
+ * until the button comes up wherever that is, and selects what it covers. The math is here, in
+ * board units, so the guard can replay her exact drag.
+ */
+export interface BoardPoint { x: number; y: number }
+export interface BoardRect { x: number; y: number; width: number; height: number }
+
+/** Pointer travel (screen px) before a press counts as a box rather than a click. */
+export const MARQUEE_THRESHOLD_PX = 5
+
+/** Screen position -> board units, given the board's on-screen box and its scale. */
+export function toBoardPoint(clientX: number, clientY: number, boardLeft: number, boardTop: number, scale: number): BoardPoint {
+  return { x: (clientX - boardLeft) / scale, y: (clientY - boardTop) / scale }
+}
+
+/** The box between press and pointer, or null while the pointer is still within the click threshold. */
+export function marqueeRect(start: BoardPoint, current: BoardPoint, scale: number): BoardRect | null {
+  const dx = current.x - start.x
+  const dy = current.y - start.y
+  if (Math.abs(dx) * scale < MARQUEE_THRESHOLD_PX && Math.abs(dy) * scale < MARQUEE_THRESHOLD_PX) return null
+  return { x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width: Math.abs(dx), height: Math.abs(dy) }
+}
+
+/** Does a node's rendered box touch the selection box? (Touching, not containing: drag over it.) */
+export function boxesOverlap(a: BoardRect, b: BoardRect): boolean {
+  return !(b.x > a.x + a.width || b.x + b.width < a.x || b.y > a.y + a.height || b.y + b.height < a.y)
+}
