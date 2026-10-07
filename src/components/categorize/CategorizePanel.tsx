@@ -390,6 +390,9 @@ export function CategorizePanel() {
         lookName: look.name,
         imageUrl: look.image,
         omitted,
+        // An Atelier look opens on its own saved board. Without this the panel told stylists
+        // "no saved layout, so the board is a grid" on a board that was not a grid (ADR-0168).
+        fromLayout: look.source === 'builder',
         covers: card.lookIds.length,
       })
       setStyleTab('canvas')
@@ -436,6 +439,20 @@ export function CategorizePanel() {
   }
 
   /**
+   * THE ONE WAY A LOOK OPENS ON THE CANVAS from Categorize (ADR-0168). A look made in Atelier opens
+   * on its own saved board, to Edit in place; a GoodPix look is rebuilt (ADR-0076/0127).
+   *
+   * Cynthia Dada, 2026-10-06, Holly McClellan Look 259: "I was trying to restyle a look for Holly
+   * and the look shows up like this": a plain grid. The "Styled in N looks" shortcut (ADR-0150)
+   * called handleRebuildLook for every look, so an Atelier look lost its arrangement and its
+   * labels, and saving would have retired it for the grid. Reproduced on Look 249 (5 pieces,
+   * 5 labels saved). Every button calls this; scripts/check-open-look.mjs holds it.
+   */
+  function openLookOnCanvas(look: TaggableLook) {
+    return look.source === 'builder' ? handleEditLook(look) : handleRebuildLook(look)
+  }
+
+  /**
    * Open a look from the Collection tab's "Styled in N looks" list. ADR-0150.
    *
    * Deliberately the SAME handler the Looks grid uses, not a second route onto the canvas.
@@ -451,7 +468,7 @@ export function CategorizePanel() {
   function handleOpenLookFromPiece(lookId: string) {
     const look = looks.find((l) => l.id === lookId)
     if (!look) { alert('That look is no longer in this list. Refresh Categorize and try again.'); return }
-    void handleRebuildLook(look)
+    void openLookOnCanvas(look)
   }
 
   function handleRenameLook(look: TaggableLook) {
@@ -536,7 +553,7 @@ export function CategorizePanel() {
   const lookCardActions = (look: TaggableLook) => (
     <>
       <button
-        onClick={(e) => { e.stopPropagation(); if (look.source === 'builder') { handleEditLook(look) } else { handleRebuildLook(look) } }}
+        onClick={(e) => { e.stopPropagation(); void openLookOnCanvas(look) }}
         disabled={openingLookId === look.id}
         title={look.source === 'builder'
           ? 'Open this look on the canvas to edit it'

@@ -1,31 +1,20 @@
+import { loadBoardImage } from '@/lib/loadBoardImage'
 // Capsule-grid composite — the St. Moritz style hero for look-composed capsules (a grid of the
 // member looks' thumbnails, italic serif titles, seamless white background). Extracted verbatim
 // from CreateCapsuleDialog so the in-browser "Create capsule" flow AND the headless renderer box
 // bake the exact same image — one implementation, no drift when a member look's photo changes.
 
 /**
- * Load an image from a URL or data URL. For data: URLs, no CORS needed.
- * For http URLs, tries with crossOrigin first, falls back without.
+ * Load an image from a URL or data URL. A data: URL needs no CORS. An http URL goes through the
+ * ONE board loader (lib/loadBoardImage, ADR-0168): never a tainted fallback, because one tainted
+ * thumbnail blanks the whole capsule picture.
  */
 function loadImage(src: string): Promise<HTMLImageElement> {
+  if (!src.startsWith('data:')) return loadBoardImage(src)
   return new Promise((resolve, reject) => {
     const img = new window.Image()
-    // Data URLs don't need CORS; only set for http URLs
-    if (!src.startsWith('data:')) {
-      img.crossOrigin = 'anonymous'
-    }
     img.onload = () => resolve(img)
-    img.onerror = () => {
-      // Retry without crossOrigin (tainted canvas, but we can still draw)
-      if (!src.startsWith('data:') && img.crossOrigin) {
-        const retry = new window.Image()
-        retry.onload = () => resolve(retry)
-        retry.onerror = () => reject(new Error(`Failed to load image`))
-        retry.src = src
-      } else {
-        reject(new Error(`Failed to load image`))
-      }
-    }
+    img.onerror = () => reject(new Error('Failed to load image'))
     img.src = src
   })
 }

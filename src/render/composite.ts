@@ -11,24 +11,12 @@
 import Konva from 'konva'
 import type { LookCanvasState, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 import { toKonvaConfig, pictureKonvaAttrs } from '@/components/canvas/CanvasAdapter'
-import { proxyImageUrl } from '@/lib/images'
+import { loadBoardImage } from '@/lib/loadBoardImage'
 
-// Match useCanvasImages: proxy + crossOrigin so toDataURL stays untainted; on failure fall
-// back to a direct load (may taint, but a visible item beats a blank one).
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => resolve(img)
-    img.onerror = () => {
-      const fb = new window.Image()
-      fb.onload = () => resolve(fb)
-      fb.onerror = () => reject(new Error(`image load failed: ${url}`))
-      fb.src = url
-    }
-    img.src = proxyImageUrl(url)
-  })
-}
+// The ONE board loader (lib/loadBoardImage, ADR-0168): CORS always, one cache-busted retry,
+// never a tainted fallback. A tainted picture makes toDataURL return "" and the whole bake blank;
+// a piece that cannot load safely is left off (logged) instead.
+const loadImage = loadBoardImage
 
 // The same families LookCanvas waits on before Konva measures/draws text, so composed brand
 // labels ("Amalfi Coast" et al.) bake with the real font instead of a fallback.

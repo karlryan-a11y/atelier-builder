@@ -177,6 +177,11 @@ export function settleCanvasTransforms(): void {
  * Automatically crops to content bounds with padding.
  * Returns null if no canvas is registered.
  */
+// Pieces on the board whose photo could not be loaded safely (they show a placeholder). ADR-0168.
+let _unusablePhotos: () => string[] = () => []
+export function registerUnusablePhotos(fn: () => string[]) { _unusablePhotos = fn }
+export function unusablePhotoNodeIds(): string[] { return _unusablePhotos() }
+
 export function exportCanvasImage(opts?: { pixelRatio?: number; padding?: number }): string | null {
   return _registeredExportFn ? _registeredExportFn(opts) : null
 }

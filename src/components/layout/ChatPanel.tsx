@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useCanvasStore, exportCanvasImage, settleCanvasTransforms } from '@/stores/canvasStore'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { boardPictureForSave } from '@/lib/boardPictureForSave'
+import { reportBuilderError } from '@/lib/reportError'
 import { useClientStore } from '@/stores/clientStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useLooks } from '@/hooks/useLooks'
@@ -144,63 +146,55 @@ export function ChatPanel() {
   const handleSave = useCallback(async (data: { name: string; notes: string; clientNote: string; tags: string[]; toTry: boolean }) => {
     if (!activeClient) return
     setSaving(true)
-
-    // No thumbnailUrl any more: Save used to also write a 2160px base64 JPEG into
-    // gp_looks.thumbnail_url (641 rows, 199 MB) that no screen reads. The look's picture is the
-    // R2 PNG below; its small copy is made on Save (useLooks -> api/derive-image).
-    let imageBase64: string | undefined
-    // Settle FIRST, then read. This copies what is actually on the board (angles, positions,
-    // text box widths) into the state, so the state we save and the picture we export cannot
-    // disagree. Reading `state` before this is what shipped flat labels for months.
-    settleCanvasTransforms()
-    // Save the canvas exactly as it is. Styling is an explicit action (the ✨
-    // button in the toolbar) — saving must NEVER re-arrange or rescale the look.
-    const styledState = useCanvasStore.getState().state
-
+    // try/finally: "Saving..." always clears. A throw anywhere below used to leave the dialog
+    // stuck with its button spinning and nothing on screen to say why (ADR-0168).
     try {
-      // Export the current canvas via Konva native API
-      const pngDataUrl = exportCanvasImage({ pixelRatio: 2 })
-      if (pngDataUrl) {
-        imageBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, '')
+      // The picture FIRST (lib/boardPictureForSave). A board whose picture cannot be made is not
+      // saved: 2026-10-07 "mh" saved with no picture and nobody was told.
+      const picture = boardPictureForSave()
+      if (!picture.ok) { alert(picture.message); return }
+      // Save the canvas exactly as it is (settled by boardPictureForSave). Styling is an explicit
+      // action (the toolbar's sparkle button); saving must NEVER re-arrange or rescale the look.
+      const styledState = useCanvasStore.getState().state
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const authUserId = sessionData?.session?.user?.id ?? null
+
+      const saved = await saveLook({
+        id: currentLookId ?? undefined,
+        // Set only when this board is a rebuild of a transitioned GoodPix look: the new row takes
+        // that look's place in the lookbook and the original retires (ADR-0076 + migration 014).
+        replacesLookId: replacesLookId ?? undefined,
+        replacesSiblingLookIds,
+        clientId: activeClient.id,
+        name: data.name,
+        canvasState: styledState,
+        tags: data.tags,
+        // Only what the stylist changed in the dialog (ADR-0166). Her description can be edited by
+        // the client while this board is open; sending the old text back would undo her edit.
+        notesInternal: changedText(data.notes, currentLookId ? currentLook?.notes_internal : null),
+        notesClient: changedText(data.clientNote, currentLookId ? currentLook?.notes_client : null),
+        toTry: data.toTry,
+        imageBase64: picture.base64,
+        createdBy: authUserId ?? undefined,
+      })
+      if (saved?.error || !saved?.data?.id) {
+        reportBuilderError('save_failed', saved?.error ?? 'no row returned', { step: 'look', lookId: currentLookId })
+        alert(`The look did not save. ${saved?.error?.message ?? ''} Your board is still here: try Save again. If it fails twice, tell Karl which client and look.`.replace(/\s+/g, ' '))
+        return
       }
-    } catch (err) {
-      console.error('Canvas export failed:', err)
-    }
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const authUserId = sessionData?.session?.user?.id ?? null
+      // Adopt the row we just created, so pressing Save again edits it instead of forking a third
+      // look and retiring an original that is already retired.
+      if (replacesLookId) noteSavedAs(saved.data.id)
 
-    const saved = await saveLook({
-      id: currentLookId ?? undefined,
-      // Set only when this board is a rebuild of a transitioned GoodPix look: the new row takes
-      // that look's place in the lookbook and the original retires (ADR-0076 + migration 014).
-      replacesLookId: replacesLookId ?? undefined,
-      replacesSiblingLookIds,
-      clientId: activeClient.id,
-      name: data.name,
-      canvasState: styledState,
-      tags: data.tags,
-      // Only what the stylist changed in the dialog (ADR-0166). Her description can be edited by
-      // the client while this board is open; sending the old text back would undo her edit.
-      notesInternal: changedText(data.notes, currentLookId ? currentLook?.notes_internal : null),
-      notesClient: changedText(data.clientNote, currentLookId ? currentLook?.notes_client : null),
-      toTry: data.toTry,
-      imageBase64,
-      createdBy: authUserId ?? undefined,
-    })
-
-    // Adopt the row we just created, so pressing Save again edits it instead of forking a third
-    // look and retiring an original that is already retired.
-    if (replacesLookId && saved?.data?.id) noteSavedAs(saved.data.id)
-
-    // FILE IT WHERE SHE SAID. The pills used to write `gp_looks.tags` only, which nothing files
-    // by — 72 live looks were tagged and in no category at all on 2026-09-24 (ADR-0149). Last,
-    // and deliberately: saveLook has already run replaceTransitionedLook, which copies the
-    // original's filing onto the new row, so this is the stylist's word over the inherited one.
-    // Never fatal — the look IS saved, and a filing that did not stick must not read as a lost
-    // restyle.
-    const savedId = saved?.data?.id
-    if (savedId) {
+      // FILE IT WHERE SHE SAID. The pills used to write `gp_looks.tags` only, which nothing files
+      // by: 72 live looks were tagged and in no category at all on 2026-09-24 (ADR-0149). Last,
+      // and deliberately: saveLook has already run replaceTransitionedLook, which copies the
+      // original's filing onto the new row, so this is the stylist's word over the inherited one.
+      // Never fatal: the look IS saved, and a filing that did not stick must not read as a lost
+      // restyle.
+      const savedId = saved.data.id
       try {
         const change = await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFiling : [], data.tags)
         // A stylist who re-filed a look the client had filed herself takes it back (ADR-0166).
@@ -213,17 +207,29 @@ export function ChatPanel() {
         setLookFilingOk(f.ok)
       } catch (e) {
         console.error('Filing the look failed (look saved):', e)
+        reportBuilderError('look_filing_failed', e, { lookId: savedId })
       }
-    }
 
-    markClean()
-    setSaving(false)
-    setShowSaveDialog(false)
+      markClean()
+      setShowSaveDialog(false)
+    } catch (e) {
+      reportBuilderError('save_failed', e, { step: 'look', lookId: currentLookId })
+      alert('The look did not save because something went wrong. Your board is still here: try Save again. If it fails twice, tell Karl which client and look.')
+    } finally {
+      setSaving(false)
+    }
   }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; teamNote: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
+    // ADR-0168: never a capsule without its picture.
+    if (!data.compositeBase64) {
+      reportBuilderError('save_failed', 'capsule picture empty', { step: 'capsule_create' })
+      alert("The capsule's picture could not be made, so nothing was saved. Try again; if it happens twice, tell Karl which client.")
+      return
+    }
     setSavingCapsule(true)
+    try {
 
     // Collect all closet_item_ids from the selected looks
     const selectedLooks = looks.filter(l => data.lookIds.includes(l.id))
@@ -241,8 +247,13 @@ export function ChatPanel() {
       description: data.description,
       lookIds: data.lookIds,
       closetItemIds: allItemIds,
-      imageBase64: data.compositeBase64 || undefined,
+      imageBase64: data.compositeBase64,
     })
+    if (created?.error || !(created?.data as any)?.id) {
+      reportBuilderError('save_failed', created?.error ?? 'no row returned', { step: 'capsule_create' })
+      alert('The capsule did not save. Try again; if it fails twice, tell Karl which client.')
+      return
+    }
     // The team note, in the team-only table (ADR-0166). Never fatal: the capsule IS saved.
     const createdId = (created?.data as any)?.id
     if (createdId && data.teamNote.trim()) {
@@ -250,8 +261,13 @@ export function ChatPanel() {
       if (!r.ok) console.error('capsule team note not saved (capsule saved):', r.error)
     }
 
-    setSavingCapsule(false)
     setShowCapsuleDialog(false)
+    } catch (e) {
+      reportBuilderError('save_failed', e, { step: 'capsule_create' })
+      alert('The capsule did not save because something went wrong. Try again.')
+    } finally {
+      setSavingCapsule(false)
+    }
   }, [activeClient, looks, saveCapsule])
 
   // Save the CURRENT board (the canvas as arranged — e.g. a Landscape packing
@@ -265,18 +281,13 @@ export function ChatPanel() {
   const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string; teamNote: string }) => {
     if (!activeClient) return
     setSavingCapsule(true)
-
-    // Settle FIRST, then read — same reason as handleSave above.
-    settleCanvasTransforms()
-    const canvasState = useCanvasStore.getState().state
-
-    let imageBase64: string | undefined
     try {
-      const pngDataUrl = exportCanvasImage({ pixelRatio: 2 })
-      if (pngDataUrl) imageBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, '')
-    } catch (err) {
-      console.error('Canvas export failed:', err)
-    }
+    // The picture FIRST, same rule as Save Look (lib/boardPictureForSave, ADR-0168): a capsule
+    // whose picture cannot be made is not saved, and she is told why.
+    const picture = boardPictureForSave()
+    if (!picture.ok) { alert(picture.message.replace("The look's", "The capsule's")); return }
+    const canvasState = useCanvasStore.getState().state
+    const imageBase64 = picture.base64
 
     const closetItemIds = [...new Set(
       canvasState.nodes
@@ -304,6 +315,11 @@ export function ChatPanel() {
     // The board now IS the saved capsule, so the next Save updates it. This used to happen only
     // after a replacement, so every fresh "Save as Capsule" pressed twice made a second capsule:
     // Janet Foutty had five Denvers and five Cape Cods on 2026-09-24 (ADR-0152).
+    if (saved?.error || !saved?.data?.id) {
+      reportBuilderError('save_failed', saved?.error ?? 'no row returned', { step: 'capsule', capsuleId: currentCapsuleId })
+      alert('The capsule did not save. Your board is still here: try Save again. If it fails twice, tell Karl which client and capsule.')
+      return
+    }
     if (saved?.data?.id) {
       noteSavedCapsuleAs(saved.data.id)
       markClean()
@@ -316,8 +332,13 @@ export function ChatPanel() {
       }
     }
 
-    setSavingCapsule(false)
     setShowSaveAsCapsuleDialog(false)
+    } catch (e) {
+      reportBuilderError('save_failed', e, { step: 'capsule', capsuleId: currentCapsuleId })
+      alert('The capsule did not save because something went wrong. Your board is still here: try Save again.')
+    } finally {
+      setSavingCapsule(false)
+    }
   }, [activeClient, saveCapsule, currentCapsuleId, currentCapsule, replacesCapsuleId, noteSavedCapsuleAs, markClean, capsuleTeamNote, capsuleTeamNoteFor])
 
   const handleAddLooks = useCallback(async (picked: LookRow[]) => {

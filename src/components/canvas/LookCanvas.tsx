@@ -2,7 +2,7 @@ import { useRef, useMemo, useCallback, useEffect, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text as KonvaText, Line } from 'react-konva'
 import type Konva from 'konva'
 import { useViewStore } from '@/stores/viewStore'
-import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle } from '@/stores/canvasStore'
+import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle, registerUnusablePhotos } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
@@ -17,9 +17,15 @@ import type { CanvasNode, ClosetItemNode, TextNode, PictureNode } from '@/types/
 const FIT_W = 620
 const FIT_H = 680
 
+/** A board picture is a photo or, for a piece whose photo could not load safely, a placeholder
+ *  drawn on a same-origin canvas (lib/loadBoardImage, ADR-0168). Both are sized the same way. */
+type BoardPicture = HTMLImageElement | HTMLCanvasElement
+const natW = (p: BoardPicture) => ('naturalWidth' in p ? p.naturalWidth : p.width)
+const natH = (p: BoardPicture) => ('naturalHeight' in p ? p.naturalHeight : p.height)
+
 interface ClosetItemImageProps {
   node: ClosetItemNode
-  image: HTMLImageElement | undefined
+  image: BoardPicture | undefined
   isSelected: boolean
   /** True only when this is the ONLY selected node — then it shows its own resize box.
    *  When several are selected, a single group box (in the parent) resizes them together. */
@@ -42,7 +48,7 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
   // Report this item's natural dimensions once its image loads, so flip-in-place can
   // compensate the position by the rendered width (see store.flipNodes).
   useEffect(() => {
-    if (image && image.naturalWidth) useCanvasStore.getState().setNodeDims(node.id, image.naturalWidth, image.naturalHeight)
+    if (image && natW(image)) useCanvasStore.getState().setNodeDims(node.id, natW(image), natH(image))
   }, [image, node.id])
 
   // Clickable hit area. A cut-out photo's see-through margins shouldn't steal clicks from
@@ -57,7 +63,7 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
     let sparse = false
     let bbox: { x: number; y: number; width: number; height: number } | null = null
     try {
-      const NW = image.naturalWidth, NH = image.naturalHeight
+      const NW = natW(image), NH = natH(image)
       const s = Math.min(1, 96 / Math.max(NW, NH)) // scan a downscaled copy (≤96px) — cheap
       const w = Math.max(1, Math.round(NW * s)), h = Math.max(1, Math.round(NH * s))
       const c = document.createElement('canvas'); c.width = w; c.height = h
@@ -93,8 +99,8 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
   // so the item renders at the correct pixel height on the canvas.
   // Otherwise fall back to the stored scale (for old looks or manual edits).
   let effectiveScale = node.scale
-  if (node.target_height && image && image.naturalHeight > 0) {
-    effectiveScale = Math.min(Math.max(node.target_height / image.naturalHeight, 0.03), 3.0)
+  if (node.target_height && image && natH(image) > 0) {
+    effectiveScale = Math.min(Math.max(node.target_height / natH(image), 0.03), 3.0)
   }
 
   const config = toKonvaConfig({ ...node, scale: effectiveScale })
@@ -163,7 +169,7 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
 
 interface PictureNodeProps {
   node: PictureNode
-  image?: HTMLImageElement
+  image?: BoardPicture
   isSelected: boolean
   solo: boolean
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
@@ -552,7 +558,9 @@ export function LookCanvas() {
     return m
   }, [state.nodes, storeImageUrls])
 
-  const images = useCanvasImages(imageUrlMap)
+  const { images, unusable } = useCanvasImages(imageUrlMap)
+  // Save asks for these before it runs: a placeholder must never end up in a client's look picture.
+  useEffect(() => registerUnusablePhotos(() => [...unusable]), [unusable])
 
   // ADR-0146: a hidden piece is not drawn, which also keeps it out of the saved picture, because
   // that picture is this stage (render/composite.ts calls stage.toDataURL). It stays in

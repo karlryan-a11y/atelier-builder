@@ -1,3 +1,4 @@
+import { reportBuilderError } from '@/lib/reportError'
 import { useState, useCallback } from 'react'
 import { X, Check, Package, Loader2 } from 'lucide-react'
 import type { LookRow } from '@/hooks/useLooks'
@@ -60,15 +61,11 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
         compositeBase64,
       })
     } catch (err) {
+      // ADR-0168: never a capsule without its picture. It used to save one with no picture and
+      // say nothing. Nothing is saved; she is told, and her choices stay in the dialog.
       console.error('Failed to render capsule:', err)
-      // Save without composite image
-      onSave({
-        name: name.trim(),
-        description: description.trim(),
-        teamNote: teamNote.trim(),
-        lookIds: Array.from(selectedLookIds),
-        compositeBase64: '',
-      })
+      reportBuilderError('save_failed', err, { step: 'capsule_grid_render' })
+      alert("The capsule's picture could not be made, so nothing was saved. Your choices are still here: try again. If it happens twice, tell Karl which client.")
     } finally {
       setRendering(false)
     }

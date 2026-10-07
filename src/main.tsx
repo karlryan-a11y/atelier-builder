@@ -5,10 +5,15 @@ import './index.css'
 import App from './App.tsx'
 import { installChunkReload } from './lib/chunkReload.ts'
 import { queryClient } from './lib/queryClient.ts'
+import { installErrorReporting } from './lib/reportError.ts'
 
 // Before anything lazy can load: a tab left open across a deploy reloads once instead of
 // failing to open a screen (lib/chunkReload.ts).
 installChunkReload()
+
+// What breaks on a stylist's screen is written to builder_errors, not lost in her console
+// (lib/reportError.ts, ADR-0168).
+installErrorReporting()
 
 // NOTE: the "Watson W" preloader (index.html) is dismissed by <App/> once AUTH RESOLVES
 // (see App.tsx) — NOT on a fixed timer here. A timer dismissed the W mid-auth and exposed

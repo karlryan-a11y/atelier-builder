@@ -23,9 +23,10 @@
  * THE OPEN, two rules:
  *   5. The list of looks a piece is in is clickable, or finding the look and opening it stay two
  *      jobs in two tabs, which is the half that was already built and dead-ended.
- *   6. It goes through handleRebuildLook — the SAME route the Looks grid uses. ADR-0148 exists
- *      because two ways onto the canvas looked identical and did opposite things (one replaced,
- *      one duplicated). A third route would be that bug again.
+ *   6. It goes through openLookOnCanvas, the SAME route the Looks grid uses (ADR-0168). ADR-0148
+ *      exists because two ways onto the canvas looked identical and did opposite things. This rule
+ *      used to say "through handleRebuildLook", which was itself the 10/6 bug: every Atelier look
+ *      opened from a piece came up as a GoodPix grid (Cynthia Dada, Holly McClellan Look 259).
  *
  * Then the matcher itself, over EVERY live look on the roster: for a set of real queries, the
  * number of looks it returns, and the guarantee that typing more characters never returns more.
@@ -121,8 +122,8 @@ const handler = panel.match(/function handleOpenLookFromPiece\([\s\S]*?\n  \}/)
 if (!handler) {
   fail(`${PANEL}: handleOpenLookFromPiece is gone.`)
 } else {
-  if (!/handleRebuildLook\(/.test(handler[0])) {
-    fail(`${PANEL}: opening a look from a piece does NOT go through handleRebuildLook. A second route onto the canvas is exactly the bug ADR-0148 fixed: two ways in that looked the same and did opposite things.`)
+  if (!/openLookOnCanvas\(/.test(handler[0])) {
+    fail(`${PANEL}: opening a look from a piece does NOT go through openLookOnCanvas, the one route the Looks grid uses (ADR-0168). Calling handleRebuildLook directly opened Atelier looks as GoodPix grids.`)
   }
   if (/loadLookAsNew\(/.test(handler[0])) {
     fail(`${PANEL}: opening a look from a piece duplicates it instead of replacing it (ADR-0148).`)

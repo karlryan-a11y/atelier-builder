@@ -6,10 +6,9 @@ import { clearTransitionBlock, replaceTransitionedLook } from '@/lib/lookTransit
 import type { LookCanvasState } from '@/types/canvas'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
-import { authHeader } from '@/lib/authHeader'
+import { uploadBoardPicture } from '@/lib/uploadBoardPicture'
 import { fetchTargetTeamNotes, saveTargetTeamNote } from '@/lib/teamNotes'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 export interface LookRow {
   id: string
@@ -123,26 +122,12 @@ export function useLooks(clientId: string | null) {
     // Upload high-res look image to R2 if provided
     let r2ImageKey: string | null = null
     if (opts.imageBase64) {
-      try {
-        const key = `looks/${id}/image-${Date.now()}.png`
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/upload-image`, {
-          method: 'POST',
-          // Signed in, always: upload-image writes any key it is given with the service-role
-          // key. It answered anonymous callers until 2026-09-20, so anyone could overwrite any
-          // client's photo. The function now refuses a caller it cannot identify.
-          headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
-          body: JSON.stringify({
-            base64: opts.imageBase64,
-            content_type: 'image/png',
-            key,
-          }),
-        })
-        if (resp.ok) {
-          r2ImageKey = key
-        }
-      } catch (err) {
-        console.error('Failed to upload look image:', err)
-      }
+      // ADR-0168: a picture that does not upload stops the save. It used to be skipped, and the
+      // row was written with no picture and no word to the stylist.
+      const key = `looks/${id}/image-${Date.now()}.png`
+      const up = await uploadBoardPicture(key, opts.imageBase64)
+      if (!up.ok) return { error: { message: up.message, code: 'picture_upload', details: null, hint: null } as any, data: null }
+      r2ImageKey = key
     }
 
     const closetItemIds = opts.canvasState.nodes
