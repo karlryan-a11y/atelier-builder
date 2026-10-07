@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Trash2, FlipHorizontal, Lock, Unlock, RotateCcw,
   Copy, ChevronUp, ChevronDown, Type, Undo2, Redo2,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
   Sparkles, FilePlus, Bold, Underline, AlignCenter,
-  Eraser, BringToFront, SendToBack, Loader2, EyeOff,
+  Eraser, BringToFront, SendToBack, Loader2, EyeOff, ImagePlus,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
 import { styleFromPastLooks } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
-import type { CanvasNode, ClosetItemNode, TextNode } from '@/types/canvas'
+import type { CanvasNode, ClosetItemNode, PictureNode, TextNode } from '@/types/canvas'
+import { addPictureFilesToBoard, removePictureBackground } from '@/lib/addPicture'
+import { r2KeyOf } from '@/lib/imageUrls'
 import { BOARD_PRESETS } from '@/types/canvas'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -48,6 +50,41 @@ export function CanvasToolbar() {
   const [styleRun, setStyleRun] = useState<{ key: string; attempt: number; note: string; short: string } | null>(null)
   const activeClientId = useClientStore((st) => st.activeClient?.id ?? null)
   const [removingBg, setRemovingBg] = useState(false)
+  // ADD AN IMAGE (ADR-0171). Cynthia's tied-scarf photo: her own picture on the board, never a piece.
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [addingPicture, setAddingPicture] = useState(false)
+  async function handlePictureFiles(list: FileList | null) {
+    const files = Array.from(list ?? [])
+    if (fileRef.current) fileRef.current.value = ''
+    if (!files.length || addingPicture) return
+    setAddingPicture(true)
+    try { await addPictureFilesToBoard(files, activeClientId) } finally { setAddingPicture(false) }
+  }
+  // Remove background on an ADDED picture: a new transparent copy, the node points at it. Nothing
+  // else changes, and Undo puts the original back.
+  async function handleRemovePictureBg(node: PictureNode) {
+    if (removingBg) return
+    const key = r2KeyOf(node.src)
+    if (!key || !key.startsWith('looks/pictures/')) { alert('Remove background works on pictures you added with Add image.'); return }
+    setRemovingBg(true)
+    try {
+      const url = await removePictureBackground(key)
+      useCanvasStore.getState().updateNode(node.id, { src: url } as Partial<PictureNode>)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not remove the background.')
+    } finally {
+      setRemovingBg(false)
+    }
+  }
+  // HIDING SAYS WHERE IT WENT (ADR-0171). Cynthia, 9/23: "when I click the hide button, it doesn't
+  // unhide it." A hidden piece is not drawn, so it cannot be selected to un-hide; it comes back from
+  // the In this look panel. Say so the moment she hides it, with an Undo.
+  const [hiddenNote, setHiddenNote] = useState<string | null>(null)
+  useEffect(() => {
+    if (!hiddenNote) return
+    const t = setTimeout(() => setHiddenNote(null), 12000)
+    return () => clearTimeout(t)
+  }, [hiddenNote])
 
   // Remove a canvas item's background → transparent (Photoroom via intake-remove-bg-item),
   // so an opaque white-background piece stops blocking the rest of the look. Persists to the
@@ -197,6 +234,25 @@ export function CanvasToolbar() {
       </button>
 
       <button
+        onClick={() => fileRef.current?.click()}
+        disabled={addingPicture}
+        className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-40"
+        title="Add image: put your own photo on the board (for example a scarf tied the way it is worn). You can also drop a photo on the board."
+        aria-label="Add image"
+      >
+        {addingPicture ? <Loader2 className="h-3.5 w-3.5 text-text-muted animate-spin" /> : <ImagePlus className="h-3.5 w-3.5 text-text-muted" />}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*,.heic,.heif"
+        multiple
+        className="hidden"
+        data-add-image-input
+        onChange={(e) => void handlePictureFiles(e.target.files)}
+      />
+
+      <button
         onClick={handleStyle}
         disabled={styling || !hasClosetItems}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
@@ -225,12 +281,17 @@ export function CanvasToolbar() {
       <div data-toolbar-context className="grid border-t border-border pt-1">
         {SIZERS.map((nodes, i) => (
           <div key={i} aria-hidden="true" inert className="invisible [grid-area:1/1] flex flex-wrap items-center justify-center gap-1">
-            <SelectionControls nodes={nodes} removingBg={false} onRemoveBg={() => {}} />
+            <SelectionControls nodes={nodes} removingBg={false} onRemoveBg={() => {}} onRemovePictureBg={() => {}} onHid={() => {}} />
           </div>
         ))}
         <div className="[grid-area:1/1] flex flex-wrap items-center justify-center gap-1">
           {hasSelection ? (
-            <SelectionControls nodes={selectedNodes} removingBg={removingBg} onRemoveBg={handleRemoveBg} />
+            <SelectionControls nodes={selectedNodes} removingBg={removingBg} onRemoveBg={handleRemoveBg} onRemovePictureBg={handleRemovePictureBg} onHid={setHiddenNote} />
+          ) : hiddenNote ? (
+            <span data-hidden-note className="text-[10px] tracking-wide text-text-muted">
+              {hiddenNote} hidden. It is still in the look. Bring it back with the eye in In this look on the right.
+              <button onClick={() => { undo(); setHiddenNote(null) }} className="ml-2 underline text-[#1A1A1A]">Undo</button>
+            </span>
           ) : (
             <span className="text-[10px] tracking-wide text-text-muted">Select a piece or a label to edit it</span>
           )}
@@ -244,17 +305,21 @@ export function CanvasToolbar() {
 // height (see data-toolbar-context). Stand-in nodes: never drawn, never on the board.
 const SIZER_TEXT: TextNode = { id: 'sizer_text', type: 'text', content: '', font_family: DEFAULT_FONT, font_size: 32, fill: '#1A1A1A', x: 0, y: 0, rotation: 0, z_index: 0 }
 const SIZER_PIECE: ClosetItemNode = { id: 'sizer_piece', type: 'closet_item', closet_item_id: '', x: 0, y: 0, scale: 1, rotation: 0, flipped: false, z_index: 0, locked: false }
+const SIZER_PICTURE: PictureNode = { id: 'sizer_picture', type: 'picture', src: '', x: 0, y: 0, width: 1, height: 1, rotation: 0, flipped: false, z_index: 0, locked: false }
 const SIZERS: CanvasNode[][] = [
   [SIZER_TEXT],
   [SIZER_PIECE],
   [SIZER_PIECE, { ...SIZER_PIECE, id: 'sizer_piece_2' }, { ...SIZER_PIECE, id: 'sizer_piece_3' }],
+  [SIZER_PICTURE],
 ]
 
 /** Everything that acts on the current selection. Drawn for real, and as the strip's sizers. */
-function SelectionControls({ nodes, removingBg, onRemoveBg }: {
+function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, onHid }: {
   nodes: CanvasNode[]
   removingBg: boolean
   onRemoveBg: (node: ClosetItemNode) => void
+  onRemovePictureBg: (node: PictureNode) => void
+  onHid: (pieceName: string) => void
 }) {
   const { updateNode, removeNodes, duplicateNodes, moveLayer, flipNodes, alignNodes, distributeNodes, rememberTextStyle } = useCanvasStore()
   const selectedNodes = nodes
@@ -352,7 +417,7 @@ function SelectionControls({ nodes, removingBg, onRemoveBg }: {
           */}
           {singleNode?.type === 'closet_item' && (
             <button
-              onClick={() => updateNode(singleNode.id, { hidden: true } as Partial<ClosetItemNode>)}
+              onClick={() => { updateNode(singleNode.id, { hidden: true } as Partial<ClosetItemNode>); useCanvasStore.getState().setSelectedNodeIds([]); onHid('Piece') }}
               className="p-1.5 hover:bg-tile rounded-sm transition-colors"
               title="Hide on the board — the piece stays in the look and she can still shop it"
             >
@@ -366,6 +431,18 @@ function SelectionControls({ nodes, removingBg, onRemoveBg }: {
               disabled={removingBg}
               className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-40"
               title="Remove background — make this piece transparent so it stops blocking the look"
+            >
+              {removingBg ? <Loader2 className="h-3.5 w-3.5 text-text-muted animate-spin" /> : <Eraser className="h-3.5 w-3.5 text-text-muted" />}
+            </button>
+          )}
+
+          {singleNode?.type === 'picture' && (
+            <button
+              onClick={() => onRemovePictureBg(singleNode as PictureNode)}
+              disabled={removingBg}
+              className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-40"
+              title="Remove background from this picture (pictures you added with Add image)"
+              aria-label="Remove background from this picture"
             >
               {removingBg ? <Loader2 className="h-3.5 w-3.5 text-text-muted animate-spin" /> : <Eraser className="h-3.5 w-3.5 text-text-muted" />}
             </button>

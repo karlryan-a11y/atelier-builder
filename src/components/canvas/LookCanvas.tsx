@@ -6,6 +6,8 @@ import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerC
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
+import { addPictureFilesToBoard } from '@/lib/addPicture'
+import { useClientStore } from '@/stores/clientStore'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
 import { selectionOnPress, shouldClearSelection, ringOffsets, toBoardPoint, marqueeRect, boxesOverlap, type BoardRect } from '@/lib/canvasSelection'
@@ -1049,7 +1051,19 @@ export function LookCanvas() {
 
       {/* Canvas — the white look area. min-h-0 lets the flex child shrink so the
           board scales to fit instead of overflowing/clipping at the bottom. */}
-      <div ref={fitRef} className="flex-1 flex pb-4 min-h-0 w-full overflow-auto">
+      {/* Drop a photo from the desktop onto the board: same as Add image (ADR-0171). Only FILES
+          are taken; dragging a piece in from the closet rail is not a file and passes straight by. */}
+      <div
+        ref={fitRef}
+        className="flex-1 flex pb-4 min-h-0 w-full overflow-auto"
+        onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }}
+        onDrop={(e) => {
+          const files = Array.from(e.dataTransfer?.files ?? [])
+          if (!files.length) return
+          e.preventDefault()
+          void addPictureFilesToBoard(files, useClientStore.getState().activeClient?.id ?? null)
+        }}
+      >
         <div
           className="relative m-auto shrink-0 border border-border rounded bg-white shadow-sm"
           style={{ width: CW * SCALE, height: CH * SCALE }}
