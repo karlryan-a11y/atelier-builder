@@ -815,16 +815,25 @@ export function LookCanvas() {
   )
 
   // A press in the grey margin around the board starts a box too. On a board covered in garments,
-  // or with labels against its edge, the margin is the only empty place to start from.
+  // or with labels against its edge, the margin is the only empty place to start from. The margin
+  // is the WHOLE canvas column: the strip just above the board is the toolbar row's padding, and
+  // that is exactly where a stylist starts a box over labels set against the top edge (measured on
+  // the live builder: a press there landed in the toolbar row, not the board area). Presses on the
+  // toolbar's own controls, zoom and grid buttons are left alone.
   useEffect(() => {
-    const el = fitRef.current
+    const fit = fitRef.current
+    const el = fit?.closest('main') ?? fit
     if (!el) return
     const onDown = (ev: MouseEvent) => {
       if (ev.button !== 0) return
       const stage = stageRef.current
-      if (!stage || stage.container().contains(ev.target as Node)) return // the board handles its own
-      const r = el.getBoundingClientRect()
-      if (ev.clientX - r.left > el.clientWidth || ev.clientY - r.top > el.clientHeight) return // a scrollbar
+      const target = ev.target as Element | null
+      if (!stage || !target || stage.container().contains(target)) return // the board handles its own
+      if (target.closest('[data-toolbar-row] > *, button, input, select, textarea, a, [role="button"]')) return
+      if (fit && fit.contains(target)) {
+        const r = fit.getBoundingClientRect()
+        if (ev.clientX - r.left > fit.clientWidth || ev.clientY - r.top > fit.clientHeight) return // a scrollbar
+      }
       pressedEmpty.current = true
       ev.preventDefault() // no page text selection while she drags
       beginMarquee(ev.clientX, ev.clientY)

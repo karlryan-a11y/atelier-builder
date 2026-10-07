@@ -37,7 +37,10 @@ check(!/onMouseMove=\{handleStageMouseMove\}|onMouseUp=\{handleStageMouseUp\}/.t
   `${FILE}: the stage still owns the box's move/release, so a drag that leaves the board loses its release and the box sticks.`)
 check(/window\.addEventListener\('mousemove'/.test(src) && /window\.addEventListener\('mouseup'/.test(src),
   `${FILE}: the box is not followed on the window, so it stops at the board's edge.`)
-check(/const el = fitRef\.current[\s\S]{0,1500}?beginMarquee\(ev\.clientX, ev\.clientY\)[\s\S]{0,200}?el\.addEventListener\('mousedown', onDown\)/.test(src),
+check(/closest\('main'\)[\s\S]{0,1800}?beginMarquee\(ev\.clientX, ev\.clientY\)[\s\S]{0,200}?el\.addEventListener\('mousedown', onDown\)/.test(src),
+  `${FILE}: the margin that starts a box is not the whole canvas column. The strip just above the board belongs to the toolbar row, and a press there (her top labels) started nothing.`)
+check(/\[data-toolbar-row\] > \*/.test(src), `${FILE}: presses on the toolbar's own controls would start a box.`)
+check(/const el = fitRef\.current[\s\S]{0,1500}?beginMarquee\(ev\.clientX, ev\.clientY\)[\s\S]{0,200}?el\.addEventListener\('mousedown', onDown\)/.test(src) || /closest\('main'\)/.test(src),
   `${FILE}: a press in the grey margin does not start a box. On a full board the margin is the only empty place.`)
 check(/useEffect\(\(\) => \(\) => endMarquee\.current\?\.\(\)/.test(src),
   `${FILE}: window listeners are not removed when the board unmounts.`)
