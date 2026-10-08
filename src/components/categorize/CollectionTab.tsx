@@ -68,8 +68,18 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   const { activeClient } = useClientStore()
   const clientFirst = (activeClient?.name ?? 'the client').split(' ')[0]
   const [adding, setAdding] = useState(false)
-  const { byItem: lookUsage } = useItemLookUsage(clientId)
-  const [looksModal, setLooksModal] = useState<{ name: string; looks: LookLite[] } | null>(null)
+  const { byItem: lookUsage, removeItemFromLook } = useItemLookUsage(clientId)
+  const [looksModal, setLooksModal] = useState<{ name: string; itemId: string; looks: LookLite[] } | null>(null)
+  const [removingLook, setRemovingLook] = useState<string | null>(null)
+  async function notInThisLook(lk: LookLite) {
+    if (!looksModal) return
+    if (!window.confirm(`Take "${looksModal.name}" off ${lk.name}?\n\nThe look and its picture stay as they are. This piece just stops showing as styled in it.`)) return
+    setRemovingLook(lk.id)
+    const err = await removeItemFromLook(lk.id, looksModal.itemId)
+    setRemovingLook(null)
+    if (err) { window.alert("That didn't save. Refresh the page and try again."); return }
+    setLooksModal((m) => (m ? { ...m, looks: m.looks.filter((l) => l.id !== lk.id) } : m))
+  }
   const [editing, setEditing] = useState<ClosetItem | null>(null)
   const [saving, setSaving] = useState(false)
   const [removingBg, setRemovingBg] = useState(false)
@@ -217,9 +227,19 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   const searched = useMemo(() => {
     const live = items.filter((i) => !i.is_deleted)
     const scoped = !!filterCategories && filterCategories.size > 0
-    const inScope = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => filterCategories!.has(c))
+    // A HOME NARROWS, IT DOES NOT ADD (Cynthia, 2026-10-08, Keil Cadieux: Creekside + Denim showed
+    // all 1,234 pieces). Within homes and within garment types a tap adds (either one); across the
+    // two it narrows: Creekside + Denim is the denim at Creekside.
+    const picked = [...(filterCategories ?? [])]
+    const homesOn = picked.filter((c) => residenceSlugs?.has(c))
+    const typesOn = picked.filter((c) => !residenceSlugs?.has(c))
+    const inScope = (i: ClosetItem) => {
+      const cats = categoriesByItem.get(i.id) ?? []
+      return (homesOn.length === 0 || cats.some((c) => homesOn.includes(c)))
+        && (typesOn.length === 0 || cats.some((c) => typesOn.includes(c)))
+    }
     return searchInCategory(live, inScope, scoped, q, fieldsOf, 'team')
-  }, [items, q, filterCategories, categoriesByItem, fieldsOf])
+  }, [items, q, filterCategories, categoriesByItem, fieldsOf, residenceSlugs])
   const baseVisible = searched.ranked
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
@@ -716,7 +736,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                     const draft = looks.length - pub
                     return (
                       <button
-                        onClick={() => setLooksModal({ name: displayName(item) || 'Item', looks })}
+                        onClick={() => setLooksModal({ name: displayName(item) || 'Item', itemId: item.id, looks })}
                         className={`mt-1.5 inline-flex items-center gap-1 text-[11px] transition-colors hover:text-[#1A1A1A] ${pub === 0 ? 'text-[#9a6b3f]' : 'text-[#8a7a6a]'}`}
                         title={pub === 0
                           ? `Only in ${draft} unpublished look${draft === 1 ? '' : 's'}, so ${clientFirst} cannot see this piece styled yet`
@@ -809,12 +829,23 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                       </p>
                     </>
                   )
+                  // "Not in this look" sits under every card (Cynthia, 2026-10-08).
+                  const notIn = (
+                    <button
+                      type="button"
+                      data-not-in-look={lk.id}
+                      onClick={() => void notInThisLook(lk)}
+                      disabled={removingLook === lk.id}
+                      className="mt-1.5 text-[9px] tracking-[0.16em] uppercase text-[#888] underline underline-offset-4 hover:text-[#1A1A1A] disabled:opacity-40"
+                      title="This piece is not in this look's picture: take it off this look"
+                    >{removingLook === lk.id ? 'Removing…' : 'Not in this look'}</button>
+                  )
                   if (!onOpenLook) {
-                    return <div key={lk.id} className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">{body}</div>
+                    return <div key={lk.id}><div className="border border-[#E8E4DF] rounded-sm overflow-hidden bg-white">{body}</div>{notIn}</div>
                   }
                   return (
+                    <div key={lk.id}>
                     <button
-                      key={lk.id}
                       type="button"
                       onClick={() => { setLooksModal(null); onOpenLook(lk.id) }}
                       title={`Open "${lk.name}" on the canvas to change it`}
@@ -825,6 +856,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                         Open on canvas
                       </span>
                     </button>
+                    {notIn}
+                    </div>
                   )
                 })}
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
@@ -86,5 +86,29 @@ export function useItemLookUsage(clientId: string | null) {
     return () => { cancelled = true }
   }, [clientId, epoch])
 
-  return { byItem, loading, error }
+  // "NOT IN THIS LOOK" (Cynthia, 2026-10-08, Holly McClellan's J.Crew Print Dress listed under
+  // Looks 47 and 48 that do not show it: GoodPix saved those looks with the whole board's piece
+  // list). Takes ONE piece off ONE look's list. The look, its picture and the piece are untouched.
+  // Returns an error message, or null when it saved.
+  const removeItemFromLook = useCallback(async (lookId: string, itemId: string): Promise<string | null> => {
+    const { data: cur, error: rErr } = await supabase.from('gp_looks').select('closet_item_ids').eq('id', lookId).maybeSingle()
+    if (rErr || !cur) return rErr?.message ?? 'look not found'
+    const ids: string[] = Array.isArray(cur.closet_item_ids) ? cur.closet_item_ids : []
+    if (ids.includes(itemId)) {
+      const next = ids.filter((i) => i !== itemId)
+      const { data: written, error } = await supabase.from('gp_looks')
+        .update({ closet_item_ids: next.length ? next : null }).eq('id', lookId).select('id')
+      if (error) return error.message
+      if (!written?.length) return 'not saved'
+    }
+    setByItem((prev) => {
+      const m = new Map(prev)
+      const left = (m.get(itemId) ?? []).filter((l) => l.id !== lookId)
+      if (left.length) m.set(itemId, left); else m.delete(itemId)
+      return m
+    })
+    return null
+  }, [])
+
+  return { byItem, loading, error, removeItemFromLook }
 }

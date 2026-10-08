@@ -108,7 +108,7 @@ ok('useLooks keeps the error',
 ok('useLooks returns the error', /return \{ looks, loading, error,/.test(looks), 'useLooks does not return `error`')
 
 const usage = read('src/hooks/useItemLookUsage.ts') ?? ''
-ok('useItemLookUsage returns the error', /return \{ byItem, loading, error \}/.test(usage), 'a failed page reads as "styled in 0 looks"')
+ok('useItemLookUsage returns the error', /return \{ byItem, loading, error[ ,]/.test(usage), 'a failed page reads as "styled in 0 looks"')
 
 const panel = read('src/components/categorize/CategorizePanel.tsx') ?? ''
 ok('Categorize grid renders the error before the empty state', /loadError \? \(\s*<LoadError[\s\S]{0,200}visible\.length === 0/.test(panel),

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { styleKeys } from '@/lib/queryClient'
@@ -21,6 +22,9 @@ export function useHomes(clientId: string | null): Map<string, string> {
       return residencesFrom(data ?? [])
     },
   })
-  const rows = (q.data ?? []).length >= MIN_RESIDENCES ? q.data ?? [] : []
-  return new Map(rows.map((r) => [r.slug, (r.label ?? '').trim() || r.slug]))
+  // One Map per read, not per render: callers put it in useMemo dependencies.
+  return useMemo(() => {
+    const rows = (q.data ?? []).length >= MIN_RESIDENCES ? q.data ?? [] : []
+    return new Map(rows.map((r) => [r.slug, (r.label ?? '').trim() || r.slug]))
+  }, [q.data])
 }

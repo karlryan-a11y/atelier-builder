@@ -423,14 +423,23 @@ export function ClosetPanel() {
     // ONE MATCHER, TEAM AUDIENCE (ADR-0151). Every possible match, closest first (ADR-0155).
     // Chips multi-select as a union: a piece shows if ANY of its categories is selected, and a
     // search with chips on searches those chips only (ADR-0163).
-    const inChips = (i: ClosetItem) => (categoriesByItem.get(i.id) ?? []).some((c) => activeCategories.has(c))
+    // A home narrows, it does not add (Cynthia, 2026-10-08): Creekside + Denim is the denim at
+    // Creekside. Within homes, and within garment types, chips still add.
+    const picked = [...activeCategories]
+    const homesOn = picked.filter((c) => homes.has(c))
+    const typesOn = picked.filter((c) => !homes.has(c))
+    const inChips = (i: ClosetItem) => {
+      const cats = categoriesByItem.get(i.id) ?? []
+      return (homesOn.length === 0 || cats.some((c) => homesOn.includes(c)))
+        && (typesOn.length === 0 || cats.some((c) => typesOn.includes(c)))
+    }
     let result = searchInCategory(items, inChips, activeCategories.size > 0, search, fieldsOf, 'team').ranked
     // "Still to style" is the whole point of the marks: it narrows the rail to the pieces that
     // have never been in a look. A piece in a draft look is NOT still to style — it is styled and
     // unpublished, which is a different job, so it stays out of this list (ADR-0134).
     if (unstyledOnly) result = result.filter((i) => styledStateOf(lookUsage.get(i.id)) === 'none')
     return result
-  }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage, fieldsOf])
+  }, [items, search, activeCategories, categoriesByItem, unstyledOnly, lookUsage, fieldsOf, homes])
 
   // The line under the grid, over whatever she has filtered to.
   const coverage = useMemo(() => styledCoverage(filtered.map((i) => i.id), lookUsage), [filtered, lookUsage])
