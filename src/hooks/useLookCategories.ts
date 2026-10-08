@@ -400,6 +400,42 @@ export function useLookCategories(clientId: string | null) {
     const { error } = await supabase.from('gp_looks').update({ archived: true, published: false }).eq('id', id)
     if (error) { console.error('archiveLook:', error.message); await fetchAll() }
   }, [fetchAll, setLooks])
+  // DUPLICATE A CAPSULE (Cynthia Dada, 2026-10-06: "Can we please have the capability to duplicate
+  // a capsule?"). A new row copied from the original: same pieces, same board (raw.canvas_state, so
+  // the copy opens on the canvas to edit), same picture file, same categories. It lands as an
+  // unpublished draft named "<name> (copy)" on top, so it never appears on her site by itself and
+  // the original is not touched. Returns the new id, or null with the reason logged.
+  const duplicateCapsule = useCallback(async (id: string): Promise<string | null> => {
+    const { data: src, error: readErr } = await supabase.from('gp_boards').select('*').eq('id', id).maybeSingle()
+    if (readErr || !src) { console.error('duplicateCapsule (read):', readErr?.message ?? 'not found'); return null }
+    const hex = () => Math.floor(Math.random() * 16).toString(16)
+    const newId = Array.from({ length: 24 }, hex).join('')
+    const now = new Date().toISOString()
+    const row: Record<string, unknown> = { ...src }
+    Object.assign(row, {
+      id: newId,
+      name: `${String(src.name ?? 'Capsule').trim()} (copy)`,
+      published: false,
+      is_deleted: false,
+      sort_order: null,
+      created_at: now,
+      last_modified: now,
+      // A GoodPix capsule's recommendation id belongs to the original; the copy is ours.
+      recommendation_id: null,
+      raw: { ...(src.raw ?? {}), duplicated_from: id },
+    })
+    const { data: ins, error: insErr } = await supabase.from('gp_boards').insert(row).select('id')
+    if (insErr || !ins?.length) { console.error('duplicateCapsule (insert):', insErr?.message ?? 'no row'); return null }
+    const { data: cats } = await supabase.from('board_category_assignments').select('category_id').eq('board_id', id)
+    if (cats?.length) {
+      const { error: catErr } = await supabase.from('board_category_assignments')
+        .insert(cats.map((c: { category_id: string }) => ({ board_id: newId, category_id: c.category_id })))
+      if (catErr) console.error('duplicateCapsule (categories):', catErr.message)
+    }
+    await fetchAll()
+    return newId
+  }, [fetchAll])
+
   const archiveCapsule = useCallback(async (id: string) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, archived: true, published: false } : c)))
     const { error } = await supabase.from('gp_boards').update({ is_deleted: true, published: false }).eq('id', id)
@@ -503,7 +539,7 @@ export function useLookCategories(clientId: string | null) {
     createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
-    archiveLook, archiveCapsule,
+    archiveLook, archiveCapsule, duplicateCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,

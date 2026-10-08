@@ -117,7 +117,7 @@ export function CategorizePanel() {
     loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
-    archiveLook, archiveCapsule,
+    archiveLook, archiveCapsule, duplicateCapsule,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
@@ -602,6 +602,18 @@ export function CategorizePanel() {
   // published "arrange" grid) — the capsule Edit button used to be written inline in the queue
   // grid only, which is why a published capsule had no Edit and no capsule anywhere had Rename.
   // A third grid gets these for free.
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  async function handleDuplicateCapsule(capsule: TaggableCapsule) {
+    setDuplicatingId(capsule.id)
+    try {
+      const newId = await duplicateCapsule(capsule.id)
+      if (newId) window.alert(`Duplicated. "${capsule.name} (copy)" is in Queue as a draft. Edit it, then publish it when it is ready.`)
+      else window.alert("The capsule didn't duplicate. Refresh the page and try again.")
+    } finally {
+      setDuplicatingId(null)
+    }
+  }
+
   const capsuleCardActions = (capsule: TaggableCapsule) => (
     <>
       {/* Edit vs Rebuild, the same split lookCardActions makes. A capsule with a saved canvas
@@ -632,6 +644,14 @@ export function CategorizePanel() {
         className="mt-1 w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] transition-colors"
         title="Rename this capsule everywhere, including the client lookbook"
       >Rename</button>
+      {/* Duplicate (Cynthia Dada, 2026-10-06). The copy is a draft in Queue; the original stays. */}
+      <button
+        data-duplicate-capsule
+        onClick={(e) => { e.stopPropagation(); void handleDuplicateCapsule(capsule) }}
+        disabled={duplicatingId === capsule.id}
+        className="w-full py-1 text-[9px] tracking-[0.12em] uppercase text-[#888] hover:text-[#1A1A1A] disabled:opacity-40 transition-colors"
+        title="Make a copy of this capsule to change. The copy is a draft in Queue and is not on her site until you publish it."
+      >{duplicatingId === capsule.id ? 'Duplicating…' : 'Duplicate'}</button>
     </>
   )
 
