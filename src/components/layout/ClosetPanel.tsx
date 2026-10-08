@@ -15,6 +15,7 @@ import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 import { useClientCategories } from '@/hooks/useClientCategories'
+import { useHomes } from '@/hooks/useHomes'
 import { updateClosetItem } from '@/lib/teamNotes'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
@@ -267,6 +268,7 @@ export function ClosetPanel() {
   // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
   // this one. The same tree the lookbook reads, from the same rows.
   const { parentBySlug: categoryTree } = useClientCategories(activeClient?.id ?? null)
+  const homes = useHomes(activeClient?.id ?? null)
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
@@ -372,13 +374,15 @@ export function ClosetPanel() {
    * and would otherwise sit between Hats and Jewelry.
    */
   const chipCategories = useMemo(() => {
-    const out: { slug: string; label: string; count: number }[] = []
+    const out: { slug: string; label: string; count: number; home?: boolean }[] = []
     for (const [slug, count] of categoryCounts) {
       if (count <= 0) continue
-      out.push({ slug, label: labelForCategory(slug), count })
+      const home = homes.get(slug)
+      out.push({ slug, label: home ?? labelForCategory(slug), count, home: !!home })
     }
-    return out.sort((a, b) => a.label.localeCompare(b.label))
-  }, [categoryCounts])
+    // HER HOMES FIRST (Cynthia, 2026-10-08), by the name the stylist gave them, then A to Z.
+    return out.sort((a, b) => Number(!!b.home) - Number(!!a.home) || a.label.localeCompare(b.label))
+  }, [categoryCounts, homes])
 
   // Does the collapsed block hide anything? Re-measured when her categories change or the panel
   // is opened out, so the toggle only appears on the clients that need it.
@@ -545,17 +549,18 @@ export function ClosetPanel() {
                 >
                   All
                 </button>
-                {chipCategories.map(({ slug, label, count }) => {
+                {chipCategories.map(({ slug, label, count, home }) => {
                   const on = activeCategories.has(slug)
                   return (
                     <button
                       key={slug}
+                      data-home-chip={home ? slug : undefined}
                       onClick={() => toggleCategory(slug)}
-                      title={label}
+                      title={home ? `Pieces at ${label}` : label}
                       className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
                         on
                           ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]'
-                          : 'border-border text-text-muted hover:border-blush'
+                          : home ? 'border-[#1A1A1A]/40 text-text hover:border-blush' : 'border-border text-text-muted hover:border-blush'
                       }`}
                     >
                       {label}

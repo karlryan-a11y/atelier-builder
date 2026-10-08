@@ -17,7 +17,8 @@ export function isFixedCategory(slug: string): boolean {
 /** Display label for any slug — fixed label if known, else Title-Cased custom slug. */
 export function labelForCategory(slug: string): string {
   return (CATEGORY_LABELS as Record<string, string>)[slug]
-    ?? slug.replace(/(^|[\s-])(\w)/g, (_m, p: string, c: string) => p + c.toUpperCase())
+    // A slug reads as words: travel-shoes is "Travel Shoes", never "Travel-Shoes" (Cynthia, 10/8).
+    ?? slug.replace(/-/g, ' ').replace(/(^|\s)(\w)/g, (_m, p: string, c: string) => p + c.toUpperCase())
 }
 
 /**

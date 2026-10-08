@@ -884,6 +884,27 @@ export function CategorizePanel() {
                   on={activeGarmentCats.size === 0}
                   onClick={() => setActiveGarmentCats(new Set())}
                 />
+                {/* HOMES FIRST (Cynthia, 2026-10-08): which pieces are at which house, by the names
+                    she gave the homes. They were here before, but alphabetically inside Custom. */}
+                {(() => {
+                  const homeSlugs = [...residenceSlugs.keys()].filter((s) => (garmentCounts.get(s) ?? 0) > 0)
+                  if (!showResidences || homeSlugs.length === 0) return null
+                  return (
+                    <div data-homes-rail className="mt-1">
+                      <p className="text-[8px] tracking-[0.3em] uppercase text-[#bbb] px-3 mb-0.5">Homes</p>
+                      {homeSlugs.map((slug) => (
+                        <CategoryRow
+                          key={slug}
+                          label={residenceSlugs.get(slug) || labelForCategory(slug)}
+                          count={garmentCounts.get(slug) ?? 0}
+                          coverage={garmentCoverage.get(slug)}
+                          on={activeGarmentCats.has(slug)}
+                          onClick={() => toggleGarment(slug)}
+                        />
+                      ))}
+                    </div>
+                  )
+                })()}
                 {SIDEBAR_STRUCTURE.map((node) => {
                   const slugs = node.kind === 'group' ? node.children : [node.slug]
                   const present = slugs.filter((s) => (garmentCounts.get(s) ?? 0) > 0)
@@ -910,7 +931,7 @@ export function CategorizePanel() {
                   )
                 })}
                 {(() => {
-                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && !(showResidences && residenceSlugs.has(s)) && (garmentCounts.get(s) ?? 0) > 0).sort()
                   if (customSlugs.length === 0) return null
                   return (
                     <div className="mt-1">
