@@ -820,17 +820,17 @@ export function LookCanvas() {
 
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (!pressBeganOnEmptyBoard(e)) return
-      if (e.evt.button !== 0) return
       // EMPTY SPACE INSIDE THE SELECTION BOX MOVES THE SELECTION (Cynthia, 2026-10-08, Holly
       // McClellan's Westlake Village board: "I can't move these"). With everything selected she
       // grabbed the gap between rows, and that started a new selection box. A press that lands on a
       // piece never gets here (pressBeganOnEmptyBoard routes it to that piece), so pieces inside the
       // box stay clickable; shift/cmd presses still draw a box to add to the selection.
+      // Checked BEFORE the near-a-piece tolerance (pressBeganOnEmptyBoard picks a piece within 32
+      // points of the press), or the gaps between rows, all near some piece, grab one piece.
       const tr = groupTrRef.current
       const stage = e.target.getStage()
       const p = stage?.getPointerPosition()
-      if (tr && p && tr.nodes().length > 1 && !e.evt.shiftKey && !e.evt.metaKey && !e.evt.ctrlKey) {
+      if (e.target === stage && e.evt.button === 0 && tr && p && tr.nodes().length > 1 && !e.evt.shiftKey && !e.evt.metaKey && !e.evt.ctrlKey) {
         const box = tr.getClientRect()
         if (p.x >= box.x && p.x <= box.x + box.width && p.y >= box.y && p.y <= box.y + box.height) {
           pressedEmpty.current = false
@@ -838,6 +838,8 @@ export function LookCanvas() {
           return
         }
       }
+      if (!pressBeganOnEmptyBoard(e)) return
+      if (e.evt.button !== 0) return
       beginMarquee(e.evt.clientX, e.evt.clientY)
     },
     [pressBeganOnEmptyBoard, beginMarquee]
