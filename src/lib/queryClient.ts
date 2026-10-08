@@ -33,5 +33,4 @@ export const styleKeys = {
   looks: (clientId: string | null) => ['style', 'looks', clientId] as const,
   capsules: (clientId: string | null) => ['style', 'capsules', clientId] as const,
   lookCategories: (clientId: string | null) => ['style', 'lookCategories', clientId] as const,
-  homes: (clientId: string | null) => ['style', 'homes', clientId] as const,
 }

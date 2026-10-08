@@ -8,7 +8,7 @@ const cat = readFileSync('src/components/categorize/CategorizePanel.tsx', 'utf8'
 const gc = readFileSync('src/lib/garmentCategory.ts', 'utf8')
 const fails = []
 const need = (ok, msg) => { if (!ok) fails.push(msg) }
-need(/useHomes\(activeClient\?\.id/.test(panel), 'Canvas chips must read her homes')
+need(/useItemHomes\(activeClient\?\.id/.test(panel), 'Canvas chips must read her homes')
 need(/Number\(!!b\.home\) - Number\(!!a\.home\)/.test(panel), 'Canvas chips must put homes first')
 need(/data-homes-rail/.test(cat) && cat.indexOf('data-homes-rail') < cat.indexOf('{SIDEBAR_STRUCTURE.map((node) => {'), 'Collection rail must show Homes above Clothing')
 need(/!\(showResidences && residenceSlugs\.has\(s\)\)/.test(cat), 'homes must not repeat inside Custom')

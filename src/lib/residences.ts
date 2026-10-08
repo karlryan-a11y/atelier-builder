@@ -109,3 +109,45 @@ export function residenceOfItem(
   }
   return [...out]
 }
+
+/**
+ * WHICH PIECES ARE AT WHICH HOME, the same answer the client's Collection gives (twin of
+ * atelier-looks src/pages/[microsite]/closet.astro, "residencesOn" block). Karl, 2026-10-08:
+ * "make the builder match the client page". Before, the builder counted only pieces tagged with
+ * the exact home slug, so Keil Cadieux's Carlton Landing read 233 here and 267 on her page.
+ *
+ * A piece is at a home when:
+ *   1. the piece names it, in `custom_categories` or the legacy `category`, under ANY spelling
+ *      of her home ("creekside closet", the label, the slug), or
+ *   2. it is in a PUBLISHED, live look filed under that home.
+ * Only for a client with two or more homes, as on her page; empty otherwise.
+ */
+export function homesByItem(
+  items: { id: string; category?: string | null; custom_categories?: string[] | null }[],
+  looks: { closetItemIds: string[]; categoryIds: string[]; published: boolean; archived: boolean }[],
+  rows: (ResidenceCategoryRow & { id: string; is_hidden?: boolean | null })[] | null | undefined,
+): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const homes = (rows ?? []).filter((r) => r.is_residence === true && !!r.slug && !r.is_hidden)
+  if (homes.length < MIN_RESIDENCES) return out
+  const add = (itemId: string, slug: string) => {
+    const s = out.get(itemId) ?? new Set<string>()
+    s.add(slug)
+    out.set(itemId, s)
+  }
+  const slugOf = residenceResolverFor(homes)
+  for (const item of items) {
+    for (const c of [...(item.custom_categories ?? []), item.category]) {
+      const slug = c ? slugOf(c) : null
+      if (slug) add(item.id, slug)
+    }
+  }
+  const slugByCatId = new Map(homes.map((h) => [h.id, h.slug]))
+  for (const look of looks) {
+    if (!look.published || look.archived) continue
+    const slugs = look.categoryIds.map((id) => slugByCatId.get(id)).filter((s): s is string => !!s)
+    if (slugs.length === 0) continue
+    for (const itemId of look.closetItemIds) for (const s of slugs) add(itemId, s)
+  }
+  return out
+}

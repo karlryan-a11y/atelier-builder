@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { styleKeys, queryClient } from '@/lib/queryClient'
+import { styleKeys } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { planCategoryDeletion, type CategoryDeletionPlan } from '@/lib/categoryDeletion'
@@ -262,7 +262,6 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: l } : c)))
     const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id)
     if (error) { console.error('renameCategory:', error.message); await fetchAll() }
-    void queryClient.invalidateQueries({ queryKey: ['style', 'homes'] }) // Canvas home chips (useHomes)
   }, [fetchAll, setCategories])
 
   /**
@@ -298,9 +297,6 @@ export function useLookCategories(clientId: string | null) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_residence: isResidence } : c)))
     const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id)
     if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
-    // Canvas reads homes from its own cache (useHomes): without this, a Home ticked here took up to
-    // 3 minutes to reach the Canvas chips, and Creekside + Denim showed everything there (review 10/8).
-    void queryClient.invalidateQueries({ queryKey: ['style', 'homes'] })
     return plan
   }, [categories, looks, fetchAll, setCategories])
 

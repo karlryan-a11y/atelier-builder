@@ -15,7 +15,7 @@ import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 import { useClientCategories } from '@/hooks/useClientCategories'
-import { useHomes } from '@/hooks/useHomes'
+import { useItemHomes } from '@/hooks/useItemHomes'
 import { updateClosetItem } from '@/lib/teamNotes'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
@@ -268,7 +268,6 @@ export function ClosetPanel() {
   // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
   // this one. The same tree the lookbook reads, from the same rows.
   const { parentBySlug: categoryTree } = useClientCategories(activeClient?.id ?? null)
-  const homes = useHomes(activeClient?.id ?? null)
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
@@ -347,14 +346,16 @@ export function ClosetPanel() {
   // the Collection tab: the category chips are built from custom_categories too, so a chip
   // could exist here and match almost nothing. Margaux's "New-York-City" read 50 pieces in
   // Collection and 4 on the canvas, because 46 of them carry it as an "Also in".
+  // Her homes, counted the way her Collection page counts them (useItemHomes, Karl 10/8).
+  const { homes, withHomes } = useItemHomes(activeClient?.id ?? null, items)
   const categoriesByItem = useMemo(() => {
     const m = new Map<string, string[]>()
     for (const i of items) {
       const tagNames = (i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean)
-      m.set(i.id, categoriesOf(i, tagNames, categoryTree))
+      m.set(i.id, withHomes(i.id, categoriesOf(i, tagNames, categoryTree)))
     }
     return m
-  }, [items, tagNameById, categoryTree])
+  }, [items, tagNameById, categoryTree, withHomes])
 
   const customCats = useMemo(() => customCategoriesFromItems(items), [items])
 
