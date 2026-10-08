@@ -1155,9 +1155,14 @@ export function LookCanvas() {
               }
               return null
             })}
-            {/* One box that resizes/rotates the whole selection together (2+ nodes). */}
+            {/* One box that resizes/rotates the whole selection together (2+ nodes). Its whole
+                inside is a handle (shouldOverdrawWholeArea): Cynthia, 2026-10-08, Holly McClellan's
+                Westlake Village board, "I can't move these" - with everything selected, a press in
+                the space between pieces started a new selection box instead of moving them. Now
+                anywhere inside the box moves the selection; outside it still starts a new box. */}
             <Transformer
               ref={groupTrRef}
+              shouldOverdrawWholeArea
               rotateEnabled
               keepRatio
               enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
