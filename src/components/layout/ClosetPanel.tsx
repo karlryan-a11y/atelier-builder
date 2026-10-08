@@ -272,6 +272,8 @@ export function ClosetPanel() {
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
+  // A new client starts on All (her chips are her own slugs; 10/8).
+  useEffect(() => { setActiveCategories(new Set()) }, [activeClient?.id])
   // Which looks each piece is in, published and draft alike. The SAME hook the Collection tab
   // uses, so the mark on a tile here and the number over there cannot disagree (ADR-0134). It is
   // one read per client, shared through the Style cache, and it is read-only.

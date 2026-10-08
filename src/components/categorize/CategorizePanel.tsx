@@ -199,6 +199,9 @@ export function CategorizePanel() {
   // Collection mode uses garment categories (item-level), not the look-category brush.
   const [garmentCounts, setGarmentCounts] = useState<Map<string, number>>(new Map())
   const [activeGarmentCats, setActiveGarmentCats] = useState<Set<string>>(new Set())
+  // A new client starts on All items. Picked categories are one client's slugs: carried to the
+  // next client, Keil's Denim left Holly's list empty ("Nothing in this category matches", 10/8).
+  useEffect(() => { setActiveGarmentCats(new Set()) }, [activeClient?.id])
   const onGarmentCounts = useCallback((c: Map<string, number>) => setGarmentCounts(c), [])
   const [garmentCoverage, setGarmentCoverage] = useState<Map<string, StyledCoverage>>(new Map())
   const onGarmentCoverage = useCallback((c: Map<string, StyledCoverage>) => setGarmentCoverage(c), [])

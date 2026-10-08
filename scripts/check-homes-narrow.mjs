@@ -17,5 +17,8 @@ const pick = (sel, cats) => { const h = sel.filter((c) => homes.has(c)), t = sel
 need(pick(['creekside', 'denim'], ['denim', 'creekside']) && !pick(['creekside', 'denim'], ['skirts', 'creekside']) && !pick(['creekside', 'denim'], ['denim', 'carlton-landing']), 'rule: Creekside + Denim is the denim at Creekside')
 need(pick(['denim', 'skirts'], ['skirts']), 'rule: two garment types still add')
 need(/removeItemFromLook/.test(hook) && /data-not-in-look=\{lk\.id\}/.test(col), 'the Styled in N looks window needs Not in this look')
+const cat = readFileSync('src/components/categorize/CategorizePanel.tsx', 'utf8')
+need(/useEffect\(\(\) => \{ setActiveGarmentCats\(new Set\(\)\) \}, \[activeClient\?\.id\]\)/.test(cat), 'Collection filter must reset when the client changes')
+need(/useEffect\(\(\) => \{ setActiveCategories\(new Set\(\)\) \}, \[activeClient\?\.id\]\)/.test(pan), 'Canvas chips must reset when the client changes')
 if (fails.length) { console.error('check-homes-narrow FAILED:\n  ' + fails.join('\n  ')); process.exit(1) }
 console.log('check-homes-narrow: ok')
