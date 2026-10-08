@@ -131,7 +131,9 @@ const KEYWORD_PATTERNS: [RegExp, Category][] = [
   // Accessories / bags / shoes are matched FIRST, so "Top Handle Satchel" and
   // "Denim Tote Bag" resolve to bags (not tops/jeans) and "Faux Fur Beanie" to a
   // hat (not outerwear). Dresses also runs early so "wrap dress" beats "wrap" scarf.
-  [/\b(dress|gown|jumpsuit|romper|caftan|kaftan|shirtdress)\b/i, 'dresses'],
+  // "Dress Shirt" / "Dress Trousers" are menswear, not dresses (Chris Cadieux, 2026-10-06): DRESS_WEAR
+  // in detectCategory answers those first; this never sees a "dress" followed by a garment word.
+  [/\b(gown|jumpsuit|romper|caftan|kaftan|shirtdress)\b|\bdress\b(?![\s-]*(?:shirts?|trousers?|pants?|slacks?|shoes?|boots?|socks?)\b)/i, 'dresses'],
   // Shoes. Every alternative is word-bounded and plural-tolerant, and this line is the reason why:
   // it used to be a bare substring match, so "Bootcut Jeans" filed as shoes (168 of them across the
   // roster), "rawedge" matched "wedge", and "AMULETTE" matched "mule". `[a-z]*boots?` still catches
@@ -140,7 +142,9 @@ const KEYWORD_PATTERNS: [RegExp, Category][] = [
   // KEEP IN STEP WITH THE TWIN: atelier-builder and atelier-looks each carry their own copy.
   [/\b([a-z]*boots?|booties?|[a-z]*heel(?:s|ed)?|sneakers?|sneakerinas?|sandals?|sanals?|loafers?|pumps?|flats?|mules?|slides?|espadrilles?|shoes?|wedges?|slingbacks?|oxfords?|derbys?|derbies|flip[- ]?flops?|kitten)\d*\b/i, 'shoes'],
   [/\b(bag|tote|clutch|purse|handbag|crossbody|cross-body|backpack|satchel|birkin|kelly|pochette|hobo|minaudiere|duffle|duffel|top handle)\b/i, 'bags'],
-  [/(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|ring|jewelry|jewellery)\b/i, 'jewelry'],
+  // Word-bounded on BOTH sides: "faux-layering" ends in "ring" and filed a T-shirt as jewelry
+  // (Chris Cadieux, 2026-10-06).
+  [/\b(earrings?|necklace|bracelet|pendant|brooch|cuff|choker|bangle|studs?|hoops?|rings?|jewelry|jewellery)\b/i, 'jewelry'],
   [/\b(belt)\b/i, 'belts'],
   [/\b(scarf|shawl|stole|wrap|foulard)\b/i, 'scarves'],
   [/\b(hat|cap|beanie|beret|fedora|visor)\b/i, 'hats'],
@@ -157,9 +161,23 @@ const KEYWORD_PATTERNS: [RegExp, Category][] = [
 ]
 
 /** Detect a garment category from an item name. Returns 'other' when nothing matches. */
+/**
+ * "Dress" in front of a garment word is the garment, not a dress: Dress Shirt, Dress Trousers, Dress
+ * Shoes. Checked before the prefix map, whose first-word rule would otherwise read "Dress Shirt" as
+ * a dress. Chris Cadieux, 2026-10-06: a sync showed his shirts and trousers under "Dresses".
+ */
+const DRESS_WEAR: [RegExp, Category][] = [
+  [/\bdress[\s-]*shirts?\b/, 'tops'],
+  [/\bdress[\s-]*(?:trousers?|pants?|slacks?)\b/, 'pants'],
+  [/\bdress[\s-]*(?:shoes?|boots?)\b/, 'shoes'],
+]
+
 export function detectCategory(name: string): Category {
   if (!name) return 'other'
   const lower = name.toLowerCase().trim()
+  for (const [pattern, category] of DRESS_WEAR) {
+    if (pattern.test(lower)) return category
+  }
 
   if (lower.includes('-')) {
     const prefix = lower.split('-')[0].trim()
