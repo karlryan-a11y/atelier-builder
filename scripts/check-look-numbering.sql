@@ -4,6 +4,8 @@
 -- has to survive, and ALWAYS ends by raising an exception, so the block rolls back and nothing
 -- it made survives. Success raises 'CHECK_OK <n> assertions'; any failure raises 'CHECK_FAIL ...'.
 -- On a database without migration 031 it fails (no look_numbering_apply), which is the point.
+-- Since 039 (Maegan 2026-10-08) every step asserts that numbers NEVER change: a delete leaves a
+-- gap, a deleted top number is never reused, a restored look gets its own number back.
 DO $check$
 DECLARE
   cid  text := 'zz-check-look-numbering-' || md5(clock_timestamp()::text);
@@ -31,81 +33,81 @@ BEGIN
     RAISE EXCEPTION 'CHECK_FAIL 1: a client who is off was renamed';
   END IF; passed := passed + 1;
 
-  -- 2. Renumber looks.
+  -- 2. Switch on. Every unique number in a title is kept (1, 3, 8). Two looks say 7: the older
+  --    keeps it, the newer gets the next number (9). The untitled look gets 10. Gaps stay.
   PERFORM * FROM look_numbering_apply(cid, 'check');
   SELECT string_agg(name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid AND NOT archived;
-  IF live_names <> 'Look 1|Look 2|To Be Tried Look 3|Look 4|Look 5|Look 6' THEN
-    RAISE EXCEPTION 'CHECK_FAIL 2: renumber gave %', live_names;
+  IF live_names <> 'Look 1|Look 3|To Be Tried Look 7|Look 8|Look 9|Look 10' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 2: switch-on gave %', live_names;
   END IF; passed := passed + 1;
 
-  -- 3. Archive Look 2: everything after moves up, no gap. (Builder Archive writes archived+published.)
+  -- 3. Archive Look 3: nothing else moves. (Builder Archive writes archived+published.)
   UPDATE gp_looks SET archived = true, published = false WHERE id = cid||'-b';
   SELECT string_agg(name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid AND NOT archived;
-  IF live_names <> 'Look 1|To Be Tried Look 2|Look 3|Look 4|Look 5' THEN
+  IF live_names <> 'Look 1|To Be Tried Look 7|Look 8|Look 9|Look 10' THEN
     RAISE EXCEPTION 'CHECK_FAIL 3: after archive %', live_names;
   END IF; passed := passed + 1;
 
-  -- 4. Restore it: back to its old spot, the rest move down. (The blank-titled look sits after the
-  --    numbered draft: looks with no number go last, from step 2.)
+  -- 4. Restore it: it is Look 3 again.
   UPDATE gp_looks SET archived = false WHERE id = cid||'-b';
-  SELECT string_agg(id || '=' || name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid AND NOT archived;
-  IF live_names <> cid||'-a=Look 1|'||cid||'-b=Look 2|'||cid||'-c=To Be Tried Look 3|'||cid||'-d=Look 4|'||cid||'-f=Look 5|'||cid||'-e=Look 6' THEN
-    RAISE EXCEPTION 'CHECK_FAIL 4: after restore %', live_names;
+  IF (SELECT name FROM gp_looks WHERE id = cid||'-b') <> 'Look 3' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 4: restored look is %', (SELECT name FROM gp_looks WHERE id = cid||'-b');
   END IF; passed := passed + 1;
 
   -- 5. Tick To Try: the words come off that look, and its number stays.
   UPDATE gp_looks SET to_try_at = now() WHERE id = cid||'-c';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'-c') <> 'Look 3' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'-c') <> 'Look 7' THEN
     RAISE EXCEPTION 'CHECK_FAIL 5: ticked look is %', (SELECT name FROM gp_looks WHERE id = cid||'-c');
   END IF; passed := passed + 1;
 
   -- 6. Untick: the words do NOT come back.
   UPDATE gp_looks SET to_try_at = null WHERE id = cid||'-c';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'-c') <> 'Look 3' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'-c') <> 'Look 7' THEN
     RAISE EXCEPTION 'CHECK_FAIL 6: unticked look is %', (SELECT name FROM gp_looks WHERE id = cid||'-c');
   END IF; passed := passed + 1;
 
-  -- 7. Delete Look 1 (builder Delete): no gap.
-  DELETE FROM gp_looks WHERE id = cid||'-a';
+  -- 7. Delete the top look (Look 10): it is gone, nothing else moves.
+  DELETE FROM gp_looks WHERE id = cid||'-e';
   SELECT string_agg(look_number::text, ',' ORDER BY look_number) INTO nums FROM gp_looks WHERE client_id = cid AND NOT archived;
-  IF nums <> '1,2,3,4,5' THEN RAISE EXCEPTION 'CHECK_FAIL 7: after delete %', nums; END IF;
+  IF nums <> '1,3,7,8,9' THEN RAISE EXCEPTION 'CHECK_FAIL 7: after delete %', nums; END IF;
   passed := passed + 1;
 
-  -- 8. A new look saved with any name goes on the end.
+  -- 8. A new look gets 11, never the retired 10.
   INSERT INTO gp_looks (id, client_id, name, raw, published) VALUES (cid||'-g', cid, 'Untitled Look', '{}', false);
-  IF (SELECT name FROM gp_looks WHERE id = cid||'-g') <> 'Look 6' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'-g') <> 'Look 11' THEN
     RAISE EXCEPTION 'CHECK_FAIL 8: new look is %', (SELECT name FROM gp_looks WHERE id = cid||'-g');
   END IF; passed := passed + 1;
 
-  -- 9. The GoodPix sync writes back GoodPix's old title (it writes raw = the GoodPix look, so
-  --    raw->>'name' = name): the name is put right, the order holds, no title is invented.
+  -- 9. The GoodPix sync writes back GoodPix's old title (raw->>'name' = name): the name is put
+  --    right (its title says to be tried, as before) and no number moves.
   UPDATE gp_looks SET name = 'ZZ Client To Be Tried Look 99', raw = '{"name":"ZZ Client To Be Tried Look 99"}'
    WHERE id = cid||'-d';
   SELECT string_agg(name, '|' ORDER BY look_number) INTO live_names FROM gp_looks WHERE client_id = cid AND NOT archived;
-  IF live_names <> 'Look 1|Look 2|To Be Tried Look 3|Look 4|Look 5|Look 6' THEN
+  IF live_names <> 'Look 1|Look 3|Look 7|Look 8|To Be Tried Look 9|Look 11' THEN
     RAISE EXCEPTION 'CHECK_FAIL 9: after a sync overwrite %', live_names;
   END IF; passed := passed + 1;
 
   -- 10. A drag (sort_order) renumbers nothing.
   UPDATE gp_looks SET sort_order = 0 WHERE id = cid||'-g';
-  IF (SELECT look_number FROM gp_looks WHERE id = cid||'-g') <> 6 THEN
+  IF (SELECT look_number FROM gp_looks WHERE id = cid||'-g') <> 11 THEN
     RAISE EXCEPTION 'CHECK_FAIL 10: a drag moved the number';
   END IF; passed := passed + 1;
 
-  -- 11. Undo: every old name back, switch off, and an archive no longer renumbers.
+  -- 11. Undo: every old name back, switch off, no numbers left, and an archive renames nothing.
   PERFORM * FROM look_numbering_undo(cid, 'check');
   IF (SELECT name FROM gp_looks WHERE id = cid||'-b') <> 'ZZ Client FW26 Look 3'
-     OR (SELECT looks_numbering_on FROM gp_clients WHERE id = cid) THEN
+     OR (SELECT looks_numbering_on FROM gp_clients WHERE id = cid)
+     OR EXISTS (SELECT 1 FROM gp_looks WHERE client_id = cid AND look_number IS NOT NULL) THEN
     RAISE EXCEPTION 'CHECK_FAIL 11: undo left % / on=%', (SELECT name FROM gp_looks WHERE id = cid||'-b'),
       (SELECT looks_numbering_on FROM gp_clients WHERE id = cid);
   END IF;
-  UPDATE gp_looks SET archived = true WHERE id = cid||'-e';
+  UPDATE gp_looks SET archived = true WHERE id = cid||'-c';
   IF (SELECT name FROM gp_looks WHERE id = cid||'-f') <> 'Look 8' THEN
     RAISE EXCEPTION 'CHECK_FAIL 11b: renamed after undo: %', (SELECT name FROM gp_looks WHERE id = cid||'-f');
   END IF; passed := passed + 1;
 
-  -- TITLES AND SEASON-BY-SEASON ORDER (migration 034). A second throwaway client whose numbers
-  -- restart per season, created out of order, like Margaux Ellery's.
+  -- TITLES AND SEASON-BY-SEASON NUMBERS. A second throwaway client whose numbers restart per
+  -- season, created out of order, like Margaux Ellery's: no number is unique, so fresh ones.
   INSERT INTO gp_clients (id, name, raw) VALUES (cid||'2', 'Zelda Quill', '{}'::jsonb);
   INSERT INTO gp_looks (id, client_id, name, raw, published, created_at) VALUES
     (cid||'2-a', cid||'2', 'Zelda Quill SS25 Look 2',  '{}', true, now() - interval '9 days'),
@@ -127,35 +129,35 @@ BEGIN
       (SELECT look_number FROM gp_looks WHERE id = cid||'2-b'), (SELECT look_number FROM gp_looks WHERE id = cid||'2-e');
   END IF; passed := passed + 1;
 
-  -- 13. A kept title moves with its look when an earlier look goes.
+  -- 13. Archiving an earlier look moves nothing, titles included.
   UPDATE gp_looks SET archived = true WHERE id = cid||'2-b';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'2-g') <> 'Look 6 Aspen Day' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-g') <> 'Look 7 Aspen Day' THEN
     RAISE EXCEPTION 'CHECK_FAIL 13: titled look is %', (SELECT name FROM gp_looks WHERE id = cid||'2-g');
   END IF; passed := passed + 1;
 
   -- 14. A stylist types a title (builder Save Look): either shape works, the number is ours.
   UPDATE gp_looks SET name = 'Bali Dinner' WHERE id = cid||'2-a';
   UPDATE gp_looks SET name = 'Look 99 Hamptons Swim' WHERE id = cid||'2-c';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1 Bali Dinner'
-     OR (SELECT name FROM gp_looks WHERE id = cid||'2-c') <> 'Look 2 Hamptons Swim' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 2 Bali Dinner'
+     OR (SELECT name FROM gp_looks WHERE id = cid||'2-c') <> 'Look 3 Hamptons Swim' THEN
     RAISE EXCEPTION 'CHECK_FAIL 14: typed titles gave % / %',
       (SELECT name FROM gp_looks WHERE id = cid||'2-a'), (SELECT name FROM gp_looks WHERE id = cid||'2-c');
   END IF; passed := passed + 1;
 
   -- 15. GoodPix writing back its own title does not touch a stylist's title. Typing a bare
-  --     "Look 1" clears it.
+  --     "Look 1" clears the title and still does not change the number.
   UPDATE gp_looks SET name = 'Zelda Quill SS25 Look 2', raw = '{"name":"Zelda Quill SS25 Look 2"}' WHERE id = cid||'2-a';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1 Bali Dinner' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 2 Bali Dinner' THEN
     RAISE EXCEPTION 'CHECK_FAIL 15: sync overwrite left %', (SELECT name FROM gp_looks WHERE id = cid||'2-a');
   END IF;
   UPDATE gp_looks SET name = 'Look 1' WHERE id = cid||'2-a';
-  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 1' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-a') <> 'Look 2' THEN
     RAISE EXCEPTION 'CHECK_FAIL 15b: clearing the title left %', (SELECT name FROM gp_looks WHERE id = cid||'2-a');
   END IF; passed := passed + 1;
 
-  -- 16. A new look saved as "Paris Lunch" goes on the end with its title.
+  -- 16. A new look saved as "Paris Lunch" gets the next number with its title.
   INSERT INTO gp_looks (id, client_id, name, raw, published) VALUES (cid||'2-h', cid||'2', 'Paris Lunch', '{}', false);
-  IF (SELECT name FROM gp_looks WHERE id = cid||'2-h') <> 'Look 7 Paris Lunch' THEN
+  IF (SELECT name FROM gp_looks WHERE id = cid||'2-h') <> 'Look 8 Paris Lunch' THEN
     RAISE EXCEPTION 'CHECK_FAIL 16: new titled look is %', (SELECT name FROM gp_looks WHERE id = cid||'2-h');
   END IF; passed := passed + 1;
 
