@@ -1,3 +1,5 @@
+import { CategoryOptions } from '@/components/common/CategoryOptions'
+import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
@@ -7,7 +9,6 @@ import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/s
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
-import { CATEGORY_LABELS } from '@/lib/categorize'
 import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
@@ -58,6 +59,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
    */
   onOpenLook?: (lookId: string) => void
 }) {
+  const usedCategories = useUsedCategories()
   const { items, tagNameById, loading, error, refetch, patchItems } = useClosetItems(clientId)
   // HER CATEGORY MAP (ADR-0113 nesting + ADR-0163 same-as). This screen resolved categories with
   // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
@@ -604,8 +606,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>Set category…</option>
-                {Object.entries(CATEGORY_LABELS).filter(([s]) => s !== 'other').map(([slug, label]) => <option key={slug} value={slug}>{label}</option>)}
-                {customCats.length > 0 && <optgroup label="Custom">{customCats.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}</optgroup>}
+                <CategoryOptions custom={customCats} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {/* ADD an "Also in" category (keeps the primary; item shows under both) */}
@@ -623,8 +624,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>＋ Also add to…</option>
-                {Object.entries(CATEGORY_LABELS).filter(([s]) => s !== 'other').map(([slug, label]) => <option key={slug} value={slug}>{label}</option>)}
-                {customCats.length > 0 && <optgroup label="Custom">{customCats.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}</optgroup>}
+                <CategoryOptions custom={customCats} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

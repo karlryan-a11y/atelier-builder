@@ -1,7 +1,9 @@
+import { CategoryOptions } from '@/components/common/CategoryOptions'
+import { splitCategoryChoices } from '@/lib/categoryChoices'
+import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { useState, useRef } from 'react'
 import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
-import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { colorsOf } from '@/lib/colorFamily'
 import { ColorSetField } from '@/components/common/ColorSetField'
@@ -54,6 +56,7 @@ interface EditItemDialogProps {
 }
 
 export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
+  const usedCategories = useUsedCategories()
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
   const clientOwns = (f: string) => (clientEditedFields ?? []).includes(f)
   const who = clientFirst || 'The client'
@@ -82,9 +85,10 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
   // Offer every fixed category + this client's customs, minus the current primary and ones already added.
+  const split = splitCategoryChoices(customCategories, usedCategories)
   const alsoInOptions: { slug: string; label: string }[] = [
-    ...Object.entries(CATEGORY_LABELS).filter(([s]) => s !== 'other').map(([slug, label]) => ({ slug, label })),
-    ...customCategories,
+    ...split.mine,
+    ...split.more,
   ].filter((o, i, arr) => arr.findIndex((x) => x.slug === o.slug) === i)
     .filter((o) => o.slug !== primarySlug && !alsoIn.includes(o.slug))
 
@@ -215,18 +219,8 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
               >
                 <option value="">Auto — detect from name</option>
-                {Object.entries(CATEGORY_LABELS)
-                  .filter(([slug]) => slug !== 'other')
-                  .map(([slug, label]) => (
-                    <option key={slug} value={slug}>{label}</option>
-                  ))}
-                {customCategories.length > 0 && (
-                  <optgroup label="Custom">
-                    {customCategories.map((c) => (
-                      <option key={c.slug} value={c.slug}>{c.label}</option>
-                    ))}
-                  </optgroup>
-                )}
+                {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
+                <CategoryOptions custom={customCategories} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
             )}

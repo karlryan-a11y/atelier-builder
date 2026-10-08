@@ -1,3 +1,6 @@
+import { CategoryOptions } from '@/components/common/CategoryOptions'
+import { splitCategoryChoices } from '@/lib/categoryChoices'
+import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -62,6 +65,7 @@ interface Props {
 }
 
 export function AddItemDialog({ clientId, clientName, customCategories = [], residenceSlugs, onClose, onAdded }: Props) {
+  const usedCategories = useUsedCategories()
   const fileRef = useRef<HTMLInputElement>(null)
   const [processing, setProcessing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -93,9 +97,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
   // Every fixed category + this client's customs, minus the current primary and ones already added.
+  const split = splitCategoryChoices(customCategories, usedCategories)
   const alsoInOptions: { slug: string; label: string }[] = [
-    ...FIXED.map(([slug, label]) => ({ slug, label })),
-    ...customCategories,
+    ...split.mine,
+    ...split.more,
   ].filter((o, i, arr) => arr.findIndex(x => x.slug === o.slug) === i)
     .filter(o => o.slug !== primarySlug && !alsoIn.includes(o.slug))
 
@@ -241,8 +246,8 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
               <select value={category} onChange={e => { if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') } else setCategory(e.target.value) }}
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
-                {FIXED.map(([slug, label]) => <option key={slug} value={slug}>{label}</option>)}
-                {customCategories.length > 0 && <optgroup label="Custom">{customCategories.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}</optgroup>}
+                {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
+                <CategoryOptions custom={customCategories} used={usedCategories} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>
               </select>
