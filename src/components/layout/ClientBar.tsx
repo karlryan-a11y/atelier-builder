@@ -14,8 +14,10 @@ const TIERS = ['A-la-carte', 'Signature', 'White Glove', 'Elève']
  * client here updates every panel at once. Also creates new clients (the only create
  * entry point now that the per-panel selectors are gone).
  */
-export function ClientBar() {
-  const { clients, refetch } = useClients()
+export function ClientBar({ styleOnly = false }: { styleOnly?: boolean } = {}) {
+  const { clients: all, refetch } = useClients()
+  // Style lists only clients with a lookbook; a billing-only record has nothing to style.
+  const clients = useMemo(() => (styleOnly ? all.filter((c) => c.hasLookbook) : all), [all, styleOnly])
   const { activeClient, setActiveClient } = useClientStore()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')

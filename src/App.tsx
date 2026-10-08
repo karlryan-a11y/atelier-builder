@@ -173,7 +173,7 @@ function App() {
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Top bar: the ONE client selector (always visible) + the Style sub-tabs. */}
             <div className="flex items-center gap-3 px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
-              <ClientBar />
+              <ClientBar styleOnly />
               <div className="w-px h-5 bg-[#E8E4DF]" />
               {(['canvas', 'categorize'] as const).map((t) => (
                 <button

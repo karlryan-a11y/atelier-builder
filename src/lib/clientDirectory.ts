@@ -20,16 +20,27 @@ export interface ClientEntry {
   note: string | null
   /** "Most looks" | "Most pieces" | "Most recent" | "Kept separate" | null */
   badge: string | null
+  /**
+   * False for a record with no lookbook and nothing in it: a billing record from QuickBooks
+   * (Keil Cadieux's holds her hours and sizes) rather than someone to style. The Style picker
+   * leaves these out (Cynthia, 2026-10-08); Shop and Digitize still list them. Every client
+   * made with "New client" gets a lookbook at once, so a new client is never hidden.
+   */
+  hasLookbook: boolean
 }
 
 export async function fetchClientDirectory(): Promise<ClientEntry[]> {
   const { data, error } = await supabase.rpc('client_directory')
   if (!error && Array.isArray(data)) {
-    return (data as ClientEntry[]).map((c) => ({ id: c.id, name: c.name, note: c.note ?? null, badge: c.badge ?? null }))
+    type Row = ClientEntry & { microsite: string | null; pieces: number | null; looks: number | null; capsules: number | null }
+    return (data as Row[]).map((c) => ({
+      id: c.id, name: c.name, note: c.note ?? null, badge: c.badge ?? null,
+      hasLookbook: !!c.microsite || (c.pieces ?? 0) + (c.looks ?? 0) + (c.capsules ?? 0) > 0,
+    }))
   }
   // A picker that cannot open blocks every screen behind it, so fall back to the plain
   // list (no notes) and say so loudly rather than rendering nothing.
   console.error('[clientDirectory] client_directory() failed; picker shows names without duplicate notes', error)
   const { data: plain } = await supabase.from('clients').select('id, name').order('name')
-  return (plain ?? []).map((c) => ({ id: c.id, name: c.name, note: null, badge: null }))
+  return (plain ?? []).map((c) => ({ id: c.id, name: c.name, note: null, badge: null, hasLookbook: true }))
 }
