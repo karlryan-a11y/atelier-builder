@@ -184,6 +184,19 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   // Report category counts up to the rail (present categories + counts for the filter chips).
   // '__total__' carries the true number of DISTINCT items (not the sum of category counts, which
   // over-counts multi-category pieces) so "All items" can show an accurate total.
+  //
+  // WITH A HOME PICKED, every garment row counts THAT home (review 2026-10-08): the Denim row reads
+  // Creekside's denim, the same 3 the grid shows, not the whole closet's 7. Home rows always count
+  // the whole closet, so she can still see and switch to the other home.
+  const homesPicked = useMemo(
+    () => [...(filterCategories ?? [])].filter((c) => residenceSlugs?.has(c)),
+    [filterCategories, residenceSlugs],
+  )
+  const railCats = useCallback((i: ClosetItem) => {
+    const cats = categoriesByItem.get(i.id) ?? []
+    if (homesPicked.length === 0 || cats.some((c) => homesPicked.includes(c))) return cats
+    return cats.filter((c) => residenceSlugs?.has(c))
+  }, [categoriesByItem, homesPicked, residenceSlugs])
   useEffect(() => {
     if (!onCategoryCounts) return
     const counts = new Map<string, number>()
@@ -191,11 +204,11 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     for (const i of items) {
       if (i.is_deleted) continue
       total++
-      for (const c of categoriesByItem.get(i.id) ?? []) counts.set(c, (counts.get(c) ?? 0) + 1)
+      for (const c of railCats(i)) counts.set(c, (counts.get(c) ?? 0) + 1)
     }
     counts.set('__total__', total)
     onCategoryCounts(counts)
-  }, [categoriesByItem, items, onCategoryCounts])
+  }, [railCats, items, onCategoryCounts])
 
   /**
    * ONE MATCHER, TEAM AUDIENCE. ADR-0151. This used to read four fields with a substring test of
@@ -253,10 +266,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   // the numbers already printed beside each row.
   const railCoverage = useMemo(
     () => coverageByCategory(
-      items.filter((i) => !i.is_deleted).map((i) => ({ id: i.id, categories: categoriesByItem.get(i.id) ?? [] })),
+      items.filter((i) => !i.is_deleted).map((i) => ({ id: i.id, categories: railCats(i) })),
       lookUsage,
     ),
-    [items, categoriesByItem, lookUsage],
+    [items, railCats, lookUsage],
   )
   useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
   const visible = useMemo(

@@ -101,6 +101,8 @@ export function useItemLookUsage(clientId: string | null) {
       if (error) return error.message
       if (!written?.length) return 'not saved'
     }
+    // Every other copy of this map (Canvas "Still to style", its styled marks) re-reads too.
+    useStyleRefreshStore.getState().bumpCategorize()
     setByItem((prev) => {
       const m = new Map(prev)
       const left = (m.get(itemId) ?? []).filter((l) => l.id !== lookId)

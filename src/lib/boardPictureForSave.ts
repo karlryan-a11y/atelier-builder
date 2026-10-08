@@ -23,7 +23,10 @@ export function boardPictureForSave(): BoardPicture {
   // A hidden piece is off the picture (ADR-0146), so its photo cannot spoil it.
   const hidden = new Set(useCanvasStore.getState().state.nodes
     .filter((n) => n.type === 'closet_item' && (n as { hidden?: boolean }).hidden).map((n) => n.id))
-  const unusable = unusablePhotoNodeIds().filter((id) => !hidden.has(id))
+  // ONLY pieces still on this board. The unusable list outlives a piece: removed, or left behind on
+  // an earlier board this session, it kept blocking every later Save until a reload (review 10/8).
+  const onBoard = new Set(useCanvasStore.getState().state.nodes.map((n) => n.id))
+  const unusable = unusablePhotoNodeIds().filter((id) => onBoard.has(id) && !hidden.has(id))
   if (unusable.length > 0) {
     const n = unusable.length
     reportBuilderError('save_blocked_unusable_photo', `${n} piece(s) with no usable photo`, { nodeIds: unusable })

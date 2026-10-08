@@ -17,6 +17,9 @@ export function useCanvasImages(imageUrls: Map<string, string | null>) {
   const loadingUrl = useRef(new Map<string, string>())
 
   useEffect(() => {
+    // Forget pieces that left the board, so a removed piece's "Photo unavailable" is gone with it.
+    for (const id of [...loadedUrl.current.keys()]) if (!imageUrls.has(id)) loadedUrl.current.delete(id)
+    setUnusable((prev) => { const n = new Set([...prev].filter((id) => imageUrls.has(id))); return n.size === prev.size ? prev : n })
     for (const [id, url] of imageUrls) {
       if (!url) continue
       if (loadedUrl.current.get(id) === url || loadingUrl.current.get(id) === url) continue

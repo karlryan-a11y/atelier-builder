@@ -317,7 +317,12 @@ export function LookCanvas() {
   // travel together. We snapshot every selected node's start position, move the others'
   // Konva nodes live by the same delta during the drag, then commit them in ONE history step.
   const dragGroup = useRef<{ id: string; ox: number; oy: number; others: { id: string; sx: number; sy: number }[] } | null>(null)
+  // The other pieces in a group move commit with the leader, in ONE history step. Konva starts a
+  // drag on every selected piece, so their own start/end must not open or commit a second group
+  // (review, 2026-10-08: Cmd+Z after moving 5 pieces put back only one).
+  const justCommitted = useRef<Set<string>>(new Set())
   const handleGroupDragStart = useCallback((id: string) => {
+    if (dragGroup.current && dragGroup.current.others.some((o) => o.id === id)) return
     const { selectedNodeIds: ids, state: s } = useCanvasStore.getState()
     const dragged = s.nodes.find((n) => n.id === id)
     if (!dragged || !ids.includes(id) || ids.length < 2) { dragGroup.current = null; return }
@@ -343,6 +348,12 @@ export function LookCanvas() {
       const dx = x - g.ox, dy = y - g.oy
       s.updateNodes([{ id, updates: { x, y } }, ...g.others.map((o) => ({ id: o.id, updates: { x: o.sx + dx, y: o.sy + dy } }))])
       dragGroup.current = null
+      justCommitted.current = new Set(g.others.map((o) => o.id))
+      setTimeout(() => { justCommitted.current = new Set() }, 0)
+    } else if (g && g.others.some((o) => o.id === id)) {
+      // A follower: the leader commits it.
+    } else if (justCommitted.current.has(id)) {
+      // A follower whose leader already committed it.
     } else {
       s.updateNode(id, { x, y })
     }
@@ -811,6 +822,22 @@ export function LookCanvas() {
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       if (!pressBeganOnEmptyBoard(e)) return
       if (e.evt.button !== 0) return
+      // EMPTY SPACE INSIDE THE SELECTION BOX MOVES THE SELECTION (Cynthia, 2026-10-08, Holly
+      // McClellan's Westlake Village board: "I can't move these"). With everything selected she
+      // grabbed the gap between rows, and that started a new selection box. A press that lands on a
+      // piece never gets here (pressBeganOnEmptyBoard routes it to that piece), so pieces inside the
+      // box stay clickable; shift/cmd presses still draw a box to add to the selection.
+      const tr = groupTrRef.current
+      const stage = e.target.getStage()
+      const p = stage?.getPointerPosition()
+      if (tr && p && tr.nodes().length > 1 && !e.evt.shiftKey && !e.evt.metaKey && !e.evt.ctrlKey) {
+        const box = tr.getClientRect()
+        if (p.x >= box.x && p.x <= box.x + box.width && p.y >= box.y && p.y <= box.y + box.height) {
+          pressedEmpty.current = false
+          tr.nodes()[0].startDrag()
+          return
+        }
+      }
       beginMarquee(e.evt.clientX, e.evt.clientY)
     },
     [pressBeganOnEmptyBoard, beginMarquee]
@@ -1155,14 +1182,13 @@ export function LookCanvas() {
               }
               return null
             })}
-            {/* One box that resizes/rotates the whole selection together (2+ nodes). Its whole
-                inside is a handle (shouldOverdrawWholeArea): Cynthia, 2026-10-08, Holly McClellan's
-                Westlake Village board, "I can't move these" - with everything selected, a press in
-                the space between pieces started a new selection box instead of moving them. Now
-                anywhere inside the box moves the selection; outside it still starts a new box. */}
+            {/* One box that resizes/rotates the whole selection together (2+ nodes). A press on
+                empty space inside it moves the selection (handleStageMouseDown). NOT
+                shouldOverdrawWholeArea: that laid an invisible sheet over the pieces, so a
+                shift-click, a double-click on a label or a click on a piece inside the box did
+                nothing (review, 2026-10-08). */}
             <Transformer
               ref={groupTrRef}
-              shouldOverdrawWholeArea
               rotateEnabled
               keepRatio
               enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
