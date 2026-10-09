@@ -278,7 +278,7 @@ export function ChatPanel() {
   // Edit), this UPDATES that same gp_boards row instead of inserting a new one — mirrors how
   // handleSave above passes currentLookId through to saveLook so re-saving a Look doesn't
   // duplicate it.
-  const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string; teamNote: string }) => {
+  const handleSaveAsCapsule = useCallback(async (data: { name: string; description: string; teamNote: string; eventStart: string | null; eventEnd: string | null }) => {
     if (!activeClient) return
     setSavingCapsule(true)
     try {
@@ -323,6 +323,12 @@ export function ChatPanel() {
     if (saved?.data?.id) {
       noteSavedCapsuleAs(saved.data.id)
       markClean()
+      // The trip's dates, on the capsule just saved (migration 041). Never fatal: the capsule IS saved.
+      {
+        const { error: dErr } = await supabase.from('gp_boards')
+          .update({ event_start: data.eventStart, event_end: data.eventStart ? data.eventEnd : null }).eq('id', saved.data.id)
+        if (dErr) { console.error('capsule dates not saved (capsule saved):', dErr.message); alert("The capsule saved, but its dates didn't. Add them on the capsule card in Categorize.") }
+      }
       // The team note, in the team-only table (ADR-0166). Written when it changed, so a rebuild
       // carries the original's note onto the new capsule. Never fatal: the capsule IS saved.
       if (changedText(data.teamNote, saved.data.id === capsuleTeamNoteFor ? capsuleTeamNote : null) !== undefined
@@ -898,6 +904,8 @@ export function ChatPanel() {
           initialName={currentCapsule?.name ?? replacedCapsule?.name ?? ''}
           initialDescription={currentCapsule?.description ?? replacedCapsule?.description ?? ''}
           initialTeamNote={capsuleTeamNote}
+          initialStart={currentCapsule?.event_start ?? replacedCapsule?.event_start ?? null}
+          initialEnd={currentCapsule?.event_end ?? replacedCapsule?.event_end ?? null}
           onSave={handleSaveAsCapsule}
           onClose={() => setShowSaveAsCapsuleDialog(false)}
         />

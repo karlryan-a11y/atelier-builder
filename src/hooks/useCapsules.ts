@@ -17,6 +17,9 @@ export interface CapsuleRow {
   raw: Record<string, unknown>
   source: string
   created_at: string
+  /** The trip's dates (migration 041), set in Save as Capsule or on the Categorize card. */
+  event_start?: string | null
+  event_end?: string | null
 }
 
 function generateBoardId(): string {
@@ -35,7 +38,7 @@ export function useCapsules(clientId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('gp_boards')
-        .select('id, client_id, name, description, closet_item_ids, raw, created_at')
+        .select('id, client_id, name, description, closet_item_ids, raw, created_at, event_start, event_end')
         .eq('client_id', clientId!)
         .order('created_at', { ascending: false })
       // The old hook kept the previous list on a failed read and said nothing; throwing keeps

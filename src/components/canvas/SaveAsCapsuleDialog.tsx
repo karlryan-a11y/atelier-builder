@@ -13,7 +13,10 @@ interface SaveAsCapsuleDialogProps {
   /** The capsule's team note, read from the team-only table (ADR-0166). Arrives a moment after
    *  the box opens, so it fills the field unless the stylist has already typed in it. */
   initialTeamNote?: string
-  onSave: (data: { name: string; description: string; teamNote: string }) => void
+  /** The trip's dates (migration 041; Karl 10/9: set them when the capsule is made). */
+  initialStart?: string | null
+  initialEnd?: string | null
+  onSave: (data: { name: string; description: string; teamNote: string; eventStart: string | null; eventEnd: string | null }) => void
   onClose: () => void
 }
 
@@ -23,17 +26,19 @@ interface SaveAsCapsuleDialogProps {
  * several already-saved looks into a grid), this captures the board itself as the
  * capsule image + its closet items as the packing list. No look selection.
  */
-export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName = '', initialDescription = '', initialTeamNote = '', onSave, onClose }: SaveAsCapsuleDialogProps) {
+export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName = '', initialDescription = '', initialTeamNote = '', initialStart = null, initialEnd = null, onSave, onClose }: SaveAsCapsuleDialogProps) {
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
   const [teamNote, setTeamNote] = useState(initialTeamNote)
+  const [start, setStart] = useState(initialStart ?? '')
+  const [end, setEnd] = useState(initialEnd ?? '')
   const typedNote = useRef(false)
   useEffect(() => { if (!typedNote.current) setTeamNote(initialTeamNote) }, [initialTeamNote])
 
   const handleSave = useCallback(() => {
     if (!name.trim()) return
-    onSave({ name: name.trim(), description: description.trim(), teamNote: teamNote.trim() })
-  }, [name, description, teamNote, onSave])
+    onSave({ name: name.trim(), description: description.trim(), teamNote: teamNote.trim(), eventStart: start || null, eventEnd: start && end && end >= start ? end : null })
+  }, [name, description, teamNote, start, end, onSave])
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
@@ -86,6 +91,21 @@ export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName 
               placeholder="Notes for the client..."
               className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none"
             />
+          </div>
+
+          {/* Trip dates (migration 041). Optional; they show beneath the name on her lookbook,
+              under Coming up on her home page, and on the team's Trips list. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Leaves (optional)</label>
+              <input type="date" data-capsule-start value={start} onChange={e => setStart(e.target.value)}
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Back</label>
+              <input type="date" data-capsule-end value={end} min={start || undefined} onChange={e => setEnd(e.target.value)}
+                className="w-full border border-[#E8E4DF] rounded-sm px-3 py-2 text-sm text-[#1A1A1A] focus:border-[#888] focus:outline-none" />
+            </div>
           </div>
 
           {/* ADR-0166. The team's note on this capsule, in the team-only table. */}

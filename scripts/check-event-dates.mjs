@@ -14,5 +14,9 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const src = readFileSync('src/lib/eventDates.ts', 'utf8')
 need(src.includes("`${one}–${b.day}`") && src.includes("`${one} – ${MONTHS[b.m - 1]} ${b.day}`"), 'format: Oct 14–18 / Oct 30 – Nov 2')
 void MONTHS
+const dlg = readFileSync('src/components/canvas/SaveAsCapsuleDialog.tsx', 'utf8')
+const chat = readFileSync('src/components/layout/ChatPanel.tsx', 'utf8')
+need(/data-capsule-start/.test(dlg) && /data-capsule-end/.test(dlg), 'Save as Capsule needs the trip dates')
+need(/update\(\{ event_start: data\.eventStart/.test(chat), 'Save as Capsule must save the dates on the capsule it saved')
 if (fails.length) { console.error('check-event-dates FAILED:\n  ' + fails.join('\n  ')); process.exit(1) }
 console.log('check-event-dates: ok')
