@@ -3,7 +3,7 @@ import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
-import { useItemHomes } from '@/hooks/useItemHomes'
+import { useItemHomes, NO_HOME } from '@/hooks/useItemHomes'
 import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/styledCoverage'
@@ -173,7 +173,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   // the rail counts + filter so an item in Tops AND 49ers shows under both.
   // Her homes, counted the way her Collection page counts them (useItemHomes, Karl 10/8): a piece
   // tagged with any spelling of the home, or in a published look filed under it.
-  const { homes, withHomes } = useItemHomes(clientId, items)
+  const { homes, withHomes, homeLine } = useItemHomes(clientId, items)
   const categoriesByItem = useMemo(() => {
     const m = new Map<string, string[]>()
     for (const i of items) {
@@ -193,13 +193,13 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
   // Creekside's denim, the same 3 the grid shows, not the whole closet's 7. Home rows always count
   // the whole closet, so she can still see and switch to the other home.
   const homesPicked = useMemo(
-    () => [...(filterCategories ?? [])].filter((c) => homes.has(c)),
+    () => [...(filterCategories ?? [])].filter((c) => homes.has(c) || c === NO_HOME),
     [filterCategories, homes],
   )
   const railCats = useCallback((i: ClosetItem) => {
     const cats = categoriesByItem.get(i.id) ?? []
     if (homesPicked.length === 0 || cats.some((c) => homesPicked.includes(c))) return cats
-    return cats.filter((c) => homes.has(c))
+    return cats.filter((c) => homes.has(c) || c === NO_HOME)
   }, [categoriesByItem, homesPicked, homes])
   useEffect(() => {
     if (!onCategoryCounts) return
@@ -248,8 +248,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     // all 1,234 pieces). Within homes and within garment types a tap adds (either one); across the
     // two it narrows: Creekside + Denim is the denim at Creekside.
     const picked = [...(filterCategories ?? [])]
-    const homesOn = picked.filter((c) => homes.has(c))
-    const typesOn = picked.filter((c) => !homes.has(c))
+    const homesOn = picked.filter((c) => homes.has(c) || c === NO_HOME)
+    const typesOn = picked.filter((c) => !homes.has(c) && c !== NO_HOME)
     const inScope = (i: ClosetItem) => {
       const cats = categoriesByItem.get(i.id) ?? []
       return (homesOn.length === 0 || cats.some((c) => homesOn.includes(c)))
@@ -744,6 +744,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
                       </p>
                     )
                   })()}
+                  {/* Which home it is at, or "No home yet" (Karl 10/9). Only for a client with homes. */}
+                  {homeLine(item.id) && (
+                    <p data-piece-home className={`text-[10px] tracking-[0.12em] uppercase mt-1 truncate ${homeLine(item.id) === 'No home yet' ? 'text-[#9a6b3f]' : 'text-[#888]'}`}>{homeLine(item.id)}</p>
+                  )}
                   {(() => {
                     const looks = lookUsage.get(item.id) ?? []
                     if (looks.length === 0) return <p className="text-[10px] text-[#c4c0ba] mt-1.5">Not yet styled</p>

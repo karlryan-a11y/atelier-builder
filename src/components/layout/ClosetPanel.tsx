@@ -15,7 +15,7 @@ import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 import { useClientCategories } from '@/hooks/useClientCategories'
-import { useItemHomes } from '@/hooks/useItemHomes'
+import { useItemHomes, NO_HOME } from '@/hooks/useItemHomes'
 import { updateClosetItem } from '@/lib/teamNotes'
 
 /** Remembered per stylist: whoever wants the chips opened out wants it on every client. */
@@ -33,12 +33,15 @@ const DraggableItem = memo(function DraggableItem({
   item: piece,
   index,
   styled,
+  home,
   onAdd,
   onEdit,
   onZoom,
 }: {
   item: ClosetItem
   index: number
+  /** Which home it is at, or "No home yet"; '' for a client without homes (Karl 10/9). A primitive. */
+  home: string
   /** Where this piece stands: styled / draft / none. A PRIMITIVE, see the note above. */
   styled: PieceStyledState
   onAdd: (item: ClosetItem) => void
@@ -145,6 +148,7 @@ const DraggableItem = memo(function DraggableItem({
         {item.brand}
         {item.color ? <span className="text-text-muted/60">{item.brand ? ' · ' : ''}{item.color}</span> : null}
       </p>
+      {home && <p data-piece-home className={`text-[9px] tracking-[0.14em] uppercase truncate ${home === 'No home yet' ? 'text-[#9a6b3f]' : 'text-text-muted'}`}>{home}</p>}
     </div>
   )
 })
@@ -347,7 +351,7 @@ export function ClosetPanel() {
   // could exist here and match almost nothing. Margaux's "New-York-City" read 50 pieces in
   // Collection and 4 on the canvas, because 46 of them carry it as an "Also in".
   // Her homes, counted the way her Collection page counts them (useItemHomes, Karl 10/8).
-  const { homes, withHomes } = useItemHomes(activeClient?.id ?? null, items)
+  const { homes, withHomes, homeLine } = useItemHomes(activeClient?.id ?? null, items)
   const categoriesByItem = useMemo(() => {
     const m = new Map<string, string[]>()
     for (const i of items) {
@@ -380,11 +384,11 @@ export function ClosetPanel() {
     const out: { slug: string; label: string; count: number; home?: boolean }[] = []
     for (const [slug, count] of categoryCounts) {
       if (count <= 0) continue
-      const home = homes.get(slug)
+      const home = slug === NO_HOME ? 'No home yet' : homes.get(slug)
       out.push({ slug, label: home ?? labelForCategory(slug), count, home: !!home })
     }
     // HER HOMES FIRST (Cynthia, 2026-10-08), by the name the stylist gave them, then A to Z.
-    return out.sort((a, b) => Number(!!b.home) - Number(!!a.home) || a.label.localeCompare(b.label))
+    return out.sort((a, b) => Number(!!b.home) - Number(!!a.home) || Number(a.slug === NO_HOME) - Number(b.slug === NO_HOME) || a.label.localeCompare(b.label))
   }, [categoryCounts, homes])
 
   // Does the collapsed block hide anything? Re-measured when her categories change or the panel
@@ -429,8 +433,9 @@ export function ClosetPanel() {
     // A home narrows, it does not add (Cynthia, 2026-10-08): Creekside + Denim is the denim at
     // Creekside. Within homes, and within garment types, chips still add.
     const picked = [...activeCategories]
-    const homesOn = picked.filter((c) => homes.has(c))
-    const typesOn = picked.filter((c) => !homes.has(c))
+    const isHome = (c: string) => homes.has(c) || c === NO_HOME
+    const homesOn = picked.filter(isHome)
+    const typesOn = picked.filter((c) => !isHome(c))
     const inChips = (i: ClosetItem) => {
       const cats = categoriesByItem.get(i.id) ?? []
       return (homesOn.length === 0 || cats.some((c) => homesOn.includes(c)))
@@ -631,6 +636,7 @@ export function ClosetPanel() {
                       item={item}
                       index={idx}
                       styled={styledStateOf(lookUsage.get(item.id))}
+                      home={homeLine(item.id)}
                       onAdd={addPiece}
                       onEdit={setEditingItem}
                       onZoom={setZoomIndex}

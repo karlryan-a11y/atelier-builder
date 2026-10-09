@@ -11,6 +11,9 @@ import { homesByItem, residenceResolverFor, MIN_RESIDENCES } from '@/lib/residen
  * her home slugs added, and a free-text spelling of a home ("creekside closet") taken out so it
  * does not show as a garment category of its own.
  */
+/** The filter for pieces with no home yet (team only): a client with homes, a piece filed under none. */
+export const NO_HOME = '__no_home__'
+
 export function useItemHomes(
   clientId: string | null,
   items: { id: string; category?: string | null; custom_categories?: string[] | null }[],
@@ -27,8 +30,14 @@ export function useItemHomes(
     if (homes.size === 0) return cats
     const kept = cats.filter((c) => !(slugOf(c) && !homes.has(c)))
     const at = byItem.get(itemId)
-    if (!at) return kept.filter((c) => !homes.has(c))
+    if (!at) return [...kept.filter((c) => !homes.has(c)), NO_HOME]
     return [...new Set([...kept.filter((c) => !homes.has(c)), ...at])]
   }, [homes, slugOf, byItem])
-  return { homes, homesByItem: byItem, withHomes }
+  /** "Creekside", "Creekside · Carlton Landing", "No home yet"; '' for a client without homes. */
+  const homeLine = useMemo(() => (itemId: string) => {
+    if (homes.size === 0) return ''
+    const at = byItem.get(itemId)
+    return at?.size ? [...at].map((s) => homes.get(s) ?? s).join(' · ') : 'No home yet'
+  }, [homes, byItem])
+  return { homes, homesByItem: byItem, withHomes, homeLine }
 }

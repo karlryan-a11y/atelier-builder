@@ -18,6 +18,7 @@ import { LookArrangeGrid } from './LookArrangeGrid'
 import { ResidencesTab } from './ResidencesTab'
 import { EventDatesDialog } from './EventDatesDialog'
 import { formatEventDates } from '@/lib/eventDates'
+import { NO_HOME } from '@/hooks/useItemHomes'
 import { NestingTab } from './NestingTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
@@ -922,6 +923,17 @@ export function CategorizePanel() {
                           onClick={() => toggleGarment(slug)}
                         />
                       ))}
+                      {/* Pieces filed under no home (Karl 10/9): pick them, then "+ Also add to" a home. */}
+                      {(garmentCounts.get(NO_HOME) ?? 0) > 0 && (
+                        <CategoryRow
+                          key={NO_HOME}
+                          label="No home yet"
+                          count={garmentCounts.get(NO_HOME) ?? 0}
+                          coverage={garmentCoverage.get(NO_HOME)}
+                          on={activeGarmentCats.has(NO_HOME)}
+                          onClick={() => toggleGarment(NO_HOME)}
+                        />
+                      )}
                     </div>
                   )
                 })()}
@@ -951,7 +963,7 @@ export function CategorizePanel() {
                   )
                 })}
                 {(() => {
-                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && !(showResidences && residenceSlugs.has(s)) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && s !== NO_HOME && !(showResidences && residenceSlugs.has(s)) && (garmentCounts.get(s) ?? 0) > 0).sort()
                   if (customSlugs.length === 0) return null
                   return (
                     <div className="mt-1">
