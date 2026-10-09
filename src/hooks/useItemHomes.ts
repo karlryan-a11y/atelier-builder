@@ -37,7 +37,8 @@ export function useItemHomes(
   const homeLine = useMemo(() => (itemId: string) => {
     if (homes.size === 0) return ''
     const at = byItem.get(itemId)
-    return at?.size ? [...at].map((s) => homes.get(s) ?? s).join(' · ') : 'No home yet'
+    // In her homes' own order, so a piece in two homes always reads the same way.
+    return at?.size ? [...homes.keys()].filter((s) => at.has(s)).map((s) => homes.get(s) ?? s).join(' · ') : 'No home yet'
   }, [homes, byItem])
   return { homes, homesByItem: byItem, withHomes, homeLine }
 }
