@@ -42,7 +42,7 @@ export async function loadLookCategories(
         .order('sort_order').order('label'),
       db.from('gp_looks')
         // thumbnail_url is never selected here: see lib/lookImage.ts.
-        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids, to_try_at, tried_at, tried_ok, tried_note')
+        .select('id, name, raw, published, archived, sort_order, source, closet_item_ids, to_try_at, tried_at, tried_ok, tried_note, event_start, event_end')
         .eq('client_id', clientId)
         // Transitioned looks live in the Transitions tab, not the normal Looks/Queue grid. (migration 014)
         .is('transitioned_at', null)
@@ -55,7 +55,7 @@ export async function loadLookCategories(
         .order('extracted_at', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true }),
       db.from('gp_boards')
-        .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids')
+        .select('id, name, raw, published, is_deleted, sort_order, closet_item_ids, event_start, event_end')
         .eq('client_id', clientId)
         // Match the client lookbook's ordering so "On lookbook" == what she sees. Mirrors
         // atelier-looks/src/lib/capsuleOrder.ts: never-arranged first, then newest, then a drag
@@ -121,6 +121,8 @@ export async function loadLookCategories(
         triedAt: (l.tried_at as string | null) ?? null,
         triedOk: (l.tried_ok as boolean | null) ?? null,
         triedNote: (l.tried_note as string | null) ?? null,
+        eventStart: (l.event_start as string | null) ?? null,
+        eventEnd: (l.event_end as string | null) ?? null,
       })),
       capsules: ((capsRes.data ?? []) as any[]).map((b) => ({
         id: b.id,
@@ -133,6 +135,8 @@ export async function loadLookCategories(
         canvasState: (b.raw?.canvas_state as LookCanvasState | undefined) ?? null,
         source: (b.raw?.source as string | undefined) ?? 'goodpix',
         closetItemIds: (b.closet_item_ids as string[] | null) ?? [],
+        eventStart: (b.event_start as string | null) ?? null,
+        eventEnd: (b.event_end as string | null) ?? null,
       })),
     },
   }

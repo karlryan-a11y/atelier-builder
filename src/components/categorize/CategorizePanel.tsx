@@ -16,6 +16,8 @@ import type { LookCanvasState } from '@/types/canvas'
 import { CollectionTab } from './CollectionTab'
 import { LookArrangeGrid } from './LookArrangeGrid'
 import { ResidencesTab } from './ResidencesTab'
+import { EventDatesDialog } from './EventDatesDialog'
+import { formatEventDates } from '@/lib/eventDates'
 import { NestingTab } from './NestingTab'
 import { ReviewTab } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
@@ -117,7 +119,7 @@ export function CategorizePanel() {
     loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
-    archiveLook, archiveCapsule, duplicateCapsule,
+    archiveLook, archiveCapsule, duplicateCapsule, setEventDates,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
@@ -555,6 +557,13 @@ export function CategorizePanel() {
   // "On lookbook" arrange grid so GoodPix looks are editable from wherever Paige finds them.
   const lookCardActions = (look: TaggableLook) => (
     <>
+      {/* Dates (migration 041, Karl 10/9): shown beside the name on her lookbook and on her home page. */}
+      <button
+        data-event-dates={look.id}
+        onClick={(e) => { e.stopPropagation(); setDatesFor({ kind: 'look', id: look.id, name: look.name, start: look.eventStart, end: look.eventEnd }) }}
+        className={`w-full py-1 text-[9px] tracking-[0.12em] uppercase transition-colors ${look.eventStart ? 'text-[#1A1A1A]' : 'text-[#888] hover:text-[#1A1A1A]'}`}
+        title="Set the date. It shows next to the name on her lookbook and on her home page while it is coming up."
+      >{look.eventStart ? formatEventDates(look.eventStart, look.eventEnd) : 'Add dates'}</button>
       <button
         onClick={(e) => { e.stopPropagation(); void openLookOnCanvas(look) }}
         disabled={openingLookId === look.id}
@@ -606,6 +615,7 @@ export function CategorizePanel() {
   // grid only, which is why a published capsule had no Edit and no capsule anywhere had Rename.
   // A third grid gets these for free.
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  const [datesFor, setDatesFor] = useState<{ kind: 'look' | 'capsule'; id: string; name: string; start: string | null; end: string | null } | null>(null)
   async function handleDuplicateCapsule(capsule: TaggableCapsule) {
     setDuplicatingId(capsule.id)
     try {
@@ -619,6 +629,13 @@ export function CategorizePanel() {
 
   const capsuleCardActions = (capsule: TaggableCapsule) => (
     <>
+      {/* Dates (migration 041, Karl 10/9): shown beside the name on her lookbook and on her home page. */}
+      <button
+        data-event-dates={capsule.id}
+        onClick={(e) => { e.stopPropagation(); setDatesFor({ kind: 'capsule', id: capsule.id, name: capsule.name, start: capsule.eventStart, end: capsule.eventEnd }) }}
+        className={`w-full py-1 text-[9px] tracking-[0.12em] uppercase transition-colors ${capsule.eventStart ? 'text-[#1A1A1A]' : 'text-[#888] hover:text-[#1A1A1A]'}`}
+        title="Set the date. It shows next to the name on her lookbook and on her home page while it is coming up."
+      >{capsule.eventStart ? formatEventDates(capsule.eventStart, capsule.eventEnd) : 'Add dates'}</button>
       {/* Edit vs Rebuild, the same split lookCardActions makes. A capsule with a saved canvas
           reopens in place. A GoodPix capsule cannot — it is a flat image — so it is rebuilt
           from its pieces onto a new board that replaces it. Only a capsule with NEITHER a
@@ -1480,6 +1497,16 @@ export function CategorizePanel() {
         </div>
         )}
       </div>
+      {datesFor && (
+        <EventDatesDialog
+          kind={datesFor.kind}
+          name={datesFor.name}
+          start={datesFor.start}
+          end={datesFor.end}
+          onSave={(start, end) => setEventDates(datesFor.kind, datesFor.id, start, end)}
+          onClose={() => setDatesFor(null)}
+        />
+      )}
     </div>
   )
 }

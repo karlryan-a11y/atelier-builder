@@ -85,6 +85,9 @@ export interface TaggableLook {
   triedAt: string | null
   triedOk: boolean | null
   triedNote: string | null
+  /** Its date or dates (migration 041): "Gala, Nov 2" or a trip, Oct 14 to 18. Calendar dates. */
+  eventStart: string | null
+  eventEnd: string | null
 }
 export interface TaggableCapsule {
   id: string
@@ -108,6 +111,9 @@ export interface TaggableCapsule {
   // and saves the emptiness over a live capsule (ADR-0099 — a surface that shows a field
   // fetches it).
   closetItemIds: string[]
+  /** Its dates (migration 041): a packing capsule's trip, Oct 14 to 18. Calendar dates. */
+  eventStart: string | null
+  eventEnd: string | null
 }
 
 const slugify = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -440,6 +446,23 @@ export function useLookCategories(clientId: string | null) {
     return newId
   }, [fetchAll])
 
+  // DATES on a look or a capsule (migration 041; Maegan, 2026-10-08: "adding the date in one place
+  // should accomplish all of this"). Set here; her lookbook shows them beside the name, lists what
+  // is coming up on her home page, and moves a past trip into Past trips. Empty clears.
+  const setEventDates = useCallback(async (
+    kind: 'look' | 'capsule', id: string, start: string | null, end: string | null,
+  ): Promise<string | null> => {
+    const s = start || null
+    const e = s && end && end !== s ? end : null
+    if (s && e && e < s) return 'The end date is before the start date.'
+    if (kind === 'look') setLooks((prev) => prev.map((l) => (l.id === id ? { ...l, eventStart: s, eventEnd: e } : l)))
+    else setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, eventStart: s, eventEnd: e } : c)))
+    const { data, error } = await supabase.from(kind === 'look' ? 'gp_looks' : 'gp_boards')
+      .update({ event_start: s, event_end: e }).eq('id', id).select('id')
+    if (error || !data?.length) { console.error('setEventDates:', error?.message ?? 'not saved'); await fetchAll(); return "The dates didn't save. Refresh and try again." }
+    return null
+  }, [fetchAll, setLooks, setCapsules])
+
   const archiveCapsule = useCallback(async (id: string) => {
     setCapsules((prev) => prev.map((c) => (c.id === id ? { ...c, archived: true, published: false } : c)))
     const { error } = await supabase.from('gp_boards').update({ is_deleted: true, published: false }).eq('id', id)
@@ -543,7 +566,7 @@ export function useLookCategories(clientId: string | null) {
     createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
-    archiveLook, archiveCapsule, duplicateCapsule,
+    archiveLook, archiveCapsule, duplicateCapsule, setEventDates,
     restoreLook, restoreCapsule,
     reorderLooks, reorderCapsules, reorderCategories,
     renameLook, renameCapsule,
