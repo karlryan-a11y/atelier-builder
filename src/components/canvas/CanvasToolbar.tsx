@@ -33,7 +33,8 @@ const FONT_FAMILIES = [
   { value: 'Courier New, monospace', label: 'Mono' },
 ]
 
-const FONT_SIZES = [12, 16, 20, 24, 32, 40, 48, 64, 80, 96]
+// 28 added for Cynthia Dada, 2026-10-09 ("Can I please request a size 28 font option on canvas?").
+const FONT_SIZES = [12, 16, 20, 24, 28, 32, 40, 48, 64, 80, 96]
 
 const TEXT_COLORS = [
   '#1A1A1A', '#FFFFFF', '#F8E5E7', '#9B8B7E',
