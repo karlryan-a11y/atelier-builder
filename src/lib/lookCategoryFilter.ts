@@ -55,6 +55,24 @@ export function filterByCategory<T extends { categoryIds: string[] }>(
   return items.filter((i) => i.categoryIds.some((c) => ids.has(c)))
 }
 
+/**
+ * UNCATEGORIZED (Paige Berndt, 2026-10-13: "Is there an easy way on Atelier to see that every look
+ * has a category?"; Karl 10/14: build it). A look or capsule is uncategorized when it is in no
+ * category she files by. A HOME (NYC) or a SEASON (FW) alone does not count: those say where it
+ * lives and when, not what it is. Measured 10/14: 1,742 live looks in no category at all and 2,174
+ * more filed only under a home or a season. Hidden categories do not count either; she cannot see them.
+ */
+export function isUncategorized(
+  categoryIds: string[],
+  categories: { id: string; is_hidden?: boolean; is_residence?: boolean; season?: string | null }[],
+): boolean {
+  const byId = new Map(categories.map((c) => [c.id, c]))
+  return !categoryIds.some((id) => {
+    const c = byId.get(id)
+    return !!c && !c.is_hidden && !c.is_residence && !c.season
+  })
+}
+
 export type CardClick = 'select' | 'tag' | 'nothing'
 
 /**

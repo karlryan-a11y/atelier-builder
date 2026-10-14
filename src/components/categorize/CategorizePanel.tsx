@@ -33,7 +33,7 @@ import { hasResidences, residencesFrom } from '@/lib/residences'
 import { ReconciliationPanel } from '@/components/reconciliation/ReconciliationPanel'
 import { ReconcileFilterRail } from '@/components/reconciliation/ReconcileFilterRail'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
-import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, selectAllLabel } from '@/lib/lookCategoryFilter'
+import { filterByCategory, cardClickAction, mergeSubsetOrder, selectAllToggle, selectAllLabel, isUncategorized } from '@/lib/lookCategoryFilter'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 import { SelectCheckbox, BADGE_OFFSET_WHEN_SELECTABLE } from '@/components/categorize/SelectCheckbox'
@@ -487,6 +487,9 @@ export function CategorizePanel() {
   }
 
   const activeBrush = brush && categories.some((c) => c.id === brush && !c.is_hidden) ? brush : null
+  // "Uncategorized" on the rail (Paige 10/13, Karl 10/14): only the looks in no category she files by.
+  const [uncatOnly, setUncatOnly] = useState(false)
+  const showUncat = uncatOnly && !activeBrush && !tagging
   const labelOf = useMemo(() => {
     const m = new Map(categories.map((c) => [c.id, c.label]))
     return (id: string) => m.get(id) ?? '—'
@@ -521,20 +524,22 @@ export function CategorizePanel() {
     [items, status],
   )
   // Then by the category picked in the rail, unless tagging is on (tagging needs every card).
+  const uncatCount = useMemo(() => inStatus.filter((i) => isUncategorized(i.categoryIds, categories)).length, [inStatus, categories])
   const visible = useMemo(
     // Search LAST, over whatever the status pills and the category rail left. The three compose:
     // "the drafts in Evening called 182" is one question, and she can ask it. (ADR-0150)
     // Then the looks with a PIECE that matches every word, after the name matches (ADR-0163): her
     // Looks page finds "the look with the Margaret dress" and this list could not.
     () => {
-      const base = filterByCategory(inStatus, activeBrush, categories, tagging)
+      const byCat = filterByCategory(inStatus, activeBrush, categories, tagging)
+      const base = showUncat ? byCat.filter((i) => isUncategorized(i.categoryIds, categories)) : byCat
       const byName = searchByName(base, search)
       if (!search.trim() || !closetPieces.length) return byName
       const named = new Set(byName.map((l) => l.id))
       const byPiece = searchPieces(base.filter((l) => !named.has(l.id)), search, lookPieceFields, 'team').full
       return [...byName, ...byPiece]
     },
-    [inStatus, activeBrush, categories, tagging, search, closetPieces.length, lookPieceFields],
+    [inStatus, activeBrush, categories, tagging, search, closetPieces.length, lookPieceFields, showUncat],
   )
   // What search alone removed, so the empty state can tell her the search is why, rather than
   // leaving her looking at a blank grid wondering where her looks went.
@@ -542,7 +547,7 @@ export function CategorizePanel() {
     () => filterByCategory(inStatus, activeBrush, categories, tagging).length,
     [inStatus, activeBrush, categories, tagging],
   )
-  const filtering = !!activeBrush && !tagging
+  const filtering = (!!activeBrush || showUncat) && !tagging
 
   // "Select all" acts on what is in view, which is how a whole category gets added to another
   // one. See selectAllToggle in lib/lookCategoryFilter.ts.
@@ -905,6 +910,20 @@ export function CategorizePanel() {
                   on={activeGarmentCats.size === 0}
                   onClick={() => setActiveGarmentCats(new Set())}
                 />
+                {/* Pieces with no category (Paige 10/13, Karl 10/14). Same pieces the fixed list used
+                    to show as Other at the very bottom; up here, named for what it is. Pick them, then
+                    Set category… on the Collection tab. */}
+                {(garmentCounts.get('other') ?? 0) > 0 && (
+                  <div data-no-category>
+                    <CategoryRow
+                      label="No category"
+                      count={garmentCounts.get('other') ?? 0}
+                      coverage={garmentCoverage.get('other')}
+                      on={activeGarmentCats.has('other')}
+                      onClick={() => toggleGarment('other')}
+                    />
+                  </div>
+                )}
                 {/* HOMES FIRST (Cynthia, 2026-10-08): which pieces are at which house, by the names
                     she gave the homes. They were here before, but alphabetically inside Custom. */}
                 {(() => {
@@ -939,7 +958,7 @@ export function CategorizePanel() {
                 })()}
                 {SIDEBAR_STRUCTURE.map((node) => {
                   const slugs = node.kind === 'group' ? node.children : [node.slug]
-                  const present = slugs.filter((s) => (garmentCounts.get(s) ?? 0) > 0)
+                  const present = slugs.filter((s) => s !== 'other' && (garmentCounts.get(s) ?? 0) > 0)
                   if (present.length === 0) return null
                   return (
                     <div key={node.kind === 'group' ? node.label : node.slug} className="mt-1">
@@ -1014,10 +1033,22 @@ export function CategorizePanel() {
           <div className="flex flex-col gap-1 overflow-y-auto pr-1">
             {!tagging && categories.some((c) => !c.is_hidden) && (
               <button
-                onClick={() => setBrush(null)}
-                className={`w-full text-left px-3 py-2 rounded text-[12px] transition-colors ${activeBrush === null ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+                onClick={() => { setBrush(null); setUncatOnly(false) }}
+                className={`w-full text-left px-3 py-2 rounded text-[12px] transition-colors ${activeBrush === null && !uncatOnly ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
               >
                 All {mode}
+              </button>
+            )}
+            {/* The ones in no category she files by (a home or a season alone does not count). Pick
+                them, then File into… in the bar above. Each drops out of this list as it is filed. */}
+            {!tagging && (
+              <button
+                data-uncategorized
+                onClick={() => { setBrush(null); setUncatOnly(true) }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded text-[12px] transition-colors ${showUncat ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+              >
+                <span>Uncategorized</span>
+                <span className={showUncat ? 'text-white/70' : uncatCount > 0 ? 'text-[#a33]' : 'text-[#bbb]'}>{uncatCount}</span>
               </button>
             )}
             {categories.filter((c) => !c.is_hidden).length === 0 && (
@@ -1053,7 +1084,7 @@ export function CategorizePanel() {
                 >
                   <div className="group flex items-center justify-between">
                   {grip}
-                  <button onClick={() => setBrush(!tagging && activeBrush === cat.id ? null : cat.id)} className="flex-1 text-left px-3 py-2 capitalize truncate">
+                  <button onClick={() => { setUncatOnly(false); setBrush(!tagging && activeBrush === cat.id ? null : cat.id) }} className="flex-1 text-left px-3 py-2 capitalize truncate">
                     {cat.label}
                   </button>
                   {/* Note + Rename + Delete. Kept at opacity-60 rather than 0 because a hover-only
@@ -1283,6 +1314,19 @@ export function CategorizePanel() {
               {selected.size > 0 && (
                 <>
               <span className="text-[11px] text-[#888]">{selected.size} selected</span>
+              {showUncat && (
+                <select
+                  data-file-into
+                  value=""
+                  onChange={(e) => { const id = e.target.value; if (!id) return; for (const item of items) if (selected.has(item.id) && !has(item, id)) assignItem(item.id, id, true); setSelected(new Set()) }}
+                  className="px-2 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded border border-[#E8E4DF] bg-white text-[#1A1A1A]"
+                >
+                  <option value="">File into…</option>
+                  {categories.filter((c) => !c.is_hidden && !c.is_residence && !c.season).map((c) => (
+                    <option key={c.id} value={c.id}>{labelOf(c.id)}</option>
+                  ))}
+                </select>
+              )}
               {activeBrushLabel && (
                 <>
                   <button onClick={() => applyBrushToSelected(false)} className="px-2.5 py-1.5 text-[11px] tracking-[0.08em] uppercase rounded bg-[#F8E5E7] text-[#1A1A1A] hover:brightness-95">+ {activeBrushLabel}</button>
