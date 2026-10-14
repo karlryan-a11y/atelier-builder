@@ -34,3 +34,22 @@ export function nextZoom(current: number, direction: 1 | -1): number {
 export function zoomLabel(zoom: number): string {
   return `${Math.round(clampZoom(zoom) * 100)}%`
 }
+
+/**
+ * HOW SMALL A PIECE MAY BE RESIZED (Cynthia, 2026-10-14: "I'm unable to make this shoe smaller",
+ * a brown Gucci horsebit flat on Stacy Janiak's Landscape capsule). The resize handles used to stop
+ * at 20 screen px on EITHER side. A flat is wide and short, so its HEIGHT hit 20 px while the shoe
+ * still looked big beside the sneakers, and on a Landscape board (shown at about a fifth of its
+ * real size) 20 screen px is a lot of board. Now only the LONGER side has a floor, and it is half as
+ * big: a piece can get as short as it needs, but never so small you cannot find and grab it. To go
+ * smaller still, zoom in (the floor is on screen, so zooming in lowers it on the board).
+ * Konva hands boundBoxFunc boxes in screen px, which is what this measures.
+ */
+export const MIN_PIECE_SCREEN_PX = 10
+
+export function resizeAllowed(box: { width: number; height: number }): boolean {
+  const w = Math.abs(box.width)
+  const h = Math.abs(box.height)
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return false
+  return Math.max(w, h) >= MIN_PIECE_SCREEN_PX && Math.min(w, h) >= 1
+}

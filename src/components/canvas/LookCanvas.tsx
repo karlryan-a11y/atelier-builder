@@ -11,7 +11,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
 import { selectionOnPress, shouldClearSelection, ringOffsets, toBoardPoint, marqueeRect, boxesOverlap, type BoardRect } from '@/lib/canvasSelection'
-import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM } from '@/lib/canvasView'
+import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM, resizeAllowed } from '@/lib/canvasView'
 import type { CanvasNode, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
@@ -159,10 +159,7 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
           rotateEnabled
           keepRatio={false}
           enabledAnchors={['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']}
-          boundBoxFunc={(oldBox, newBox) => {
-            if (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20) return oldBox
-            return newBox
-          }}
+          boundBoxFunc={(oldBox, newBox) => (resizeAllowed(newBox) ? newBox : oldBox)}
         />
       )}
     </>
@@ -218,7 +215,7 @@ function PictureNodeElement({ node, image, isSelected, solo, onSelect, onDragSta
           rotateEnabled
           keepRatio
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          boundBoxFunc={(oldBox, newBox) => (Math.abs(newBox.width) < 12 || Math.abs(newBox.height) < 12 ? oldBox : newBox)}
+          boundBoxFunc={(oldBox, newBox) => (resizeAllowed(newBox) ? newBox : oldBox)}
         />
       )}
     </>
@@ -1194,7 +1191,7 @@ export function LookCanvas() {
               rotateEnabled
               keepRatio
               enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-              boundBoxFunc={(oldBox, newBox) => (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20 ? oldBox : newBox)}
+              boundBoxFunc={(oldBox, newBox) => (resizeAllowed(newBox) ? newBox : oldBox)}
               onTransformEnd={handleGroupTransformEnd}
             />
             {selectionRect && (
