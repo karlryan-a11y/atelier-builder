@@ -81,8 +81,13 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   const [color, setColor] = useState(item.color ?? '')
   const [styleNote, setStyleNote] = useState(item.style_note ?? '')
   const [description, setDescription] = useState(item.description ?? '')
-  // Material and Care (migration 043). Material falls back to what digitizing read off the tag.
-  const [material, setMaterial] = useState(item.material ?? item.raw?.material ?? '')
+  // Material and Care (migration 043). The tag read from digitizing is often a guess ("Appears to be
+  // ... likely a blend"), and migration 043 copied it into the column, so a material equal to the tag
+  // read counts as NOT entered: the box starts empty and the read is offered under it. The client's
+  // sheet applies the same rule (atelier-looks shownMaterial) and never shows an unconfirmed read.
+  const tagRead = String(item.raw?.material ?? '').trim().slice(0, 300)
+  const enteredMaterial = (item.material ?? '').trim() && (item.material ?? '').trim() !== tagRead ? (item.material ?? '').trim() : ''
+  const [material, setMaterial] = useState(enteredMaterial)
   const [care, setCare] = useState(item.care ?? '')
   const [category, setCategory] = useState(item.category ?? '')
   const [customMode, setCustomMode] = useState(false)
@@ -133,7 +138,9 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       color: color.trim() || null,
       style_note: styleNote.trim() || null,
       description: description.trim() || null,
-      material: material.trim() || null,
+      // Empty box: keep the tag read in the column (search uses it; she never sees it). Clearing a
+      // material a person had entered does clear it.
+      material: material.trim() || (enteredMaterial ? null : (item.material ?? null)),
       care: care.trim() || null,
       category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
       // Only the Collection tab manages "Also in"; when disabled, omit the key so other
@@ -345,6 +352,12 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
               placeholder='e.g. "100% cashmere"'
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
             />
+            {!material && tagRead && (
+              <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
+                Read from the tag: {tagRead}{' '}
+                <button type="button" onClick={() => setMaterial(tagRead)} className="underline underline-offset-2 hover:text-[#1A1A1A]">Use this</button>
+              </p>
+            )}
             <ClientNote field="material" />
           </div>
           <div>
