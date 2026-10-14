@@ -23,7 +23,9 @@ export function closetSearchFields(item: ClosetItem, categories: string[], tagNa
     color: item.color,
     colorFamilies: [item.color_family, ...(item.color_families ?? [])],
     description: item.description,
-    material: item.raw?.material,
+    // Its own column since migration 043; older rows read the tag value digitizing stored.
+    material: item.material ?? item.raw?.material,
+    care: item.care,
     retailer: item.retailer,
     categories: [...categories, ...categories.map(labelForCategory)],
     tags: tagNames,

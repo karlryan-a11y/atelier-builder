@@ -33,7 +33,7 @@ interface EditItemDialogProps {
    *  Passing false is a CLAIM — say why in a comment, and note that a surface which shows this field
    *  must also FETCH color_family + color_families, or it saves an empty set over real data. */
   enableMultiColor?: boolean
-  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; description: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
+  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; description: string | null; material?: string | null; care?: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
   onClose: () => void
   /** When provided, shows a "Remove BG" button that strips the item's image to transparent. */
   onRemoveBackground?: () => void
@@ -55,6 +55,14 @@ interface EditItemDialogProps {
   clientFirst?: string
 }
 
+// Common care instructions, one tap each (same list as the client's sheet in atelier-looks).
+const CARE_CHIPS = ['Dry clean only', 'Hand wash cold', 'Machine wash cold', 'Lay flat to dry', 'Do not tumble dry', 'Steam, do not iron', 'Specialist clean']
+function addCare(cur: string, add: string): string {
+  const t = cur.trim()
+  if (t.toLowerCase().includes(add.toLowerCase())) return cur
+  return t ? (/[.!?]$/.test(t) ? t + ' ' : t + '. ') + add + '.' : add + '.'
+}
+
 export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
   const usedCategories = useUsedCategories()
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
@@ -73,6 +81,9 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   const [color, setColor] = useState(item.color ?? '')
   const [styleNote, setStyleNote] = useState(item.style_note ?? '')
   const [description, setDescription] = useState(item.description ?? '')
+  // Material and Care (migration 043). Material falls back to what digitizing read off the tag.
+  const [material, setMaterial] = useState(item.material ?? item.raw?.material ?? '')
+  const [care, setCare] = useState(item.care ?? '')
   const [category, setCategory] = useState(item.category ?? '')
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -122,6 +133,8 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       color: color.trim() || null,
       style_note: styleNote.trim() || null,
       description: description.trim() || null,
+      material: material.trim() || null,
+      care: care.trim() || null,
       category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
       // Only the Collection tab manages "Also in"; when disabled, omit the key so other
       // consumers' saves never touch custom_categories.
@@ -317,6 +330,49 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
               Shown to the client on her piece, and searchable by you both. She can edit it too
             </p>
             <ClientNote field="description" />
+          </div>
+
+          {/* MATERIAL AND CARE (Maegan, 2026-10-14: "we will need a garment care field"). Hers to see
+              and edit too, for whoever looks after the clothes. The chips add a common instruction. */}
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
+              Material
+            </label>
+            <input
+              value={material}
+              onChange={(e) => setMaterial(e.target.value)}
+              maxLength={300}
+              placeholder='e.g. "100% cashmere"'
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
+            />
+            <ClientNote field="material" />
+          </div>
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
+              Care
+            </label>
+            <textarea
+              value={care}
+              onChange={(e) => setCare(e.target.value)}
+              maxLength={2000}
+              placeholder='e.g. "Dry clean only. Steam, do not iron."'
+              rows={2}
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none"
+            />
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {CARE_CHIPS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCare((cur) => addCare(cur, c))}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-[#E8E4DF] text-text-muted hover:text-[#1A1A1A] hover:border-[#1A1A1A]/40"
+                >{c}</button>
+              ))}
+            </div>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+              Shown to the client on her piece with the material. She can edit both
+            </p>
+            <ClientNote field="care" />
           </div>
 
           <div>

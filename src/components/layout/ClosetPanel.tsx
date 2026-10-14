@@ -312,7 +312,7 @@ export function ClosetPanel() {
   const [savingItem, setSavingItem] = useState(false)
   const [zoomIndex, setZoomIndex] = useState<number | null>(null)
 
-  async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
+  async function handleSaveItem(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; material?: string | null; care?: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editingItem) return
     setSavingItem(true)
     // This panel already FILTERS by categoriesOf (primary + "Also in"), so the chips it shows are
@@ -321,6 +321,7 @@ export function ClosetPanel() {
     const { error } = await updateClosetItem(editingItem.id, editingItem.client_id, {
         name_override: data.name_override, brand: data.brand, color: data.color,
         style_note: data.style_note, category: data.category,
+        ...('material' in data ? { material: data.material, care: data.care } : {}),
         ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
         // Same guard for the colour set (ADR-0115): the key is only present when the dialog
         // manages it, so spreading it can never blank the columns.
@@ -335,6 +336,7 @@ export function ClosetPanel() {
     patchItems([editingItem.id], {
       name_override: data.name_override, brand: data.brand as string, color: data.color,
       style_note: data.style_note, category: data.category,
+      ...('material' in data ? { material: data.material, care: data.care } : {}),
       ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
       ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
     })

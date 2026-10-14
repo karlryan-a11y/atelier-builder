@@ -25,6 +25,10 @@ export interface ClosetItem {
    * she can neither see nor search. Migration 028, ADR-0151.
    */
   description?: string | null
+  /** What it is made of, and how to care for it (migration 043, Maegan 2026-10-14). Shown to the
+   *  client on her piece sheet when filled; she can edit both. */
+  material?: string | null
+  care?: string | null
   /** Stylist garment-category override (Phase B). Wins over auto-detection; the
    *  lookbook Collection sidebar reads it. Scraper never writes it. */
   category?: string | null

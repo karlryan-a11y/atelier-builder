@@ -69,8 +69,10 @@ export interface PieceSearchFields {
   colorFamilies?: (string | null | undefined)[]
   /** Client-visible description (gp_closet_items.description, migration 028). */
   description?: string | null
-  /** raw.material, where GoodPix had it. */
+  /** gp_closet_items.material (migration 043; was raw.material). */
   material?: string | null
+  /** How to care for it (migration 043). */
+  care?: string | null
   retailer?: string | null
   /** Category slugs AND their human labels: "high-top-sneakers" and "High Top Sneakers". */
   categories?: (string | null | undefined)[]
@@ -87,7 +89,7 @@ export interface PieceSearchFields {
 /** How much a hit in each field is worth. The name and designer are what she means. */
 const WEIGHT = {
   name: 3, brand: 3,
-  colorChip: 2.5, color: 2, colorLong: 1, description: 2, material: 2, retailer: 2,
+  colorChip: 2.5, color: 2, colorLong: 1, description: 2, material: 2, care: 1, retailer: 2,
   category: 1.5, tag: 1.5,
   note: 1, size: 1, legacy: 0.5,
 } as const
@@ -205,7 +207,7 @@ function weightedTokens(f: PieceSearchFields, audience: SearchAudience): Token[]
   // colour the piece is (ADR-0155, measured 2026-10-02).
   for (const c of f.colorFamilies ?? []) add(c, 'colorChip')
   add(f.color, (f.color ?? '').length > LONG_COLOR_TEXT ? 'colorLong' : 'color')
-  add(f.description, 'description'); add(f.material, 'material'); add(f.retailer, 'retailer')
+  add(f.description, 'description'); add(f.material, 'material'); add(f.care, 'care'); add(f.retailer, 'retailer')
   for (const c of f.categories ?? []) add(c, 'category')
   for (const t of f.tags ?? []) add(t, 'tag')
   if (audience === 'team') {

@@ -27,7 +27,7 @@ import { fetchTeamNotes } from '@/lib/teamNotes'
 export const CLOSET_SELECT =
   'id, client_id, name, name_override, description, category, custom_categories, category_suggested, brand, color, color_family, color_families, color_audit, content_tag_ids, is_deleted, transitioned_at, transition_reason, transition_source, client_edited_fields, client_edited_at, drive_verified_at, drive_verified_by, ' +
   'raw_image:raw->>image, raw_processed_image:raw->>processed_image, raw_image0:raw->images->>0, ' +
-  'retailer, size, raw_material:raw->>material, raw_description:raw->>description, ' +
+  'retailer, size, material, care, raw_material:raw->>material, raw_description:raw->>description, ' +
   'primary_image_hash, processed_image_hash, source, added_at'
 
 const PAGE = 1000

@@ -296,6 +296,9 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         if (f === 'category') return (data.category ?? null) === (editing.category ?? null)
         // ADR-0166: she can write the description now; a stylist who rewrites it takes it back.
         if (f === 'description') return ((data as any).description ?? null) === (editing.description ?? null)
+        // Material and Care (migration 043): hers too; a stylist who changes one takes it back.
+        if (f === 'material') return ((data as any).material ?? null) === (editing.material ?? null)
+        if (f === 'care') return ((data as any).care ?? null) === (editing.care ?? null)
         // Colour was missing from this list, so a stylist could override a set the client chose and
         // the piece went on claiming she owned it — forever. The comparison is the SET (ADR-0115),
         // not the free-text shade note; the client only ever picks palette colours.
