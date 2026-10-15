@@ -114,7 +114,7 @@ export function CreateCapsuleDialog({ looks, saving, onSave, onClose }: CreateCa
 
           {/* ADR-0166. The team's note on this capsule, in the team-only table. */}
           <div>
-            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Team note</label>
+            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Internal styling note</label>
             <textarea
               value={teamNote}
               onChange={e => setTeamNote(e.target.value)}

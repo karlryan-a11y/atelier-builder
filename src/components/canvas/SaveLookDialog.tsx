@@ -221,7 +221,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
           </div>
 
           <div>
-            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Team note</label>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Internal styling note</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

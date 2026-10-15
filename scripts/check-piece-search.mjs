@@ -119,7 +119,8 @@ for (const [needle, what] of [
   [/colorFamilies:/, 'the colour families'],
   [/color: item\.color/, 'the colour text'],
   [/retailer: item\.retailer/, 'the retailer'],
-  [/material: item\.raw\?\.material/, 'the material'],
+  // Material has its own column since migration 043 (2026-10-14); older rows still read the tag value in raw.
+  [/material: item\.material \?\? item\.raw\?\.material/, 'the material'],
   [/labelForCategory/, 'the category labels'],
 ]) {
   checks++
@@ -127,7 +128,7 @@ for (const [needle, what] of [
 }
 const HOOK = 'src/hooks/useClosetItems.ts'
 checks++
-if (!/retailer, size, raw_material:raw->>material, raw_description:raw->>description/.test(read(HOOK))) {
+if (!/retailer, size, material, care, raw_material:raw->>material, raw_description:raw->>description/.test(read(HOOK))) {
   fail(`${HOOK}: the closet read does not select retailer, size and material, so searching them reads undefined for every piece (ADR-0103).`)
 }
 

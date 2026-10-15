@@ -390,7 +390,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
 
           <div>
             <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">
-              Team note
+              Internal styling note
             </label>
             <textarea
               value={styleNote}

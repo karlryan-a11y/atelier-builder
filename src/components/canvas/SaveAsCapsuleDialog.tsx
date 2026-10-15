@@ -110,7 +110,7 @@ export function SaveAsCapsuleDialog({ itemCount, saving, isEditing, initialName 
 
           {/* ADR-0166. The team's note on this capsule, in the team-only table. */}
           <div>
-            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Team note</label>
+            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-1">Internal styling note</label>
             <textarea
               value={teamNote}
               onChange={e => { typedNote.current = true; setTeamNote(e.target.value) }}
