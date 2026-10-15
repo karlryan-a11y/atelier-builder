@@ -56,7 +56,7 @@ interface EditItemDialogProps {
 }
 
 // Common care instructions, one tap each (same list as the client's sheet in atelier-looks).
-const CARE_CHIPS = ['Dry clean only', 'Hand wash cold', 'Machine wash cold', 'Lay flat to dry', 'Do not tumble dry', 'Steam, do not iron', 'Specialist clean']
+const CARE_CHIPS = ['Dry clean only', 'Hand wash cold', 'Machine wash cold', 'Lay flat to dry', 'Do not tumble dry', 'Steam, do not iron', 'Hand press only', 'Specialist clean']
 function addCare(cur: string, add: string): string {
   const t = cur.trim()
   if (t.toLowerCase().includes(add.toLowerCase())) return cur
