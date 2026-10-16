@@ -13,7 +13,7 @@ import { SearchDebug } from '@/components/admin/SearchDebug'
 import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { ShopView } from '@/components/shopping/ShopView'
 import { CategorizePanel } from '@/components/categorize/CategorizePanel'
-import { FeedbackButton } from '@/components/feedback/FeedbackButton'
+import { AskAtelierButton } from '@/components/feedback/AskAtelierButton'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
 import { useClientStore } from '@/stores/clientStore'
@@ -249,7 +249,7 @@ function App() {
           </div>
         ) : null}
       </DragOverlay>
-      <FeedbackButton />
+      <AskAtelierButton />
     </DndContext>
   )
 }
