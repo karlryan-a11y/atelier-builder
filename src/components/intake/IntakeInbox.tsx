@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { ClientFilter } from './ClientFilter'
 import { Inbox, Check, X, Edit3, RefreshCw, RotateCw, Upload, Camera, Download, HardDrive, ChevronDown } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
@@ -50,6 +51,7 @@ export function IntakeInbox() {
   // The camera bubble's queue (Karl, 2026-10-16): pieces captured on a phone wait here to be matched and confirmed, then
   // go into In Progress. The tab shows only for people the dashboard lets in (it answers 403 to everyone else).
   const [queueCount, setQueueCount] = useState<number | null>(null)
+  const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   useEffect(() => {
     let alive = true
     const load = async () => {
@@ -57,8 +59,9 @@ export function IntakeInbox() {
         const r = await fetch('/api/capture/review?filter=todo&limit=1', { credentials: 'include', cache: 'no-store' })
         if (!alive) return
         if (!r.ok) { setQueueCount(null); return }
-        const j = (await r.json()) as { counts?: { todo?: number } }
+        const j = (await r.json()) as { counts?: { todo?: number }; clients?: Array<{ id: string; name: string; n: number }> }
         setQueueCount(j.counts?.todo ?? 0)
+        setQueueClients(j.clients ?? [])
       } catch { if (alive) setQueueCount(null) }
     }
     void load()
@@ -477,34 +480,20 @@ export function IntakeInbox() {
         ))}
       </div>
 
-      {/* Client filter bar */}
+      {/* Client filter: a search, then pick a client (the Queue tab lists only clients that have pieces waiting) */}
       <div className="flex items-center gap-2 px-4 md:px-6 py-2 bg-white border-b border-[#E8E4DF] shrink-0">
-        <span className="text-[9px] tracking-[0.15em] uppercase text-[#888]">Client:</span>
-        <button
-          onClick={() => setSelectedClientId(null)}
-          className={`px-2.5 py-1 text-[10px] tracking-[0.1em] uppercase rounded-sm transition-colors ${
-            !selectedClientId ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8F7F5] text-[#888] hover:bg-[#E8E4DF]'
-          }`}
-        >
-          All
-        </button>
-        {clientOptions.map(c => (
-          <button
-            key={c.id}
-            onClick={() => setSelectedClientId(c.id)}
-            className={`px-2.5 py-1 text-[10px] tracking-[0.1em] rounded-sm transition-colors truncate max-w-[160px] ${
-              selectedClientId === c.id ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8F7F5] text-[#888] hover:bg-[#E8E4DF]'
-            }`}
-          >
-            {c.name}
-          </button>
-        ))}
+        <ClientFilter
+          options={filter === 'queue' ? queueClients.map((c) => ({ id: c.id, name: c.name, count: c.n })) : clientOptions}
+          value={selectedClientId}
+          valueName={[...clientOptions, ...queueClients].find((c) => c.id === selectedClientId)?.name}
+          onChange={setSelectedClientId}
+        />
       </div>
 
       {/* Content — In Progress tab or item cards */}
       {filter === 'queue' ? (
         <div className="flex-1 overflow-y-auto">
-          <iframe src="/capture-queue" title="Capture queue" className="w-full border-0" style={{ height: '78vh' }} />
+          <iframe key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: '78vh' }} />
         </div>
       ) : filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">
