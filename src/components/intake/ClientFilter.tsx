@@ -27,7 +27,9 @@ export function ClientFilter({ options, value, valueName, onChange }: {
 
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return (s ? options.filter((o) => o.name.toLowerCase().includes(s)) : options).slice(0, 40)
+    const hit = s ? options.filter((o) => o.name.toLowerCase().includes(s)) : options
+    // clients with pieces waiting first, then the rest alphabetically
+    return [...hit].sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.name.localeCompare(b.name)).slice(0, 40)
   }, [options, q])
 
   const pick = (id: string | null) => { onChange(id); setOpen(false); setQ('') }

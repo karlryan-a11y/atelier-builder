@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ClientFilter } from './ClientFilter'
+import { useClients } from '@/hooks/useClients'
 import { Inbox, Check, X, Edit3, RefreshCw, RotateCw, Upload, Camera, Download, HardDrive, ChevronDown } from 'lucide-react'
 import { useIntakeItems, type IntakeItem } from '@/hooks/useIntakeItems'
 import { ClickableSignedImage, LightboxProvider } from './IntakeItemCard'
@@ -52,6 +53,8 @@ export function IntakeInbox() {
   // go into In Progress. The tab shows only for people the dashboard lets in (it answers 403 to everyone else).
   const [queueCount, setQueueCount] = useState<number | null>(null)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
+  // Every client, so the search finds anyone (a piece uploaded a minute ago may not be in the list yet). Clients with pieces here show a count.
+  const { clients: directory } = useClients()
   useEffect(() => {
     let alive = true
     const load = async () => {
@@ -483,9 +486,17 @@ export function IntakeInbox() {
       {/* Client filter: a search, then pick a client (the Queue tab lists only clients that have pieces waiting) */}
       <div className="flex items-center gap-2 px-4 md:px-6 py-2 bg-white border-b border-[#E8E4DF] shrink-0">
         <ClientFilter
-          options={filter === 'queue' ? queueClients.map((c) => ({ id: c.id, name: c.name, count: c.n })) : clientOptions}
+          options={(() => {
+            const counts = new Map<string, number>()
+            if (filter === 'queue') queueClients.forEach((c) => counts.set(c.id, c.n))
+            const all = new Map<string, { id: string; name: string; count?: number }>()
+            directory.forEach((c) => all.set(c.id, { id: c.id, name: c.name, count: counts.get(c.id) }))
+            clientOptions.forEach((c) => { if (!all.has(c.id)) all.set(c.id, { id: c.id, name: c.name }) })
+            queueClients.forEach((c) => { if (!all.has(c.id)) all.set(c.id, { id: c.id, name: c.name, count: c.n }) })
+            return [...all.values()]
+          })()}
           value={selectedClientId}
-          valueName={[...clientOptions, ...queueClients].find((c) => c.id === selectedClientId)?.name}
+          valueName={[...directory, ...clientOptions, ...queueClients].find((c) => c.id === selectedClientId)?.name}
           onChange={setSelectedClientId}
         />
       </div>
