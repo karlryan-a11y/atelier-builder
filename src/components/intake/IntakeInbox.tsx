@@ -41,12 +41,30 @@ const FIXED_CATEGORIES = (Object.entries(CATEGORY_LABELS) as [string, string][])
   .map(([slug, label]) => ({ slug, label }))
 
 export function IntakeInbox() {
-  const [filter, setFilter] = useState<'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
+  const [filter, setFilter] = useState<'queue' | 'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
     // Default to In Progress if there are active batches
     const saved = localStorage.getItem('atelier_active_batch')
     return saved ? 'in_progress' : 'pending_review'
   })
   const [activeBatchCount, setActiveBatchCount] = useState(0)
+  // The camera bubble's queue (Karl, 2026-10-16): pieces captured on a phone wait here to be matched and confirmed, then
+  // go into In Progress. The tab shows only for people the dashboard lets in (it answers 403 to everyone else).
+  const [queueCount, setQueueCount] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      try {
+        const r = await fetch('/api/capture/review?filter=todo&limit=1', { credentials: 'include', cache: 'no-store' })
+        if (!alive) return
+        if (!r.ok) { setQueueCount(null); return }
+        const j = (await r.json()) as { counts?: { todo?: number } }
+        setQueueCount(j.counts?.todo ?? 0)
+      } catch { if (alive) setQueueCount(null) }
+    }
+    void load()
+    const t = setInterval(() => void load(), 30000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
   const [bulkApproving, setBulkApproving] = useState(false)
   const [bulkProgress, setBulkProgress] = useState('')
   const [showBulkConfirm, setShowBulkConfirm] = useState(false)
@@ -55,7 +73,7 @@ export function IntakeInbox() {
   const { activeClient } = useClientStore()
   const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
-  const hookFilter = filter === 'in_progress' ? 'pending_review' : filter
+  const hookFilter = filter === 'in_progress' || filter === 'queue' ? 'pending_review' : filter
   const { items, loading, error, refresh, refreshBackground, counts } = useIntakeItems(hookFilter, selectedClientId)
   // Approve All warns about pieces that look already in her closet (ADR-0164). Only with one client
   // chosen: the closet it compares against is that client's.
@@ -297,6 +315,7 @@ export function IntakeInbox() {
   }, [items, refreshBackground, selectedIds])
 
   const tabs = [
+    ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
     { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
@@ -483,7 +502,11 @@ export function IntakeInbox() {
       </div>
 
       {/* Content — In Progress tab or item cards */}
-      {filter === 'in_progress' ? (
+      {filter === 'queue' ? (
+        <div className="flex-1 overflow-y-auto">
+          <iframe src="/capture-queue" title="Capture queue" className="w-full border-0" style={{ height: '78vh' }} />
+        </div>
+      ) : filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">
           <InProgressPanel onBatchCountChange={setActiveBatchCount} onRefreshItems={refresh} clientId={selectedClientId} />
         </div>
