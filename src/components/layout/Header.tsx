@@ -57,7 +57,9 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
         <div className="w-px h-8 bg-white/[0.08]" />
         <div className="flex items-center gap-1">
           {/* In-app tabs */}
-          {(['digitize', 'style', 'shop'] as const).map(view => (
+          {/* Shop is the dashboard's Shop (/shop), not the old shop inside this tool (Karl, 2026-10-17: "sometimes I click
+              shop and it goes to the old shop"). Digitize and Style stay in-app tabs. */}
+          {(['digitize', 'style'] as const).map(view => (
             <button
               key={view}
               onClick={() => setActiveView(view)}
@@ -76,6 +78,11 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
               )}
             </button>
           ))}
+
+          <a href="/shop" className="relative px-4 py-2 text-[13px] tracking-[0.22em] uppercase text-white/80 hover:text-white transition-all duration-[400ms] group">
+            Shop
+            <span className="absolute bottom-0 h-[1.5px] w-0 bg-[#F8E5E7] rounded-full transition-all duration-[400ms] group-hover:w-[calc(100%-2rem)]" style={{ left: '1rem' }} />
+          </a>
 
           {/* External platform links — same style */}
           <a

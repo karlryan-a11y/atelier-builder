@@ -84,14 +84,14 @@ function App() {
   // Handle hash-based routing for platform nav tabs
   useEffect(() => {
     const hash = window.location.hash
-    if (hash === '#shop') setActiveView('shop')
+    if (hash === '#shop') { window.location.replace('/shop'); return }
     if (hash === '#digitize' || hash === '#inbox') setActiveView('digitize')
   }, [setActiveView])
 
   useEffect(() => {
     const onHash = () => {
       setShowSearch(window.location.hash === '#search')
-      if (window.location.hash === '#shop') setActiveView('shop')
+      if (window.location.hash === '#shop') window.location.replace('/shop')
       if (['#inbox', '#digitize'].includes(window.location.hash)) setActiveView('digitize')
       const m = window.location.hash.match(/#session=([0-9a-fA-F-]{36})/)
       if (m) resumeSession(m[1])
