@@ -53,6 +53,19 @@ export function IntakeInbox() {
   // go into In Progress. The tab shows only for people the dashboard lets in (it answers 403 to everyone else).
   const [queueCount, setQueueCount] = useState<number | null>(null)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
+  // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string }
+  const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
+  const frameRef = useRef<HTMLIFrameElement | null>(null)
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || !e.data || e.data.source !== 'capture-queue' || e.data.type !== 'state') return
+      setCap({ tab: e.data.tab, attention: e.data.attention ?? 0, items: Array.isArray(e.data.items) ? e.data.items : [], selectedId: e.data.selectedId ?? null })
+    }
+    window.addEventListener('message', on)
+    return () => window.removeEventListener('message', on)
+  }, [])
+  const tellFrame = (msg: { type: 'select'; id: string } | { type: 'tab'; tab: 'todo' | 'attention' | 'done' }) => frameRef.current?.contentWindow?.postMessage({ target: 'capture-queue', ...msg }, window.location.origin)
   // Every client, so the search finds anyone (a piece uploaded a minute ago may not be in the list yet). Clients with pieces here show a count.
   const { clients: directory } = useClients()
   useEffect(() => {
@@ -383,65 +396,12 @@ export function IntakeInbox() {
 
   return (
     <LightboxProvider>
-    <div className="flex-1 bg-[#F8F7F5] flex flex-col overflow-hidden">
-      {/* Upload panel — collapsible */}
-      {showUpload && (
-        <UploadPanel
-          onRefreshItems={refresh}
-          onComplete={() => {
-            setShowUpload(false)
-            setFilter('in_progress')
-            refresh()
-          }}
-        />
-      )}
-
-      {/* Confirm board: opened from the "Confirm items" chip in the bar below; height-capped and internally scrollable. */}
-      {showConfirm && (
-        <div className="shrink-0 bg-white border-b border-[#E8E4DF] overflow-y-auto px-4 md:px-6 max-h-[45vh]">
-          <IntakeConfirmBoard clientId={selectedClientId} onDone={() => { refresh(); loadClientOptions() }} />
-        </div>
-      )}
-
-      {/* One slim bar: tabs on the left; client search, Confirm items and Upload on the right (Karl, 2026-10-18: the rows above the work took half the screen). */}
-      <div className="relative z-20 flex items-stretch border-b border-[#E8E4DF] bg-white shrink-0">
-        <div className="flex min-w-0 overflow-x-auto">
-          {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter(tab.key)}
-            className={`
-              px-4 py-2.5 text-[11px] whitespace-nowrap tracking-[0.2em] uppercase font-sans
-              transition-colors relative
-              ${filter === tab.key
-                ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A]'
-                : 'text-[#888] hover:text-[#1A1A1A]'
-              }
-            `}
-          >
-            <span className="flex items-center justify-center gap-1.5">
-              {tab.key === 'in_progress' && tab.count > 0 && (
-                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              )}
-              {tab.label}
-            </span>
-            {tab.count > 0 && (
-              <span className={`
-                ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px]
-                rounded-full text-[9px] font-medium px-1
-                ${tab.key === 'in_progress' ? 'bg-emerald-100 text-emerald-700'
-                  : tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]'
-                  : 'bg-[#E8E4DF] text-[#888]'}
-              `}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2 px-4 md:px-6 py-1.5">
-          <div className="min-w-[240px]">
-            <ClientFilter
+    <div className="flex-1 bg-[#F8F7F5] flex flex-row overflow-hidden">
+      {/* Sidebar, laid out like the Shop's: small spaced-capital section labels, a thin line on the active item, counts as pills.
+          The Queue opens to its tabs and the pieces waiting; Upload and Confirm items sit at the bottom. */}
+      <aside className="relative z-20 w-[256px] shrink-0 border-r border-[#E8E4DF] bg-white flex flex-col min-h-0">
+        <div className="px-4 pt-4 pb-3 border-b border-[#E8E4DF]">
+          <ClientFilter
           options={(() => {
             const counts = new Map<string, number>()
             if (filter === 'queue') queueClients.forEach((c) => counts.set(c.id, c.n))
@@ -455,30 +415,92 @@ export function IntakeInbox() {
           valueName={[...directory, ...clientOptions, ...queueClients].find((c) => c.id === selectedClientId)?.name}
           onChange={setSelectedClientId}
         />
-          </div>
+        </div>
+        <nav className="flex-1 min-h-0 overflow-y-auto py-3">
+          <div className="px-5 pb-2 text-[9px] tracking-[0.35em] uppercase text-[#888]">Digitize</div>
+          {tabs.map(tab => (
+            <div key={tab.key}>
+              <button
+                onClick={() => setFilter(tab.key)}
+                className={`w-full flex items-center justify-between pl-5 pr-4 py-2.5 text-left text-[13px] border-l-2 transition-colors ${filter === tab.key ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#888] hover:text-[#1A1A1A]'}`}
+              >
+                <span className="flex items-center gap-2">
+                  {tab.key === 'in_progress' && tab.count > 0 && <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />}
+                  {tab.label}
+                </span>
+                {tab.count > 0 && (
+                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full text-[10px] font-medium px-1.5 ${tab.key === 'in_progress' ? 'bg-emerald-100 text-emerald-700' : tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]' : 'bg-[#E8E4DF] text-[#888]'}`}>{tab.count}</span>
+                )}
+              </button>
+              {tab.key === 'queue' && filter === 'queue' && (
+                <div className="pb-2">
+                  {([['todo', 'To do', cap.items.length], ['attention', 'Needs attention', cap.attention], ['done', 'Done', 0]] as const).map(([k, label, n]) => (
+                    <button key={k} onClick={() => tellFrame({ type: 'tab', tab: k })} className={`w-full flex items-center justify-between pl-9 pr-4 py-1.5 text-left text-[12px] ${cap.tab === k ? 'text-[#1A1A1A]' : 'text-[#888] hover:text-[#1A1A1A]'}`}>
+                      <span>{label}</span>{n > 0 && <span className="text-[10px] text-[#888]">{n}</span>}
+                    </button>
+                  ))}
+                  {cap.tab === 'todo' && cap.items.length > 0 && (
+                    <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
+                      {cap.items.map(it => (
+                        <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
+                          {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
+                          <span className="min-w-0">
+                            <span className="block truncate text-[11px] text-[#1A1A1A]">{it.title}</span>
+                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Pick the image' ? 'bg-[#1A1A1A] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
+        <div className="border-t border-[#E8E4DF] p-3 flex flex-col gap-2">
           {(confirmWaiting > 0 || showConfirm) && (
             <button
               onClick={() => setShowConfirm(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded whitespace-nowrap transition-colors ${showConfirm ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
+              className={`flex items-center justify-between px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${showConfirm ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
             >
-              Confirm items {confirmWaiting > 0 ? confirmWaiting : ''}
+              <span>Confirm items {confirmWaiting > 0 ? confirmWaiting : ''}</span>
               <ChevronDown className={`h-3 w-3 transition-transform ${showConfirm ? '' : '-rotate-90'}`} />
             </button>
           )}
           <button
             onClick={() => setShowUpload(!showUpload)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded whitespace-nowrap transition-colors ${showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
+            className={`flex items-center justify-center gap-1.5 px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
           >
             <Camera className="h-3.5 w-3.5" />
             Upload
           </button>
         </div>
-      </div>
+      </aside>
+
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      {/* Upload panel — collapsible */}
+      {showUpload && (
+        <UploadPanel
+          onRefreshItems={refresh}
+          onComplete={() => {
+            setShowUpload(false)
+            setFilter('in_progress')
+            refresh()
+          }}
+        />
+      )}
+
+      {/* Confirm board: opened from "Confirm items" in the sidebar; height-capped and internally scrollable. */}
+      {showConfirm && (
+        <div className="shrink-0 bg-white border-b border-[#E8E4DF] overflow-y-auto px-4 md:px-6 max-h-[45vh]">
+          <IntakeConfirmBoard clientId={selectedClientId} onDone={() => { refresh(); loadClientOptions() }} />
+        </div>
+      )}
 
       {/* Content — In Progress tab or item cards */}
       {filter === 'queue' ? (
         <div className="flex-1 overflow-y-auto">
-          <iframe key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 112px)', minHeight: 480 }} />
+          <iframe ref={frameRef} key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 60px)', minHeight: 480 }} />
         </div>
       ) : filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">
@@ -653,6 +675,7 @@ export function IntakeInbox() {
         )}
       </div>
       )}
+      </div>
     </div>
     </LightboxProvider>
   )

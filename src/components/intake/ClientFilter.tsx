@@ -36,14 +36,14 @@ export function ClientFilter({ options, value, valueName, onChange }: {
   const selectedName = value ? (options.find((o) => o.id === value)?.name ?? valueName ?? 'Client') : null
 
   return (
-    <div ref={wrap} className="relative flex items-center gap-3">
+    <div ref={wrap} className="relative flex flex-col items-stretch gap-2">
       {selectedName ? (
         <span className="inline-flex items-center gap-2 bg-[#1A1A1A] text-white pl-3 pr-1.5 py-1 text-[11px] tracking-[0.08em]">
           {selectedName}
           <button type="button" aria-label="Show all clients" onClick={() => pick(null)} className="p-1 hover:bg-white/15"><X size={12} /></button>
         </span>
       ) : null}
-      <div className="relative w-[260px]">
+      <div className="relative w-full">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#888]" />
         <input
           value={q}
