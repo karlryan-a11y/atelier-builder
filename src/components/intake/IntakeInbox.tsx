@@ -384,29 +384,6 @@ export function IntakeInbox() {
   return (
     <LightboxProvider>
     <div className="flex-1 bg-[#F8F7F5] flex flex-col overflow-hidden">
-      {/* Upload toggle bar */}
-      <div className="flex items-center justify-between px-4 md:px-6 py-2 bg-white border-b border-[#E8E4DF] shrink-0">
-        <div className="flex items-center gap-3">
-          {counts.pending > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] tracking-[0.2em] uppercase text-[#888]">
-                {counts.pending} pending review
-              </span>
-              <div className="w-2 h-2 rounded-full bg-blush animate-pulse" />
-            </div>
-          )}
-        </div>
-        <button
-          onClick={() => setShowUpload(!showUpload)}
-          className={`flex items-center gap-1.5 px-4 py-2 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${
-            showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'
-          }`}
-        >
-          <Camera className="h-3.5 w-3.5" />
-          Upload
-        </button>
-      </div>
-
       {/* Upload panel — collapsible */}
       {showUpload && (
         <UploadPanel
@@ -419,42 +396,22 @@ export function IntakeInbox() {
         />
       )}
 
-      {/* Confirm board — COLLAPSIBLE (default collapsed) so it can never eat the viewport and block
-          scrolling to the item list below. The header bar always shows how many batches are waiting,
-          so confirm work stays discoverable; click to expand and tag. When expanded it's still
-          height-capped + internally scrollable. */}
-      <div className="shrink-0 bg-white border-b border-[#E8E4DF]">
-        <button
-          onClick={() => setShowConfirm(s => !s)}
-          className="w-full flex items-center justify-between px-4 md:px-6 py-2.5 hover:bg-[#FAFAF8] transition-colors"
-        >
-          <span className="text-[10px] tracking-[0.2em] uppercase text-[#888] flex items-center gap-2">
-            Confirm items
-            {confirmWaiting > 0 ? (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-blush text-[#1A1A1A] text-[9px] font-medium px-1.5">
-                {confirmWaiting} {confirmWaiting === 1 ? 'batch' : 'batches'} waiting
-              </span>
-            ) : (
-              <span className="text-[#bbb] normal-case tracking-normal">none waiting</span>
-            )}
-          </span>
-          <ChevronDown className={`h-4 w-4 text-[#888] transition-transform ${showConfirm ? '' : '-rotate-90'}`} />
-        </button>
-        {showConfirm && (
-          <div className="overflow-y-auto px-4 md:px-6 max-h-[45vh] border-t border-[#E8E4DF]">
-            <IntakeConfirmBoard clientId={selectedClientId} onDone={() => { refresh(); loadClientOptions() }} />
-          </div>
-        )}
-      </div>
+      {/* Confirm board: opened from the "Confirm items" chip in the bar below; height-capped and internally scrollable. */}
+      {showConfirm && (
+        <div className="shrink-0 bg-white border-b border-[#E8E4DF] overflow-y-auto px-4 md:px-6 max-h-[45vh]">
+          <IntakeConfirmBoard clientId={selectedClientId} onDone={() => { refresh(); loadClientOptions() }} />
+        </div>
+      )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-[#E8E4DF] bg-white shrink-0">
-        {tabs.map(tab => (
+      {/* One slim bar: tabs on the left; client search, Confirm items and Upload on the right (Karl, 2026-10-18: the rows above the work took half the screen). */}
+      <div className="flex items-stretch border-b border-[#E8E4DF] bg-white shrink-0 overflow-x-auto">
+        <div className="flex">
+          {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setFilter(tab.key)}
             className={`
-              flex-1 px-4 py-3 text-[11px] tracking-[0.2em] uppercase font-sans
+              px-4 py-2.5 text-[11px] whitespace-nowrap tracking-[0.2em] uppercase font-sans
               transition-colors relative
               ${filter === tab.key
                 ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A]'
@@ -481,11 +438,10 @@ export function IntakeInbox() {
             )}
           </button>
         ))}
-      </div>
-
-      {/* Client filter: a search, then pick a client (the Queue tab lists only clients that have pieces waiting) */}
-      <div className="flex items-center gap-2 px-4 md:px-6 py-2 bg-white border-b border-[#E8E4DF] shrink-0">
-        <ClientFilter
+        </div>
+        <div className="ml-auto flex items-center gap-2 px-4 md:px-6 py-1.5">
+          <div className="w-[240px]">
+            <ClientFilter
           options={(() => {
             const counts = new Map<string, number>()
             if (filter === 'queue') queueClients.forEach((c) => counts.set(c.id, c.n))
@@ -499,12 +455,30 @@ export function IntakeInbox() {
           valueName={[...directory, ...clientOptions, ...queueClients].find((c) => c.id === selectedClientId)?.name}
           onChange={setSelectedClientId}
         />
+          </div>
+          {(confirmWaiting > 0 || showConfirm) && (
+            <button
+              onClick={() => setShowConfirm(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded whitespace-nowrap transition-colors ${showConfirm ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
+            >
+              Confirm items {confirmWaiting > 0 ? confirmWaiting : ''}
+              <ChevronDown className={`h-3 w-3 transition-transform ${showConfirm ? '' : '-rotate-90'}`} />
+            </button>
+          )}
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase rounded whitespace-nowrap transition-colors ${showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
+          >
+            <Camera className="h-3.5 w-3.5" />
+            Upload
+          </button>
+        </div>
       </div>
 
       {/* Content — In Progress tab or item cards */}
       {filter === 'queue' ? (
         <div className="flex-1 overflow-y-auto">
-          <iframe key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: '78vh' }} />
+          <iframe key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 112px)', minHeight: 480 }} />
         </div>
       ) : filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">

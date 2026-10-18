@@ -38,17 +38,17 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
   const hasBatch = typeof localStorage !== 'undefined' && localStorage.getItem('atelier_active_batch')
 
   return (
-    <header className="h-[120px] bg-[#050505] flex items-center justify-between px-6 border-b border-white/[0.06]">
+    <header className={`${activeView === 'digitize' ? 'h-[56px]' : 'h-[120px]'} bg-[#050505] flex items-center justify-between px-6 border-b border-white/[0.06]`}>
       <div className="flex items-center gap-8">
-        <a href="/" className="flex flex-col transition-opacity duration-300 hover:opacity-80 py-2">
+        <a href="/" className={`flex flex-col transition-opacity duration-300 hover:opacity-80 ${activeView === 'digitize' ? 'py-0' : 'py-2'}`}>
           <span
-            className="text-white text-[42px] leading-none tracking-[0.015em]"
+            className={`text-white ${activeView === 'digitize' ? 'text-[26px]' : 'text-[42px]'} leading-none tracking-[0.015em]`}
             style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}
           >
             ATELIER
           </span>
           <span
-            className="text-white/50 text-[9px] tracking-[0.35em] uppercase mt-1.5"
+            className={`text-white/50 text-[9px] tracking-[0.35em] uppercase mt-1.5 ${activeView === 'digitize' ? 'hidden' : ''}`}
             style={{ fontFamily: "'Neue Haas', 'Helvetica Neue', sans-serif", fontWeight: 300 }}
           >
             By Watson
