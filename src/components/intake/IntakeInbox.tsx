@@ -404,8 +404,8 @@ export function IntakeInbox() {
       )}
 
       {/* One slim bar: tabs on the left; client search, Confirm items and Upload on the right (Karl, 2026-10-18: the rows above the work took half the screen). */}
-      <div className="flex items-stretch border-b border-[#E8E4DF] bg-white shrink-0 overflow-x-auto">
-        <div className="flex">
+      <div className="relative z-20 flex items-stretch border-b border-[#E8E4DF] bg-white shrink-0">
+        <div className="flex min-w-0 overflow-x-auto">
           {tabs.map(tab => (
           <button
             key={tab.key}
