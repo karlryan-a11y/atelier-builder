@@ -74,11 +74,11 @@ export function IntakeInbox() {
       try {
         const r = await fetch('/api/capture/review?filter=todo&limit=1', { credentials: 'include', cache: 'no-store' })
         if (!alive) return
-        setQueueChecked(true)
-        if (!r.ok) { setQueueCount(null); return }
+        if (!r.ok) { setQueueCount(null); setQueueChecked(true); return }
         const j = (await r.json()) as { counts?: { todo?: number }; clients?: Array<{ id: string; name: string; n: number }> }
         setQueueCount(j.counts?.todo ?? 0)
         setQueueClients(j.clients ?? [])
+        setQueueChecked(true)
       } catch { if (alive) { setQueueChecked(true); setQueueCount(null) } }
     }
     void load()
