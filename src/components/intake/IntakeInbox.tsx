@@ -44,14 +44,14 @@ const FIXED_CATEGORIES = (Object.entries(CATEGORY_LABELS) as [string, string][])
 
 export function IntakeInbox() {
   const [filter, setFilter] = useState<'queue' | 'in_progress' | 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all'>(() => {
-    // Default to In Progress if there are active batches
-    const saved = localStorage.getItem('atelier_active_batch')
-    return saved ? 'in_progress' : 'pending_review'
+    // Digitize always opens on the Queue (Karl, 2026-10-18). People the dashboard does not let into the Queue fall back to Needs Review below.
+    return 'queue'
   })
   const [activeBatchCount, setActiveBatchCount] = useState(0)
   // The camera bubble's queue (Karl, 2026-10-16): pieces captured on a phone wait here to be matched and confirmed, then
   // go into In Progress. The tab shows only for people the dashboard lets in (it answers 403 to everyone else).
   const [queueCount, setQueueCount] = useState<number | null>(null)
+  const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
   type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string }
@@ -74,11 +74,12 @@ export function IntakeInbox() {
       try {
         const r = await fetch('/api/capture/review?filter=todo&limit=1', { credentials: 'include', cache: 'no-store' })
         if (!alive) return
+        setQueueChecked(true)
         if (!r.ok) { setQueueCount(null); return }
         const j = (await r.json()) as { counts?: { todo?: number }; clients?: Array<{ id: string; name: string; n: number }> }
         setQueueCount(j.counts?.todo ?? 0)
         setQueueClients(j.clients ?? [])
-      } catch { if (alive) setQueueCount(null) }
+      } catch { if (alive) { setQueueChecked(true); setQueueCount(null) } }
     }
     void load()
     const t = setInterval(() => void load(), 30000)
@@ -90,7 +91,8 @@ export function IntakeInbox() {
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState('')
   const { activeClient } = useClientStore()
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(activeClient?.id ?? null)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  useEffect(() => { if (queueChecked && queueCount === null && filter === 'queue') setFilter('pending_review') }, [queueChecked, queueCount, filter])
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
   const hookFilter = filter === 'in_progress' || filter === 'queue' ? 'pending_review' : filter
   const { items, loading, error, refresh, refreshBackground, counts } = useIntakeItems(hookFilter, selectedClientId)
@@ -201,8 +203,11 @@ export function IntakeInbox() {
   }
 
   // Sync: if stylist switches client in the Builder, update the inbox filter
+  // (Not on first load: Digitize opens with no client picked.)
+  const clientSeen = useRef(activeClient?.id)
   useEffect(() => {
-    if (activeClient?.id && activeClient.id !== selectedClientId) {
+    if (activeClient?.id && activeClient.id !== clientSeen.current) {
+      clientSeen.current = activeClient.id
       setSelectedClientId(activeClient.id)
     }
   }, [activeClient?.id])
