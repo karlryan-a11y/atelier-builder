@@ -431,6 +431,7 @@ export function IntakeInbox() {
               >
                 <span className="flex items-center gap-2">
                   {tab.key === 'in_progress' && tab.count > 0 && <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />}
+                  {tab.key === 'queue' && cap.items.some(i => i.chip === 'Stuck') && <span className="w-2 h-2 bg-[#c30319] rounded-full" title="A piece is stuck" />}
                   {tab.label}
                 </span>
                 {tab.count > 0 && (
@@ -439,19 +440,14 @@ export function IntakeInbox() {
               </button>
               {tab.key === 'queue' && filter === 'queue' && (
                 <div className="pb-2">
-                  {([['todo', 'To do', cap.items.length], ['attention', 'Needs attention', cap.attention], ['done', 'Done', 0]] as const).map(([k, label, n]) => (
-                    <button key={k} onClick={() => tellFrame({ type: 'tab', tab: k })} className={`w-full flex items-center justify-between pl-9 pr-4 py-1.5 text-left text-[12px] ${cap.tab === k ? 'text-[#1A1A1A]' : 'text-[#888] hover:text-[#1A1A1A]'}`}>
-                      <span>{label}</span>{n > 0 && <span className="text-[10px] text-[#888]">{n}</span>}
-                    </button>
-                  ))}
-                  {cap.tab === 'todo' && cap.items.length > 0 && (
+                  {cap.items.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
                       {cap.items.map(it => (
                         <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
                             <span className="block truncate text-[11px] text-[#1A1A1A]">{it.title}</span>
-                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Pick the image' ? 'bg-[#1A1A1A] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
+                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Pick the image' ? 'bg-[#1A1A1A] text-white' : it.chip === 'Stuck' ? 'bg-[#c30319] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
                           </span>
                         </button>
                       ))}
