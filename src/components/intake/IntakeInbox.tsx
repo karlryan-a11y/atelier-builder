@@ -54,9 +54,11 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
+  // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
+  const [capView, setCapView] = useState<'todo' | 'done'>('todo')
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || !e.data || e.data.source !== 'capture-queue' || e.data.type !== 'state') return
@@ -440,9 +442,16 @@ export function IntakeInbox() {
               </button>
               {tab.key === 'queue' && filter === 'queue' && (
                 <div className="pb-2">
+                  {cap.items.some(i => i.done) && (
+                    <div className="mt-1 mx-3 flex gap-1.5">
+                      {([['todo', 'To do', cap.items.filter(i => !i.done).length], ['done', 'Finished', cap.items.filter(i => i.done).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setCapView(k); const first = cap.items.find(i => (k === 'done') === !!i.done); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.2em] uppercase border ${capView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      ))}
+                    </div>
+                  )}
                   {cap.items.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
-                      {cap.items.map(it => (
+                      {cap.items.filter(i => !cap.items.some(x => x.done) || (capView === 'done') === !!i.done).map(it => (
                         <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
