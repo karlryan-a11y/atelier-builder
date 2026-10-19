@@ -59,6 +59,8 @@ export function IntakeInbox() {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
   const [capView, setCapView] = useState<'todo' | 'done'>('todo')
+  // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
+  const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || !e.data || e.data.source !== 'capture-queue' || e.data.type !== 'state') return
@@ -340,10 +342,11 @@ export function IntakeInbox() {
     }, 15000)
   }, [items, refreshBackground, selectedIds])
 
+  const camMode = queueCount !== null && (filter === 'queue' || (filter === 'pending_review' && reviewSrc === 'camera'))
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
-    { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending },
+    { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending + counts.camera },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
     { key: 'rejected_final' as const, label: 'Rejected', count: counts.rejected },
   ]
@@ -440,8 +443,16 @@ export function IntakeInbox() {
                   <span className={`inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full text-[10px] font-medium px-1.5 ${tab.key === 'in_progress' ? 'bg-emerald-100 text-emerald-700' : tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]' : 'bg-[#E8E4DF] text-[#888]'}`}>{tab.count}</span>
                 )}
               </button>
-              {tab.key === 'queue' && filter === 'queue' && (
+              {((tab.key === 'queue' && filter === 'queue') || (tab.key === 'pending_review' && filter === 'pending_review' && queueCount !== null)) && (
                 <div className="pb-2">
+                  {tab.key === 'pending_review' && (
+                    <div className="mt-1 mx-3 flex gap-1.5">
+                      {([['camera', 'From the camera', counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      ))}
+                    </div>
+                  )}
+                  {tab.key === 'queue' || reviewSrc === 'camera' ? <>
                   {cap.items.some(i => i.done) && (
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['todo', 'To do', cap.items.filter(i => !i.done).length], ['done', 'Finished', cap.items.filter(i => i.done).length]] as const).map(([k, l, n]) => (
@@ -456,12 +467,14 @@ export function IntakeInbox() {
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
                             <span className="block truncate text-[11px] text-[#1A1A1A]">{it.title}</span>
-                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Pick the image' ? 'bg-[#1A1A1A] text-white' : it.chip === 'Stuck' ? 'bg-[#c30319] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
+                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Ready to approve' ? 'bg-[#1A1A1A] text-white' : it.chip === 'Stuck' ? 'bg-[#c30319] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
                           </span>
                         </button>
                       ))}
                     </div>
                   )}
+                  {cap.items.length === 0 && tab.key === 'pending_review' && <div className="mt-1 mx-4 text-[11px] text-[#888]">Nothing from the camera is ready yet.</div>}
+                  </> : null}
                 </div>
               )}
             </div>
@@ -509,9 +522,9 @@ export function IntakeInbox() {
       )}
 
       {/* Content — In Progress tab or item cards */}
-      {filter === 'queue' ? (
+      {camMode ? (
         <div className="flex-1 overflow-y-auto">
-          <iframe ref={frameRef} key={selectedClientId ?? 'all'} src={selectedClientId ? `/capture-queue?client=${encodeURIComponent(selectedClientId)}` : '/capture-queue'} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 60px)', minHeight: 480 }} />
+          <iframe ref={frameRef} key={`${filter}-${selectedClientId ?? 'all'}`} src={`/capture-queue?view=${filter === 'queue' ? 'queue' : 'review'}${selectedClientId ? `&client=${encodeURIComponent(selectedClientId)}` : ''}`} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 60px)', minHeight: 480 }} />
         </div>
       ) : filter === 'in_progress' ? (
         <div className="flex-1 overflow-y-auto">

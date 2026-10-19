@@ -46,7 +46,7 @@ interface UseIntakeItemsResult {
   // user's scroll position is preserved (stable card keys reconcile in place). Used by the 15s
   // auto-poll and post-action refreshes so scrolling/approving never snaps back to the top.
   refreshBackground: () => void
-  counts: { qc_passed: number; pending: number; approved: number; rejected: number }
+  counts: { qc_passed: number; pending: number; approved: number; rejected: number; camera: number }
 }
 
 export function useIntakeItems(
@@ -56,7 +56,7 @@ export function useIntakeItems(
   const [items, setItems] = useState<IntakeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [counts, setCounts] = useState({ qc_passed: 0, pending: 0, approved: 0, rejected: 0 })
+  const [counts, setCounts] = useState({ qc_passed: 0, pending: 0, approved: 0, rejected: 0, camera: 0 })
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
     // Background refreshes update the data in place without tearing the list down (no spinner),
@@ -117,7 +117,17 @@ export function useIntakeItems(
         clientMap = Object.fromEntries((clients ?? []).map((c: any) => [c.id, c.name]))
       }
 
-      const items = (data ?? []).map((item: any) => ({
+      // Pieces from the camera (their batch is labelled "Capture bubble <day>") are reviewed on the camera's own pick screen in Needs Review,
+      // never on these cards: the cards' Approve button would skip the image pick. They are left out of this list and counted separately.
+      const batchIds = [...new Set((data ?? []).map((d: any) => d.batch_id))]
+      const cameraBatch = new Set<string>()
+      for (let i = 0; i < batchIds.length; i += 200) {
+        const { data: bs } = await supabase.from('intake_batches').select('id').in('id', batchIds.slice(i, i + 200)).like('batch_label', 'Capture bubble%')
+        for (const b of bs ?? []) cameraBatch.add(b.id as string)
+      }
+      const rows = filter === 'pending_review' ? (data ?? []).filter((d: any) => !cameraBatch.has(d.batch_id)) : (data ?? [])
+
+      const items = rows.map((item: any) => ({
         ...item,
         garment_photo: item.garment_photo?.[0] || item.garment_photo || null,
         tag_photo: item.tag_photo?.[0] || item.tag_photo || null,
@@ -144,17 +154,32 @@ export function useIntakeItems(
         return q
       }
 
-      const [qcPassedRes, pendingRes, approvedRes, rejectedRes, reworkRes] = await Promise.all([
+      // Camera pieces waiting for review: counted on their own so the Needs Review number is old cards + camera pieces.
+      const { data: camBatches } = await supabase.from('intake_batches').select('id').like('batch_label', 'Capture bubble%').limit(1000)
+      const camIds = (camBatches ?? []).map((b: any) => b.id as string)
+      const cameraCount = async () => {
+        if (!camIds.length) return 0
+        let total = 0
+        for (let i = 0; i < camIds.length; i += 200) {
+          let q = supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'pending_review').neq('inbox_archived', true).in('batch_id', camIds.slice(i, i + 200))
+          if (clientId) q = q.eq('client_id', clientId)
+          total += (await q).count ?? 0
+        }
+        return total
+      }
+      const [qcPassedRes, pendingRes, approvedRes, rejectedRes, reworkRes, camera] = await Promise.all([
         buildCountQuery('qc_passed'),
         buildCountQuery('pending_review'),
         buildCountQuery('approved'),
         buildCountQuery('rejected_final'),
         buildReworkCountQuery(),
+        cameraCount(),
       ])
 
       setCounts({
         qc_passed: qcPassedRes.count ?? 0,
-        pending: (pendingRes.count ?? 0) + (reworkRes.count ?? 0),
+        pending: Math.max(0, (pendingRes.count ?? 0) - camera) + (reworkRes.count ?? 0),
+        camera,
         approved: approvedRes.count ?? 0,
         rejected: rejectedRes.count ?? 0,
       })
