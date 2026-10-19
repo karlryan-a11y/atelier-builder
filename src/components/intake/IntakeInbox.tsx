@@ -447,7 +447,7 @@ export function IntakeInbox() {
                 <div className="pb-2">
                   {tab.key === 'pending_review' && (
                     <div className="mt-1 mx-3 flex gap-1.5">
-                      {([['camera', 'From the camera', counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
+                      {([['camera', 'From the camera', cap.items.length > 0 && reviewSrc === 'camera' ? cap.items.length : counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
                         <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
