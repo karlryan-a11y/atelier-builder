@@ -459,6 +459,7 @@ export function IntakeInbox() {
           ))}
         </nav>
         <div className="border-t border-[#E8E4DF] p-3 flex flex-col gap-2">
+          <a href="/sops#digitize-with-camera" target="_blank" rel="noreferrer" className="text-center text-[10px] tracking-[0.2em] uppercase text-[#888] underline hover:text-[#1A1A1A]">How to digitize</a>
           {(confirmWaiting > 0 || showConfirm) && (
             <button
               onClick={() => setShowConfirm(v => !v)}
