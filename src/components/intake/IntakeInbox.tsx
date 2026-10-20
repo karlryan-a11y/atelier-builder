@@ -55,7 +55,7 @@ export function IntakeInbox() {
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
   type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean }
-  const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
+  const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
   const [capView, setCapView] = useState<'todo' | 'done'>('todo')
@@ -64,7 +64,7 @@ export function IntakeInbox() {
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || !e.data || e.data.source !== 'capture-queue' || e.data.type !== 'state') return
-      setCap({ tab: e.data.tab, attention: e.data.attention ?? 0, items: Array.isArray(e.data.items) ? e.data.items : [], selectedId: e.data.selectedId ?? null })
+      setCap({ tab: e.data.tab, attention: e.data.attention ?? 0, total: typeof e.data.total === 'number' ? e.data.total : undefined, items: Array.isArray(e.data.items) ? e.data.items : [], selectedId: e.data.selectedId ?? null })
     }
     window.addEventListener('message', on)
     return () => window.removeEventListener('message', on)
@@ -447,7 +447,7 @@ export function IntakeInbox() {
                 <div className="pb-2">
                   {tab.key === 'pending_review' && (
                     <div className="mt-1 mx-3 flex gap-1.5">
-                      {([['camera', 'From the camera', cap.items.length > 0 && reviewSrc === 'camera' ? cap.items.length : counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
+                      {([['camera', 'From the camera', cap.items.length > 0 && reviewSrc === 'camera' ? Math.max(cap.items.length, cap.total ?? 0) : counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
                         <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
