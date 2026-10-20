@@ -346,7 +346,7 @@ export function IntakeInbox() {
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
-    { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending + counts.camera },
+    { key: 'pending_review' as const, label: 'Needs Review', count: counts.pending + (filter === 'pending_review' && (cap.total ?? 0) > 0 ? (cap.total as number) : counts.camera) },
     { key: 'approved' as const, label: 'Approved', count: counts.approved },
     { key: 'rejected_final' as const, label: 'Rejected', count: counts.rejected },
   ]
