@@ -77,7 +77,7 @@ if (chat) {
     check(!!body, `ChatPanel: ${name} is gone; this guard no longer covers it.`)
     if (!body) continue
     if (name !== 'handleCreateCapsule') {
-      check(/boardPictureForSave\(\)/.test(body), `ChatPanel: ${name} saves without asking boardPictureForSave, so a look can save with no picture.`)
+      check(/await boardPictureForSave\(/.test(body), `ChatPanel: ${name} saves without asking boardPictureForSave, so a look can save with no picture.`)
     }
     check(new RegExp(`finally \\{\\s*${flag.replace(/[()]/g, '\\$&')}`).test(body), `ChatPanel: ${name} does not clear its Saving state in a finally, so a failure leaves it stuck.`)
     check(/\.error/.test(body) && /alert\(/.test(body), `ChatPanel: ${name} does not tell the stylist when the save failed.`)

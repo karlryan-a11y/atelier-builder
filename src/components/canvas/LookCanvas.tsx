@@ -2,7 +2,7 @@ import { useRef, useMemo, useCallback, useEffect, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text as KonvaText, Line } from 'react-konva'
 import type Konva from 'konva'
 import { useViewStore } from '@/stores/viewStore'
-import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle, registerUnusablePhotos } from '@/stores/canvasStore'
+import { useCanvasStore, registerCanvasExport, unregisterCanvasExport, registerCanvasSettle, unregisterCanvasSettle, registerUnusablePhotos, registerLoadingPhotos, usePhotosLoading } from '@/stores/canvasStore'
 import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
@@ -568,9 +568,19 @@ export function LookCanvas() {
     return m
   }, [state.nodes, storeImageUrls])
 
-  const { images, unusable } = useCanvasImages(imageUrlMap)
+  const { images, unusable, loading } = useCanvasImages(imageUrlMap)
   // Save asks for these before it runs: a placeholder must never end up in a client's look picture.
   useEffect(() => registerUnusablePhotos(() => [...unusable]), [unusable])
+  // ...and waits for these: a photo still on its way is not drawn, so a picture taken now would be
+  // labels with no clothes (Peyton's London capsule, 2026-10-20, ADR-0194). A hidden piece is off
+  // the picture, so it is not waited for. Registered after the board has drawn what arrived.
+  useEffect(() => {
+    const hidden = new Set(state.nodes.filter((n) => n.type === 'closet_item' && n.hidden).map((n) => n.id))
+    const waiting = [...loading].filter((id) => !hidden.has(id))
+    registerLoadingPhotos(() => waiting)
+    usePhotosLoading.setState({ count: waiting.length })
+  }, [loading, state.nodes])
+  useEffect(() => () => { registerLoadingPhotos(() => []); usePhotosLoading.setState({ count: 0 }) }, [])
 
   // ADR-0146: a hidden piece is not drawn, which also keeps it out of the saved picture, because
   // that picture is this stage (render/composite.ts calls stage.toDataURL). It stays in

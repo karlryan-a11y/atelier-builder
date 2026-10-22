@@ -182,6 +182,13 @@ let _unusablePhotos: () => string[] = () => []
 export function registerUnusablePhotos(fn: () => string[]) { _unusablePhotos = fn }
 export function unusablePhotoNodeIds(): string[] { return _unusablePhotos() }
 
+// Pieces on the board whose photo has not arrived yet, so is not drawn. Save waits for this to be
+// empty (lib/waitForPhotos), and the save buttons wait with it via usePhotosLoading. ADR-0194.
+let _loadingPhotos: () => string[] = () => []
+export function registerLoadingPhotos(fn: () => string[]) { _loadingPhotos = fn }
+export function loadingPhotoNodeIds(): string[] { return _loadingPhotos() }
+export const usePhotosLoading = create<{ count: number }>(() => ({ count: 0 }))
+
 export function exportCanvasImage(opts?: { pixelRatio?: number; padding?: number }): string | null {
   return _registeredExportFn ? _registeredExportFn(opts) : null
 }

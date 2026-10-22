@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Send, Save, FilePlus, Loader2, Check, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasStore, usePhotosLoading } from '@/stores/canvasStore'
 import { boardPictureForSave } from '@/lib/boardPictureForSave'
 import { reportBuilderError } from '@/lib/reportError'
 import { useClientStore } from '@/stores/clientStore'
@@ -59,6 +59,9 @@ export function ChatPanel() {
     noteSavedAs: s.noteSavedAs, noteSavedCapsuleAs: s.noteSavedCapsuleAs, addNode: s.addNode,
   })))
   const nodes = useCanvasStore((s) => s.state.nodes)
+  // Photos still on their way are not drawn yet, so the board cannot be saved until they arrive
+  // (Peyton's London capsule, 2026-10-20, ADR-0194). boardPictureForSave waits on the same list.
+  const photosLoading = usePhotosLoading((s) => s.count)
   const { looks, loading, error: looksError, fetchLooks, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
@@ -151,7 +154,7 @@ export function ChatPanel() {
     try {
       // The picture FIRST (lib/boardPictureForSave). A board whose picture cannot be made is not
       // saved: 2026-10-07 "mh" saved with no picture and nobody was told.
-      const picture = boardPictureForSave()
+      const picture = await boardPictureForSave({ kind: 'look', name: data.name })
       if (!picture.ok) { alert(picture.message); return }
       // Save the canvas exactly as it is (settled by boardPictureForSave). Styling is an explicit
       // action (the toolbar's sparkle button); saving must NEVER re-arrange or rescale the look.
@@ -284,7 +287,7 @@ export function ChatPanel() {
     try {
     // The picture FIRST, same rule as Save Look (lib/boardPictureForSave, ADR-0168): a capsule
     // whose picture cannot be made is not saved, and she is told why.
-    const picture = boardPictureForSave()
+    const picture = await boardPictureForSave({ kind: 'capsule', name: data.name })
     if (!picture.ok) { alert(picture.message.replace("The look's", "The capsule's")); return }
     const canvasState = useCanvasStore.getState().state
     const imageBase64 = picture.base64
@@ -563,15 +566,15 @@ export function ChatPanel() {
             <button
               onClick={() => setShowSaveDialog(true)}
               // Several looks saved as ONE look is never what she means (ADR-0152).
-              disabled={nodes.length === 0 || buildingCapsule}
-              title={buildingCapsule ? 'This board is a capsule. Use Save as Capsule.' : undefined}
+              disabled={nodes.length === 0 || buildingCapsule || photosLoading > 0}
+              title={buildingCapsule ? 'This board is a capsule. Use Save as Capsule.' : photosLoading > 0 ? 'Photos are still loading. Save works once every piece shows its photo.' : undefined}
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#1A1A1A] text-white text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-30"
             >
               <Save className="h-3 w-3" />
               {/* A rebuild REPLACES the look it opened, so it updates from her point of view
                   even though the row underneath is a new one (ADR-0148). Saying "Save" there is
                   what made Cynthia think she was about to end up with two. */}
-              {currentLookId || replacesLookId ? 'Update Look' : 'Save Look'}
+              {photosLoading > 0 && !buildingCapsule ? `Loading photos (${photosLoading})` : currentLookId || replacesLookId ? 'Update Look' : 'Save Look'}
             </button>
             <button
               onClick={handleNewLook}
@@ -588,9 +591,11 @@ export function ChatPanel() {
           <div className="px-3 py-1.5 border-b border-border">
             <button
               onClick={() => setShowSaveAsCapsuleDialog(true)}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-[#1A1A1A] text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text"
+              disabled={photosLoading > 0}
+              title={photosLoading > 0 ? 'Photos are still loading. Save works once every piece shows its photo.' : undefined}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-[#1A1A1A] text-[10px] tracking-[0.2em] uppercase rounded-sm hover:bg-tile transition-colors text-text disabled:opacity-30"
             >
-              {currentCapsuleId ? 'Update Capsule' : replacesCapsuleId ? 'Replace Capsule' : 'Save as Capsule'}
+              {photosLoading > 0 ? `Loading photos (${photosLoading})` : currentCapsuleId ? 'Update Capsule' : replacesCapsuleId ? 'Replace Capsule' : 'Save as Capsule'}
             </button>
           </div>
         )}
