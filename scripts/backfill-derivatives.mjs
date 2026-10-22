@@ -78,9 +78,11 @@ function loadEnv(file) {
   return out
 }
 const here = path.dirname(new URL(import.meta.url).pathname)
-const builderEnv = loadEnv(path.join(here, '..', '.env.local'))
-const r2Env = loadEnv(path.join(process.env.HOME, 'wsg-intake-pipeline', '.env.local'))
-const SUPABASE_URL = builderEnv.VITE_SUPABASE_URL
+// Files first (a laptop run); the process environment fills anything they lack (the scheduled
+// GitHub Action in .github/workflows/derivatives.yml, which has no files).
+const builderEnv = { ...process.env, ...loadEnv(path.join(here, '..', '.env.local')) }
+const r2Env = { ...process.env, ...loadEnv(path.join(process.env.HOME ?? '', 'wsg-intake-pipeline', '.env.local')) }
+const SUPABASE_URL = builderEnv.VITE_SUPABASE_URL || builderEnv.SUPABASE_URL
 const SERVICE_KEY = builderEnv.SUPABASE_SERVICE_ROLE_KEY
 for (const [k, v] of Object.entries({ SUPABASE_URL, SERVICE_KEY, R2_ENDPOINT: r2Env.R2_ENDPOINT, R2_BUCKET_NAME: r2Env.R2_BUCKET_NAME })) {
   if (!v) { console.error(`missing ${k}`); process.exit(1) }
@@ -107,6 +109,7 @@ async function retry(fn, label, tries = 4) {
 }
 const logLine = (obj) => fs.appendFileSync(LOG, JSON.stringify({ ts: new Date().toISOString(), script: SCRIPT, ...obj }) + '\n')
 async function countdown(what) {
+  if (process.argv.includes('--no-countdown')) { console.log(`\n*** WRITE MODE: ${what}. ***\n`); return } // the scheduled job; nobody is there to press Ctrl-C
   console.log(`\n*** WRITE MODE: ${what}. Ctrl-C now to abort. ***`)
   for (let s = 10; s > 0; s--) { process.stdout.write(`  ${s}… `); await sleep(1000) }
   console.log('\n')

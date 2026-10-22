@@ -1,0 +1,41 @@
+# Builds the small copy (derived/w400q82, derived/w760q82) of every piece and look that lacks one.
+#
+# WHY. Pieces made by the camera flow, the intake pipeline's restyle and QC, and replace never ask
+# for a small copy, and the save-time function (api/derive-image.ts) cannot write since upload-image
+# started requiring a signed-in caller (ADR-0139). Every tile without one downloads the 1-2 MB
+# original: Margaux Ellery's Collection pulled 57.8 MB for 48 tiles on 2026-10-21 (ADR-0193).
+# This runs scripts/backfill-derivatives.mjs, which only ADDS files: a key that exists is skipped and
+# every key is HEADed again before its PUT. It reads nothing from a person's laptop.
+#
+# If a run fails GitHub emails the repository owner. Secrets: SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY, R2_ENDPOINT, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY.
+name: derivatives
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: derivatives
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build missing small copies
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: node scripts/backfill-derivatives.mjs --log "$RUNNER_TEMP/derivatives.jsonl" --write --no-countdown --concurrency 4
