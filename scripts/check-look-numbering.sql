@@ -17,7 +17,8 @@ DECLARE
   -- every live look's name in number order, as one string
   live_names text;
 BEGIN
-  INSERT INTO gp_clients (id, name, raw) VALUES (cid, 'ZZ Check Look Numbering', '{}'::jsonb);
+  -- Created OFF on purpose (since 044 a new client is on by default): steps 1-11 test switch-on.
+  INSERT INTO gp_clients (id, name, raw, looks_numbering_on) VALUES (cid, 'ZZ Check Look Numbering', '{}'::jsonb, false);
   -- Messy on purpose: a gap (3 -> 7), a duplicate (7 twice), a "to be tried" title, a blank,
   -- and a draft in the queue. All of it is what live data looks like (Kristen Seeger, Keil).
   INSERT INTO gp_looks (id, client_id, name, raw, published, created_at) VALUES
@@ -28,7 +29,7 @@ BEGIN
     (cid||'-e', cid, '',                                '{}', true,  now() - interval '2 days'),
     (cid||'-f', cid, 'Look 8',                          '{}', false, now() - interval '1 days');
 
-  -- 1. Off by default: an insert renames nothing.
+  -- 1. A client who is off: an insert renames nothing.
   IF (SELECT name FROM gp_looks WHERE id = cid||'-b') <> 'ZZ Client FW26 Look 3' THEN
     RAISE EXCEPTION 'CHECK_FAIL 1: a client who is off was renamed';
   END IF; passed := passed + 1;
@@ -108,7 +109,7 @@ BEGIN
 
   -- TITLES AND SEASON-BY-SEASON NUMBERS. A second throwaway client whose numbers restart per
   -- season, created out of order, like Margaux Ellery's: no number is unique, so fresh ones.
-  INSERT INTO gp_clients (id, name, raw) VALUES (cid||'2', 'Zelda Quill', '{}'::jsonb);
+  INSERT INTO gp_clients (id, name, raw, looks_numbering_on) VALUES (cid||'2', 'Zelda Quill', '{}'::jsonb, false);
   INSERT INTO gp_looks (id, client_id, name, raw, published, created_at) VALUES
     (cid||'2-a', cid||'2', 'Zelda Quill SS25 Look 2',  '{}', true, now() - interval '9 days'),
     (cid||'2-b', cid||'2', 'Zelda Quill SS25 Look 1',  '{}', true, now() - interval '8 days'),
@@ -169,6 +170,20 @@ BEGIN
       (SELECT name FROM gp_looks WHERE id = cid||'2-g'), (SELECT look_title FROM gp_looks WHERE id = cid||'2-g');
   END IF; passed := passed + 1;
 
-  RAISE EXCEPTION 'CHECK_OK % assertions, 15 looks, 2 throwaway clients (rolled back)', passed;
+  -- 18. A client created today, the normal way (no flag given, like Create Client Site and paid
+  --     enrollment): she is ON from the start, her first look is Look 1, a typed title is kept.
+  INSERT INTO gp_clients (id, name, raw) VALUES (cid||'3', 'Yara New', '{}'::jsonb);
+  IF NOT (SELECT looks_numbering_on FROM gp_clients WHERE id = cid||'3') THEN
+    RAISE EXCEPTION 'CHECK_FAIL 18: a new client is created with look numbers OFF';
+  END IF;
+  INSERT INTO gp_looks (id, client_id, name, raw, published) VALUES (cid||'3-a', cid||'3', 'Untitled Look', '{}', false);
+  INSERT INTO gp_looks (id, client_id, name, raw, published) VALUES (cid||'3-b', cid||'3', 'Bali Dinner', '{}', false);
+  IF (SELECT name FROM gp_looks WHERE id = cid||'3-a') <> 'Look 1'
+     OR (SELECT name FROM gp_looks WHERE id = cid||'3-b') <> 'Look 2 Bali Dinner' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 18b: new client looks are % / %',
+      (SELECT name FROM gp_looks WHERE id = cid||'3-a'), (SELECT name FROM gp_looks WHERE id = cid||'3-b');
+  END IF; passed := passed + 1;
+
+  RAISE EXCEPTION 'CHECK_OK % assertions, 17 looks, 3 throwaway clients (rolled back)', passed;
 END
 $check$;
