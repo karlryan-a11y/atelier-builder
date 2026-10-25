@@ -28,11 +28,19 @@ Start the post with **`team:`** (any capitalization, bold is fine), for example 
 - **Every reply in that post's thread stays in Slack too,** so the team can talk it over under the note.
 - The marker has to be at the very start. "The team loved this" still goes to her.
 - A reply in any other thread still goes to her as usual.
+- Before a thread reply goes to her, Atelier checks the thread's first post. If it can't check, it holds the reply back to be safe. If she says a thread reply never arrived, tell Karl.
+- Adding `team:` to a message she already has does not take it back. Delete it instead (below).
 
 ### Unsending a message
-Sent something to her by mistake? **Delete it in Slack** (hover the message, More actions, Delete message). It disappears from her chat, photos and voice notes included, within a few seconds if her chat is open, or the next time she opens it.
+Sent something to her by mistake? Delete it in Slack.
+1. On a computer, hover over the message. On your phone, press and hold it.
+2. On a computer, click **More actions** (the three dots). Skip this on your phone.
+3. Tap **Delete message**.
+4. Confirm with **Delete**.
+
+It disappears from her chat, photos and voice notes too. If her chat is open, that takes a few seconds. Otherwise it's gone the next time she opens it.
 - **This can't take back a notification.** If her phone already showed the push or a lock-screen preview, she may have read it there. When in doubt, use `team:` before you post.
-- Editing a message in Slack does not change what she already has. Delete it and post it again.
+- Editing a message in Slack does not change what she already has. Deleting it is the only way to take it back. Then post it again.
 - A message you deleted in Slack before unsend existed (October 2026) is still in her chat. Ask Karl to remove it.
 
 ### Sending a look
