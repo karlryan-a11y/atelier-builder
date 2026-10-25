@@ -25,6 +25,10 @@ type BoardPicture = HTMLImageElement | HTMLCanvasElement
 const natW = (p: BoardPicture) => ('naturalWidth' in p ? p.naturalWidth : p.width)
 const natH = (p: BoardPicture) => ('naturalHeight' in p ? p.naturalHeight : p.height)
 
+/** The handles a piece or a picture shows when it is selected alone: the four corners plus the
+ *  middle of each side, so a side handle makes it wider and a top or bottom handle taller. */
+const STRETCH_ANCHORS = ['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
 interface ClosetItemImageProps {
   node: ClosetItemNode
   image: BoardPicture | undefined
@@ -158,7 +162,7 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
           }}
           rotateEnabled
           keepRatio={false}
-          enabledAnchors={['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']}
+          enabledAnchors={STRETCH_ANCHORS}
           boundBoxFunc={(oldBox, newBox) => (resizeAllowed(newBox) ? newBox : oldBox)}
         />
       )}
@@ -180,7 +184,7 @@ interface PictureNodeProps {
 
 /**
  * A plain picture on the board — a shop product or pasted image carried across from a GoodPix
- * look (ADR-0127). Moves, resizes and rotates like a piece; its geometry comes from
+ * look (ADR-0127). Moves, resizes, stretches and rotates like a piece; its geometry comes from
  * pictureKonvaAttrs, the same function the headless renderer uses.
  */
 function PictureNodeElement({ node, image, isSelected, solo, onSelect, onDragStart, onDragMove, onDragEnd, onTransformCommit }: PictureNodeProps) {
@@ -213,8 +217,8 @@ function PictureNodeElement({ node, image, isSelected, solo, onSelect, onDragSta
         <Transformer
           ref={(tr) => { if (tr && ref.current) { tr.nodes([ref.current]); tr.getLayer()?.batchDraw() } }}
           rotateEnabled
-          keepRatio
-          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={false}
+          enabledAnchors={STRETCH_ANCHORS}
           boundBoxFunc={(oldBox, newBox) => (resizeAllowed(newBox) ? newBox : oldBox)}
         />
       )}
