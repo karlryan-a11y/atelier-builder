@@ -15,12 +15,13 @@ import type { CanvasNode, ClosetItemNode, PictureNode, TextNode } from '@/types/
 import { addPictureFilesToBoard, removePictureBackground } from '@/lib/addPicture'
 import { r2KeyOf } from '@/lib/imageUrls'
 import { BOARD_PRESETS } from '@/types/canvas'
+import { BRAND_LABEL_STYLE, type LabelStyle } from '@/lib/labelStyle'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
-// Amalfi Coast (the WSG brand script) is the default for every new label — first in the list
-// and used by handleAddText below, so manual labels match the AI-composed brand labels.
-const DEFAULT_FONT = "'Amalfi Coast', cursive"
+// Amalfi Coast (the WSG brand script) is first in the list and the starting font for a stylist
+// who has never styled a label. After that a new label takes her last style (lib/labelStyle.ts).
+const DEFAULT_FONT = BRAND_LABEL_STYLE.font_family
 const FONT_FAMILIES = [
   { value: DEFAULT_FONT, label: 'Amalfi Coast' },
   { value: "'Neue Haas', 'Helvetica Neue', Arial, sans-serif", label: 'Neue Haas' },
@@ -44,7 +45,7 @@ const TEXT_COLORS = [
 export function CanvasToolbar() {
   const {
     state, selectedNodeIds, setNodeImageUrl, addNode, undo, redo, past, future,
-    isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit,
+    isDirty, reset, setCanvasSize, newLabelStyle, requestTextEdit,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
   // ✨ steps through real looks with the same mix: the same pieces pressed again = the next look.
@@ -156,14 +157,17 @@ export function CanvasToolbar() {
   }
 
   const handleAddText = () => {
+    // Starts with the font, size, bold and underline she last gave a label, like GoodPix
+    // (Cynthia Dada, 2026-10-20). Amalfi Coast 32, plain, until she has styled one.
+    const { font_family, font_size, bold, underline } = newLabelStyle()
     const node: TextNode = {
       id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'text',
       content: 'Text',
-      // Font ALWAYS starts as Amalfi Coast (the brand script) — a stylist can still change a
-      // specific label from the dropdown. Size still reuses the last one the stylist chose.
-      font_family: DEFAULT_FONT,
-      font_size: lastTextStyle?.font_size ?? 32,
+      font_family,
+      font_size,
+      ...(bold ? { bold } : {}),
+      ...(underline ? { underline } : {}),
       fill: '#1A1A1A',
       x: 600,
       y: 750,
@@ -334,11 +338,15 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
     <>
       {singleNode?.type === 'text' && (() => {
         const tn = singleNode as TextNode
+        // This label's style with one change, remembered for the next label she adds.
+        const styleWith = (change: Partial<LabelStyle>): LabelStyle => ({
+          font_family: tn.font_family, font_size: tn.font_size, bold: !!tn.bold, underline: !!tn.underline, ...change,
+        })
         return (
           <>
             <select
               value={tn.font_family}
-              onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle({ font_family: e.target.value, font_size: tn.font_size }) }}
+              onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle(styleWith({ font_family: e.target.value })) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer max-w-[100px]"
             >
               {FONT_FAMILIES.map((f) => (
@@ -347,7 +355,7 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
             </select>
             <select
               value={tn.font_size}
-              onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle({ font_family: tn.font_family, font_size: Number(e.target.value) }) }}
+              onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle(styleWith({ font_size: Number(e.target.value) })) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer w-12"
             >
               {FONT_SIZES.map((s) => (
@@ -370,14 +378,14 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
 
             <div className="w-px h-4 bg-border mx-0.5" />
             <button
-              onClick={() => updateNode(tn.id, { bold: !tn.bold })}
+              onClick={() => { updateNode(tn.id, { bold: !tn.bold }); rememberTextStyle(styleWith({ bold: !tn.bold })) }}
               className={`p-1.5 rounded-sm transition-colors ${tn.bold ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
               title="Bold"
             >
               <Bold className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => updateNode(tn.id, { underline: !tn.underline })}
+              onClick={() => { updateNode(tn.id, { underline: !tn.underline }); rememberTextStyle(styleWith({ underline: !tn.underline })) }}
               className={`p-1.5 rounded-sm transition-colors ${tn.underline ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
               title="Underline"
             >
