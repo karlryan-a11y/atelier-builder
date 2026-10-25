@@ -405,7 +405,7 @@ export function CategorizePanel() {
             : 'We could not match any piece on this board to her collection, so there is nothing to restyle yet. Tell Karl which look this is.')
           return
         }
-        const imageUrls = await resolveClosetImageUrls(board.canvas)
+        const imageUrls = board.imageUrls
         useCanvasStore.getState().loadLookAsReplacement(look.id, card.siblings.map((s) => s.id), board.canvas, imageUrls)
         useCanvasStore.getState().setRestyleReference({
           lookId: look.id, lookName: look.name, imageUrl: look.image,
@@ -445,7 +445,7 @@ export function CategorizePanel() {
       // is one — Cynthia Dada, 2026-09-17: "I clicked rebuild in canvas for a look created on
       // good pix and this is what showed up" — and the grid only when there is not.
       const board = await buildGoodPixBoard(look.id, look.closetItemIds)
-      const imageUrls = await resolveClosetImageUrls(board.canvas)
+      const imageUrls = board.imageUrls
       // REBUILD REPLACES, IT DOES NOT DUPLICATE. ADR-0148. Cynthia Dada, 2026-09-23: "I'm trying
       // to update the pants in this look by restyling but when I go to save, it acts like I'm
       // saving a new look, not updating a look." She was right: this used loadLookAsNew, so the

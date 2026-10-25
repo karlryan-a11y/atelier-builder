@@ -234,7 +234,7 @@ export interface LayoutConversion {
    * The Style button learns arrangements from these (lib/styleFromTemplates.ts); the node itself
    * cannot say its width, because that depends on which photo of the piece Atelier loads.
    */
-  boxes: { nodeId: string; pieceId: string; cx: number; cy: number; w: number; h: number; rotation: number; flipped: boolean }[]
+  boxes: { nodeId: string; pieceId: string; cx: number; cy: number; w: number; h: number; rotation: number; flipped: boolean; srcW: number; srcH: number }[]
 }
 
 export interface ConvertOptions {
@@ -298,7 +298,7 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
         }
         nodes.push(node)
         const [ccx, ccy] = at(b, b.w / 2, b.h / 2)
-        boxes.push({ nodeId: node.id, pieceId: piece, cx: ccx * k, cy: ccy * k, w: b.w * k, h: b.h * k, rotation: b.angle, flipped: !!o.flipX })
+        boxes.push({ nodeId: node.id, pieceId: piece, cx: ccx * k, cy: ccy * k, w: b.w * k, h: b.h * k, rotation: b.angle, flipped: !!o.flipX, srcW: o.width ?? 0, srcH: o.height ?? 0 })
         if (!placed.includes(piece)) placed.push(piece)
         return
       }
@@ -353,4 +353,56 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
 
   canvas.nodes = nodes
   return { canvas, placed, leftOff, pictures, texts, skipped, boxes }
+}
+
+// ── fitting the photo Atelier has ──────────────────────────────────────────────────────────
+
+/** A photo as the board will load it: natural size, and the box its visible (opaque) part fills. */
+export interface PhotoSize {
+  width: number
+  height: number
+  content?: { x: number; y: number; width: number; height: number } | null
+}
+
+// The board's own clamp on a target_height scale (LookCanvas.tsx, render/composite.ts).
+const MIN_SCALE = 0.03, MAX_SCALE = 3.0
+// Same shape as the photo GoodPix drew, within this, means it IS that photo: leave it alone.
+const SAME_SHAPE = 0.03
+
+/**
+ * EVERY PIECE IN ITS GOODPIX BOX, WHATEVER PHOTO ATELIER HAS FOR IT.
+ *
+ * Cynthia Dada, 2026-10-21, Chris Cadieux Looks 11 and 24: after she replaced the jeans photo the
+ * jeans came in too big, and the Magnanni belt and Tom Ford loafer came in tiny though their photos
+ * were never touched. A converted piece only carries the box HEIGHT (`target_height`), and the board
+ * sizes whatever photo it loads by height alone. That is right only for GoodPix's own photo. A
+ * replaced photo, another crop, or transparent space around the piece comes out the wrong size.
+ *
+ * So, once the photos are measured (lib/goodpixBoard.ts), a piece whose photo is NOT the shape
+ * GoodPix drew has its visible part fitted inside the box (the whole of it, centred) by rewriting
+ * x, y and target_height only. The board's sizing rule is unchanged. A piece whose photo is the
+ * shape GoodPix drew, or could not be measured, is left exactly as converted.
+ */
+export function fitPiecesToPhotos(canvas: LookCanvasState, boxes: LayoutConversion['boxes'], photos: Map<string, PhotoSize>): LookCanvasState {
+  const boxById = new Map(boxes.map((b) => [b.nodeId, b]))
+  const nodes = canvas.nodes.map((n) => {
+    if (n.type !== 'closet_item' || !n.target_height) return n
+    const box = boxById.get(n.id)
+    const photo = photos.get(n.id)
+    if (!box || !photo || !(photo.width > 0) || !(photo.height > 0) || !(box.w > 0)) return n
+    if (box.srcW > 0 && box.srcH > 0
+      && Math.abs((photo.width / photo.height) / (box.srcW / box.srcH) - 1) <= SAME_SHAPE) return n
+    const c = photo.content && photo.content.width > 0 && photo.content.height > 0
+      ? photo.content : { x: 0, y: 0, width: photo.width, height: photo.height }
+    // The box is [0, W] x [0, H] in the node's own frame (turned, and mirrored when flipped): the
+    // converter anchors every piece that way. Fit the visible part inside it, centred.
+    const W = box.w, H = n.target_height
+    const s = Math.min(Math.max(Math.min(W / c.width, H / c.height), MIN_SCALE), MAX_SCALE)
+    const du = (W - c.width * s) / 2 - c.x * s
+    const dv = (H - c.height * s) / 2 - c.y * s
+    const r = (n.rotation * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r)
+    const u = n.flipped ? -du : du
+    return { ...n, x: n.x + cos * u - sin * dv, y: n.y + sin * u + cos * dv, target_height: s * photo.height }
+  })
+  return { ...canvas, nodes }
 }
