@@ -21,6 +21,7 @@ import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { updateClosetItem } from '@/lib/teamNotes'
+import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -34,9 +35,11 @@ const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', c
 // Each item's garment category is resolved with the SAME resolver as the lookbook + Style canvas
 // (override → tag → name), so GoodPix carry-overs categorize too. Reports counts up for the rail
 // filter and accepts a garment-category filter.
-export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCategoryCounts, onCategoryCoverage, onTransitioned, onOpenLook }: {
+export function CollectionTab({ clientId, filterCategories, residenceSlugs, savedCategories, onCategoryCounts, onCategoryCoverage, onTransitioned, onOpenLook }: {
   clientId: string | null
   filterCategories?: Set<string>
+  /** Categories she made from the New category box, pieces or not (lib/savedClosetCategories.ts). */
+  savedCategories?: CategoryChoice[]
   /**
    * slug -> label for this client's HOMES (ADR-0111). Comes from her look_categories rows,
    * because which slugs are homes is a property of the row and not of the word.
@@ -183,7 +186,9 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
     return m
   }, [items, tagNameById, categoryTree, withHomes])
 
-  const customCats = useMemo(() => customCategoriesFromItems(items), [items])
+  // Every picker on this tab (Set category, Also add to, Add Item, Edit Item) reads this list, so
+  // an empty category she made is offered in all of them.
+  const customCats = useMemo(() => withSavedCategories(customCategoriesFromItems(items), savedCategories ?? []), [items, savedCategories])
 
   // Report category counts up to the rail (present categories + counts for the filter chips).
   // '__total__' carries the true number of DISTINCT items (not the sum of category counts, which
@@ -678,7 +683,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, onCa
         <p className="text-[#888] text-sm">
           {q
             ? `Nothing in this category matches "${q}".${searched.elsewhere > 0 ? ` ${searched.elsewhere} piece${searched.elsewhere === 1 ? '' : 's'} match in other categories.` : ''}`
-            : 'This client has no collection items yet.'}
+            : filterCategories && filterCategories.size > 0
+              // A category she made and has not filled yet (Cynthia, 2026-10-20).
+              ? 'Nothing in this category yet. Go to All items, pick pieces, then use Set category or Also add to.'
+              : 'This client has no collection items yet.'}
         </p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">

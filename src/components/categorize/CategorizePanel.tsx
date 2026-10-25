@@ -4,7 +4,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { LoadError } from '@/components/common/LoadError'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
-import { isFixedCategory, labelForCategory } from '@/lib/garmentCategory'
+import { isFixedCategory, labelForCategory, slugifyCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
 import { TOTAL_SLUG, type StyledCoverage } from '@/lib/styledCoverage'
 import { supabase } from '@/lib/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -45,6 +45,8 @@ import { nextSeasonClick } from '@/lib/lookSeasons'
 import type { ClosetItem } from '@/lib/images'
 import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
 import { useClosetItems } from '@/hooks/useClosetItems'
+import { useClientCategories } from '@/hooks/useClientCategories'
+import { savedCustomCategories, customRailSlugs } from '@/lib/savedClosetCategories'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
@@ -204,12 +206,33 @@ export function CategorizePanel() {
   const [activeGarmentCats, setActiveGarmentCats] = useState<Set<string>>(new Set())
   // A new client starts on All items. Picked categories are one client's slugs: carried to the
   // next client, Keil's Denim left Holly's list empty ("Nothing in this category matches", 10/8).
-  useEffect(() => { setActiveGarmentCats(new Set()) }, [activeClient?.id])
+  // A half-typed New category belongs to the client it was typed for, too.
+  const [newClosetCat, setNewClosetCat] = useState('')
+  const [newClosetNote, setNewClosetNote] = useState<string | null>(null)
+  useEffect(() => { setActiveGarmentCats(new Set()); setNewClosetCat(''); setNewClosetNote(null) }, [activeClient?.id])
   const onGarmentCounts = useCallback((c: Map<string, number>) => setGarmentCounts(c), [])
   const [garmentCoverage, setGarmentCoverage] = useState<Map<string, StyledCoverage>>(new Map())
   const onGarmentCoverage = useCallback((c: Map<string, StyledCoverage>) => setGarmentCoverage(c), [])
   const toggleGarment = (slug: string) =>
     setActiveGarmentCats((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
+  // Collection categories she made before filing anything in them (Cynthia, 2026-10-20). They sit
+  // in the rail at 0 and in every picker on the Collection tab. lib/savedClosetCategories.ts.
+  const closetCategories = useClientCategories(activeClient?.id ?? null)
+  const savedClosetCats = useMemo(() => savedCustomCategories(closetCategories.rows), [closetCategories.rows])
+  async function handleCreateClosetCategory() {
+    const n = newClosetCat.trim()
+    if (!n) return
+    const slug = slugifyCategory(n)
+    if (isFixedCategory(slug)) {
+      setNewClosetNote(`${labelForCategory(slug)} is already one of the standard categories. Use Set category on a piece to file it there.`)
+      return
+    }
+    // Already a category on her pieces: no row, so her site's name for it stays as it is.
+    const res = await closetCategories.createSavedCategory(n, (s) => customCategoriesFromItems(closetPieces).some((c) => c.slug === s))
+    if (!res.ok) { setNewClosetNote(`That didn't save. ${res.message}`); return }
+    setNewClosetNote(null)
+    setNewClosetCat('')
+  }
 
   // Share a look/capsule into the client's chat (lands as a card in their thread).
   async function shareToChat(itemId: string) {
@@ -982,7 +1005,8 @@ export function CategorizePanel() {
                   )
                 })}
                 {(() => {
-                  const customSlugs = [...garmentCounts.keys()].filter((s) => s !== TOTAL_SLUG && !isFixedCategory(s) && s !== NO_HOME && !(showResidences && residenceSlugs.has(s)) && (garmentCounts.get(s) ?? 0) > 0).sort()
+                  // Her pieces' categories, plus the ones she made from the New category box at 0.
+                  const customSlugs = customRailSlugs(garmentCounts, savedClosetCats.map((c) => c.slug), (s) => s !== TOTAL_SLUG && !isFixedCategory(s) && s !== NO_HOME && !(showResidences && residenceSlugs.has(s)))
                   if (customSlugs.length === 0) return null
                   return (
                     <div className="mt-1">
@@ -992,7 +1016,7 @@ export function CategorizePanel() {
                         return (
                           <CategoryRow
                             key={slug}
-                            label={labelForCategory(slug)}
+                            label={savedClosetCats.find((c) => c.slug === slug)?.label ?? labelForCategory(slug)}
                             count={garmentCounts.get(slug) ?? 0}
                             coverage={garmentCoverage.get(slug)}
                             on={on}
@@ -1220,6 +1244,25 @@ export function CategorizePanel() {
             </>
           )}
         </div>
+        {/* Collection: a category she can fill later, saved for this client (Cynthia, 2026-10-20).
+            Same box as Looks, but a piece category, so it saves to client_categories. */}
+        {mode === 'collection' && (
+        <div data-new-closet-category className="px-5 py-3 border-t border-[#E8E4DF]">
+          <div className="flex items-center gap-1.5">
+            <input
+              value={newClosetCat}
+              onChange={(e) => { setNewClosetCat(e.target.value); setNewClosetNote(null) }}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateClosetCategory()}
+              placeholder="New category"
+              className="flex-1 min-w-0 bg-[#F8F7F5] border border-[#E8E4DF] rounded px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#1A1A1A]"
+            />
+            <button onClick={handleCreateClosetCategory} className="flex-none w-8 h-8 flex items-center justify-center rounded bg-[#1A1A1A] text-white hover:opacity-80" aria-label="Create category">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          {newClosetNote && <p className="mt-1.5 text-[10px] text-[#a33] leading-snug">{newClosetNote}</p>}
+        </div>
+        )}
         {mode !== 'collection' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
         <div className="px-5 py-3 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
@@ -1422,6 +1465,7 @@ export function CategorizePanel() {
               clientId={activeClient?.id ?? null}
               filterCategories={activeGarmentCats}
               residenceSlugs={residenceSlugs}
+              savedCategories={savedClosetCats}
               onCategoryCounts={onGarmentCounts}
               onCategoryCoverage={onGarmentCoverage}
               onTransitioned={transitions.refetch}

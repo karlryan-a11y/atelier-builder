@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { parentMapFrom, wouldCycle, type NestingRow } from '@/lib/categoryNesting'
+import { slugifyCategory } from '@/lib/garmentCategory'
 
 /**
  * The client's closet-category tree — `client_categories`. (ADR-0113)
@@ -32,8 +33,11 @@ import { parentMapFrom, wouldCycle, type NestingRow } from '@/lib/categoryNestin
 
 export type { NestingRow }
 
+/** A stored row: the tree's fields, plus `kind` and `is_hidden` for her saved categories. */
+export type ClientCategoryRow = NestingRow & { kind?: string | null; is_hidden?: boolean | null }
+
 export function useClientCategories(clientId: string | null) {
-  const [rows, setRows] = useState<NestingRow[]>([])
+  const [rows, setRows] = useState<ClientCategoryRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,7 +46,7 @@ export function useClientCategories(clientId: string | null) {
     setLoading(true)
     const { data, error: e } = await supabase
       .from('client_categories')
-      .select('slug, label, group_label, sort_order, same_as')
+      .select('slug, label, group_label, sort_order, same_as, kind, is_hidden')
       .eq('client_id', clientId)
       .order('sort_order')
       .order('slug')
@@ -59,6 +63,7 @@ export function useClientCategories(clientId: string | null) {
     setRows((data ?? []).map((r: any) => ({
       slug: r.slug, label: r.label, parent_slug: r.group_label ?? null, sort_order: r.sort_order ?? 0,
       same_as: r.same_as ?? null,
+      kind: r.kind ?? null, is_hidden: r.is_hidden ?? false,
     })))
   }, [clientId])
 
@@ -139,6 +144,40 @@ export function useClientCategories(clientId: string | null) {
   }, [clientId, fetchAll])
 
   /**
+   * A Collection category with no pieces in it yet (Cynthia Dada, 2026-10-20), from the New
+   * category box. Saved as kind 'custom' so the rail and the pickers can tell it from a row
+   * Nesting or Same as wrote (lib/savedClosetCategories.ts).
+   *
+   * INSERT, NEVER UPSERT. An upsert on a slug that already has a row would overwrite its
+   * placement (group_label, same_as). If the row is already there, nothing is written. A
+   * category that already exists from her pieces or the standard list gets no row either, so
+   * her site's label for it does not change; `existing` tells the caller to just show it.
+   */
+  const createSavedCategory = useCallback(async (label: string, existing: (slug: string) => boolean) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    const name = label.trim()
+    const slug = slugifyCategory(name)
+    if (!slug) return { ok: false as const, message: 'Give the category a name.' }
+    if (existing(slug)) return { ok: true as const, slug }
+    const row = rows.find((r) => r.slug === slug)
+    if (row && (row.kind === 'custom' || row.same_as || row.is_hidden)) return { ok: true as const, slug }
+    // A row Nesting made (an empty group, say) becomes one of hers. Only `kind` changes.
+    const { data, error: e } = row
+      ? await supabase.from('client_categories').update({ kind: 'custom' }).eq('client_id', clientId).eq('slug', slug).select('slug')
+      : await supabase
+        .from('client_categories')
+        .insert({ client_id: clientId, slug, label: name, group_label: null, kind: 'custom' })
+        .select('slug')
+    // 23505: the row was made by someone else since this screen loaded. It exists, which is the ask.
+    if (e && e.code !== '23505') return { ok: false as const, message: e.message }
+    if (!e && !data?.length) {
+      return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
+    }
+    await fetchAll()
+    return { ok: true as const, slug }
+  }, [clientId, rows, fetchAll])
+
+  /**
    * SAME AS (ADR-0163): read this category as another one for this client ("handbags" as Handbags).
    * `target` null clears it, and the category is itself again. Clears any INSIDE placement, since a
    * category that IS another one cannot also sit under a third. Nothing on any piece is rewritten.
@@ -164,5 +203,5 @@ export function useClientCategories(clientId: string | null) {
     return { ok: true as const }
   }, [clientId, fetchAll])
 
-  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, refetch: fetchAll }
+  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, createSavedCategory, refetch: fetchAll }
 }
