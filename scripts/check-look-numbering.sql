@@ -184,6 +184,39 @@ BEGIN
       (SELECT name FROM gp_looks WHERE id = cid||'3-a'), (SELECT name FROM gp_looks WHERE id = cid||'3-b');
   END IF; passed := passed + 1;
 
-  RAISE EXCEPTION 'CHECK_OK % assertions, 17 looks, 3 throwaway clients (rolled back)', passed;
+  -- ONE RUNNING SERIES, HER NAME TYPED THREE WAYS. Janet Foutty, 2026-10-19: "Janet Foutty Look N",
+  -- "Janet F Look N" and plain "Look N" all count one series up to 344, a few numbers were typed
+  -- twice under different spellings, and two titles say SS24 / FW24. That is not a season
+  -- restart: every unique number stays, the repeats and the unnumbered go on the end.
+  INSERT INTO gp_clients (id, name, raw, looks_numbering_on) VALUES (cid||'4', 'Wren Halloway', '{}'::jsonb, false);
+  INSERT INTO gp_looks (id, client_id, name, raw, published, created_at) VALUES
+    (cid||'4-a', cid||'4', 'Wren Halloway Look 47',    '{}', true, now() - interval '30 days'),
+    (cid||'4-b', cid||'4', 'Wren Halloway Look 53',    '{}', true, now() - interval '29 days'),
+    (cid||'4-c', cid||'4', 'Wren H Look 53',           '{}', true, now() - interval '28 days'),
+    (cid||'4-d', cid||'4', 'SS24 Look 100',            '{}', true, now() - interval '27 days'),
+    (cid||'4-e', cid||'4', 'FW24 Look 101',            '{}', true, now() - interval '26 days'),
+    (cid||'4-f', cid||'4', 'To Be Tried Look 245',     '{}', true, now() - interval '25 days'),
+    (cid||'4-g', cid||'4', 'Wren Halloway Look 288',   '{}', true, now() - interval '24 days'),
+    (cid||'4-h', cid||'4', 'Wren H Look 288',          '{}', true, now() - interval '23 days'),
+    (cid||'4-i', cid||'4', 'Wren H Look 289',          '{}', true, now() - interval '22 days'),
+    (cid||'4-j', cid||'4', 'Look 289',                 '{}', true, now() - interval '21 days'),
+    (cid||'4-k', cid||'4', 'Palm Beach Capsule',       '{}', true, now() - interval '20 days'),
+    (cid||'4-l', cid||'4', 'Look 344',                 '{}', true, now() - interval '19 days'),
+    (cid||'4-m', cid||'4', 'Untitled Look',            '{}', false, now() - interval '18 days');
+
+  -- 19. Her preview is one series (no season line), and switch-on keeps every unique number.
+  IF (SELECT bool_or(restarts) FROM look_numbering_plan(cid||'4')) THEN
+    RAISE EXCEPTION 'CHECK_FAIL 19: one running series with her name typed two ways is flagged as restarting each season';
+  END IF;
+  PERFORM * FROM look_numbering_apply(cid||'4', 'check');
+  SELECT string_agg(id || '=' || look_number, ',' ORDER BY id) INTO nums FROM gp_looks WHERE client_id = cid||'4';
+  IF nums <> replace('X-a=47,X-b=53,X-c=345,X-d=100,X-e=101,X-f=245,X-g=288,X-h=346,X-i=289,X-j=347,X-k=348,X-l=344,X-m=349', 'X', cid||'4') THEN
+    RAISE EXCEPTION 'CHECK_FAIL 19b: switch-on gave %', replace(nums, cid||'4', 'X');
+  END IF;
+  IF (SELECT name FROM gp_looks WHERE id = cid||'4-f') <> 'To Be Tried Look 245' THEN
+    RAISE EXCEPTION 'CHECK_FAIL 19c: Look 245 is %', (SELECT name FROM gp_looks WHERE id = cid||'4-f');
+  END IF; passed := passed + 1;
+
+  RAISE EXCEPTION 'CHECK_OK % assertions, 30 looks, 4 throwaway clients (rolled back)', passed;
 END
 $check$;
