@@ -28,6 +28,7 @@ import { CATEGORY_LABELS } from '@/lib/categorize'
 import { r2ImageUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
 import { useClosetItems } from '@/hooks/useClosetItems'
+import { isSearching, NO_UPLOAD_SEARCH, type UploadSearch } from '@/lib/uploadSearch'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -99,7 +100,12 @@ export function IntakeInbox() {
   useEffect(() => { if (queueChecked && queueCount === null && filter === 'queue') setFilter('pending_review') }, [queueChecked, queueCount, filter])
   // When "In Progress" tab is active, the hook still needs a valid filter — use 'qc_passed' as default
   const hookFilter = filter === 'in_progress' || filter === 'queue' ? 'pending_review' : filter
-  const { items, loading, error, refresh, refreshBackground, counts } = useIntakeItems(hookFilter, selectedClientId)
+  // Needs Review > Uploads search (Paige, 2026-10-22). What she types is sent to the query a moment after she stops, as one object, so it loads once.
+  const [uploadFind, setUploadFind] = useState<UploadSearch>(NO_UPLOAD_SEARCH)
+  const [uploadSearch, setUploadSearch] = useState<UploadSearch>(NO_UPLOAD_SEARCH)
+  useEffect(() => { const t = setTimeout(() => setUploadSearch(uploadFind), 300); return () => clearTimeout(t) }, [uploadFind])
+  const uploadSearching = filter === 'pending_review' && isSearching(uploadSearch)
+  const { items, loading, error, refresh, refreshBackground, counts, facets } = useIntakeItems(hookFilter, selectedClientId, filter === 'pending_review' ? uploadSearch : null)
   // Approve All warns about pieces that look already in her closet (ADR-0164). Only with one client
   // chosen: the closet it compares against is that client's.
   const { items: bulkCloset } = useClosetItems(selectedClientId)
@@ -532,6 +538,21 @@ export function IntakeInbox() {
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto">
+        {filter === 'pending_review' && (
+          <div className="max-w-5xl mx-auto pt-4 md:pt-6 px-4 md:px-6">
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#E8E4DF] pb-3">
+              <input type="search" value={uploadFind.q} onChange={(e) => setUploadFind((f) => ({ ...f, q: e.target.value }))} placeholder="Search uploaded pieces waiting for approval" aria-label="Search uploaded pieces waiting for approval" className="min-w-[220px] flex-1 border border-[#E8E4DF] bg-white px-3 py-2 text-[12px] text-[#1A1A1A]" />
+              {([['brand', 'Brand', 'All brands', facets.brands], ['color', 'Color', 'All colors', facets.colors], ['category', 'Category', 'All categories', facets.categories]] as const).map(([k, label, all, list]) => (
+                <select key={k} value={uploadFind[k]} onChange={(e) => setUploadFind((f) => ({ ...f, [k]: e.target.value }))} aria-label={`Filter uploads by ${label.toLowerCase()}`} className="max-w-[200px] border border-[#E8E4DF] bg-white px-3 py-2 text-[12px] text-[#1A1A1A]">
+                  <option value="">{all}</option>
+                  {(uploadFind[k] && !list.includes(uploadFind[k]) ? [uploadFind[k], ...list] : list).map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              ))}
+              {isSearching(uploadFind) && <button type="button" onClick={() => setUploadFind(NO_UPLOAD_SEARCH)} className="px-2 py-2 text-[10px] uppercase tracking-[0.2em] text-[#888] underline hover:text-[#1A1A1A]">Clear</button>}
+              {uploadSearching && !loading && <span className="w-full text-[11px] text-[#888]">{items.length === 1 ? '1 uploaded piece matches' : `${items.length} uploaded pieces match`}.</span>}
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -549,7 +570,12 @@ export function IntakeInbox() {
         ) : items.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              {filter === 'pending_review' ? (
+              {uploadSearching ? (
+                <>
+                  <Inbox className="h-8 w-8 mx-auto text-[#ccc] mb-3" />
+                  <p className="text-sm text-[#888]">No uploaded piece waiting for approval matches this search.</p>
+                </>
+              ) : filter === 'pending_review' ? (
                 <>
                   <Check className="h-8 w-8 mx-auto text-emerald-400 mb-3" />
                   <p className="text-sm text-[#888]">All caught up!</p>

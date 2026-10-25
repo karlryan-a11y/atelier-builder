@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { applyUploadSearch, isSearching, uploadFacets, type UploadSearch } from '@/lib/uploadSearch'
 
 export interface IntakeItem {
   id: string
@@ -47,13 +48,18 @@ interface UseIntakeItemsResult {
   // auto-poll and post-action refreshes so scrolling/approving never snaps back to the top.
   refreshBackground: () => void
   counts: { qc_passed: number; pending: number; approved: number; rejected: number; camera: number }
+  /** Needs Review > Uploads: the brands, colors and categories waiting, for the search menus. */
+  facets: { brands: string[]; colors: string[]; categories: string[] }
 }
 
 export function useIntakeItems(
   filter: 'qc_passed' | 'pending_review' | 'approved' | 'rejected_final' | 'all' = 'qc_passed',
   clientId?: string | null,
+  // Needs Review only (Paige, 2026-10-22): searched in the query, so it finds pieces the screen has not loaded. The counts are never searched.
+  search?: UploadSearch | null,
 ): UseIntakeItemsResult {
   const [items, setItems] = useState<IntakeItem[]>([])
+  const [facets, setFacets] = useState<{ brands: string[]; colors: string[]; categories: string[] }>({ brands: [], colors: [], categories: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [counts, setCounts] = useState({ qc_passed: 0, pending: 0, approved: 0, rejected: 0, camera: 0 })
@@ -96,6 +102,7 @@ export function useIntakeItems(
       if (clientId) {
         query = query.eq('client_id', clientId)
       }
+      if (filter === 'pending_review' && search) query = applyUploadSearch(query, search)
 
       const { data, error: fetchError } = await query
 
@@ -135,6 +142,8 @@ export function useIntakeItems(
       }))
 
       setItems(items)
+      // The menus are taken from the whole list (not a searched one), so they keep every choice while she searches, and each choice returns a piece.
+      if (filter === 'pending_review' && !isSearching(search)) setFacets(uploadFacets(items))
 
       // Get counts — also filtered by client if specified
       const buildCountQuery = (status: string) => {
@@ -188,7 +197,7 @@ export function useIntakeItems(
     } finally {
       if (!opts?.background) setLoading(false)
     }
-  }, [filter, clientId])
+  }, [filter, clientId, search])
 
   useEffect(() => {
     load()
@@ -196,5 +205,5 @@ export function useIntakeItems(
 
   const refreshBackground = useCallback(() => { load({ background: true }) }, [load])
 
-  return { items, loading, error, refresh: load, refreshBackground, counts }
+  return { items, loading, error, refresh: load, refreshBackground, counts, facets }
 }
