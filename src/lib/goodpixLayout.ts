@@ -370,6 +370,9 @@ export interface PhotoSize {
 const MIN_SCALE = 0.03, MAX_SCALE = 3.0
 // Same shape as the photo GoodPix drew, within this, means it IS that photo: leave it alone.
 const SAME_SHAPE = 0.03
+// A fit that would change the piece's size, or move its centre, by less than this share of its
+// size is not a fix: the piece is already where GoodPix drew it, so it is left exactly as converted.
+const SAME_PLACE = 0.08
 
 /**
  * EVERY PIECE IN ITS GOODPIX BOX, WHATEVER PHOTO ATELIER HAS FOR IT.
@@ -390,6 +393,9 @@ const SAME_SHAPE = 0.03
  * photo had see-through space around the jeans, so its box is bigger than the jeans GoodPix drew.
  * So when the photo GoodPix drew was measured too (`drawn`, keyed by node id), the target is the
  * part of the box its visible piece filled; without it, the whole box as before.
+ *
+ * A piece the fit would barely change (SAME_PLACE) is already where GoodPix drew it, so it is
+ * left exactly as converted: the tester, 2026-10-26, Danielle York Look 24's high-top.
  */
 export function fitPiecesToPhotos(canvas: LookCanvasState, boxes: LayoutConversion['boxes'], photos: Map<string, PhotoSize>, drawn?: Map<string, PhotoSize>): LookCanvasState {
   const boxById = new Map(boxes.map((b) => [b.nodeId, b]))
@@ -411,6 +417,12 @@ export function fitPiecesToPhotos(canvas: LookCanvasState, boxes: LayoutConversi
     const s = Math.min(Math.max(Math.min(t.width / c.width, t.height / c.height), MIN_SCALE), MAX_SCALE)
     const du = t.x + (t.width - c.width * s) / 2 - c.x * s
     const dv = t.y + (t.height - c.height * s) / 2 - c.y * s
+    // Already in place (the tester, 2026-10-26, Danielle York Look 24: a high-top whose photo was
+    // never replaced was nudged a few pixels and drew grainy): leave it exactly as live opens it.
+    const s0 = Math.min(Math.max(H / photo.height, MIN_SCALE), MAX_SCALE)
+    const size = Math.max(c.width, c.height) * s0
+    const moved = Math.hypot(du + (c.x + c.width / 2) * (s - s0), dv + (c.y + c.height / 2) * (s - s0))
+    if (Math.abs(s / s0 - 1) <= SAME_PLACE && moved <= SAME_PLACE * size) return n
     const r = (n.rotation * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r)
     const u = n.flipped ? -du : du
     return { ...n, x: n.x + cos * u - sin * dv, y: n.y + sin * u + cos * dv, target_height: s * photo.height }

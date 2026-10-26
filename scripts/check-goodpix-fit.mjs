@@ -113,10 +113,33 @@ for (const flip of [{}, { flipX: true }, { flipY: true }, { flipX: true, flipY: 
     { width: 1000, height: 1400, content: { x: 100, y: 100, width: 800, height: 1200 } })
   ok('a piece with its GoodPix photo opens exactly as before', JSON.stringify(d.node) === JSON.stringify(d.before))
 }
+// 5b. The tester on the preview, 2026-10-26, Danielle York Look 24: the Chrome Hearts high-top
+//     (photo never replaced) is not GoodPix's exact shape, so it was refitted, and came in a few
+//     pixels off and drawn grainy where live draws it clean. Its photo already fills its box, so
+//     there is nothing to fix: it opens exactly as converted, whether or not GoodPix's photo was
+//     measured too.
+for (const gp of [undefined, { width: 400, height: 260, content: { x: 4, y: 6, width: 392, height: 250 } }]) {
+  const d = drawn(img({ left: 300, top: 700, width: 400, height: 260, scaleX: 0.5, scaleY: 0.5 }),
+    { width: 1000, height: 700, content: null }, gp)
+  ok(`a piece already in its GoodPix box opens exactly as before (GoodPix photo ${gp ? '' : 'not '}measured)`,
+    JSON.stringify(d.node) === JSON.stringify(d.before))
+}
 {
   const conv = G.convertGoodPixLayout({ ...base, objects: [img({ left: 10, top: 10, width: 100, height: 200 })] }, { keep: () => true, mirrorUrl })
   const fitted = G.fitPiecesToPhotos(conv.canvas, conv.boxes, new Map())
   ok('a piece whose photo could not be measured opens exactly as before', JSON.stringify(fitted) === JSON.stringify(conv.canvas))
+}
+
+// 6. Measuring a photo never touches the picture the board draws. The same tester's run: the
+//    measuring loaded each photo the board's own way (an <img> through lib/loadBoardImage) before
+//    the board did, and a piece that did not move still drew differently. lib/photoContent.ts reads
+//    its own fetched copy instead, so the board loads and draws every photo exactly as on live.
+{
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../src/lib/photoContent.ts', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+  ok('measuring a photo does not load it the board\'s way (no loadBoardImage)', !/loadBoardImage\s*\(/.test(src))
+  ok('measuring a photo does not make an <img> of it', !/new\s+(window\.)?Image\s*\(/.test(src))
+  ok('measuring a photo reads its own fetched copy', /fetch\(/.test(src) && /createImageBitmap\(/.test(src))
 }
 
 if (cases === 0) { console.error('\n❌ goodpix-fit: nothing inspected. Nothing was verified.\n'); process.exit(1) }
