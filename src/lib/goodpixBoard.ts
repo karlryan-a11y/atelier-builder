@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
-import { convertGoodPixLayout, fitPiecesToPhotos, piecesInLayout, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
+import { convertGoodPixLayout, fitPiecesToPhotos, needsFit, piecesInLayout, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
 import { selectRestylePieces, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
@@ -106,13 +106,26 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
   // tiny (lib/goodpixLayout.ts fitPiecesToPhotos). A piece with GoodPix's own photo is unchanged.
   const imageUrls = await resolveClosetImageUrls(conv.canvas)
   const byUrl = new Map<string, Promise<PhotoSize | null>>()
-  for (const url of Object.values(imageUrls)) if (!byUrl.has(url)) byUrl.set(url, measurePhoto(url))
+  const measure = (url: string) => {
+    if (!byUrl.has(url)) byUrl.set(url, measurePhoto(url))
+    return byUrl.get(url)!
+  }
   const photos = new Map<string, PhotoSize>()
   await Promise.all(Object.entries(imageUrls).map(async ([nodeId, url]) => {
-    const p = await byUrl.get(url)
+    const p = await measure(url)
     if (p) photos.set(nodeId, p)
   }))
-  const canvas = fitPiecesToPhotos(conv.canvas, conv.boxes, photos)
+  // A piece that will be refitted is fitted to the piece GoodPix drew, not its whole box: GoodPix's
+  // own photo can have see-through space around the piece (the tester, 2026-10-25, Looks 11 and 24:
+  // the new jeans came in about 30% too tall). Only those photos are fetched.
+  const drawn = new Map<string, PhotoSize>()
+  await Promise.all(conv.boxes.map(async (b) => {
+    const p = photos.get(b.nodeId)
+    if (!b.drawnSrc || !p || !needsFit(b, p)) return
+    const gp = await measure(b.drawnSrc)
+    if (gp) drawn.set(b.nodeId, gp)
+  }))
+  const canvas = fitPiecesToPhotos(conv.canvas, conv.boxes, photos, drawn)
 
   const shown = new Set(inPicture)
   const notInPicture: OmittedPiece[] = closetItemIds

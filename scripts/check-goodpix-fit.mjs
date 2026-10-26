@@ -28,11 +28,13 @@ const base = { v: 1, canvas: { width: 1080, height: 1080 }, v1_primary: { width:
 const img = (o) => ({ type: 'Image', scaleX: 1, scaleY: 1, src: `https://goodpix-co.s3.amazonaws.com/processed-large-${H}.png`, ...o })
 const mirrorUrl = (k) => `https://example.invalid/${k}`
 
-/** Convert one piece, fit it to `photo`, and say where the board draws its visible part. */
-function drawn(obj, photo) {
+/** Convert one piece, fit it to `photo`, and say where the board draws its visible part.
+ *  `gpPhoto` is the photo GoodPix itself drew in the box, when it was measured. */
+function drawn(obj, photo, gpPhoto) {
   const conv = G.convertGoodPixLayout({ ...base, objects: [obj] }, { keep: () => true, mirrorUrl })
   const node0 = conv.canvas.nodes[0]
-  const fitted = G.fitPiecesToPhotos(conv.canvas, conv.boxes, new Map([[node0.id, photo]]))
+  const fitted = G.fitPiecesToPhotos(conv.canvas, conv.boxes, new Map([[node0.id, photo]]),
+    gpPhoto ? new Map([[node0.id, gpPhoto]]) : undefined)
   const n = fitted.nodes[0]
   const s = Math.min(Math.max(n.target_height / photo.height, 0.03), 3.0)   // LookCanvas.tsx
   const c = photo.content ?? { x: 0, y: 0, width: photo.width, height: photo.height }
@@ -70,6 +72,30 @@ function drawn(obj, photo) {
   ok('the new jeans photo stays inside its GoodPix box', d.w <= d.box.w + 1 && d.h <= d.box.h + 1)
   ok('the new jeans photo fills the box on one side', near(d.w, d.box.w, 1) || near(d.h, d.box.h, 1))
   ok('the new jeans photo is centred in its box', near(d.cx, d.box.cx, 2) && near(d.cy, d.box.cy, 2))
+}
+
+// 3b. The tester on the preview, 2026-10-25, Looks 11 and 24: the new jeans ran from the shirt to
+//     the bottom of the board, over both loafers, about 30% too tall. GoodPix's OWN jeans photo had
+//     transparent space around the jeans, so its box is bigger than the jeans GoodPix drew. The new
+//     photo has to fill the jeans GoodPix drew, not the box. GoodPix's photo here is the 2x copy
+//     (880x2080) with the jeans at x 140..740, y 240..1600: in the box, 150 wide, 340 tall, from
+//     (35, 60), so centred at (510, 530) on the board.
+{
+  const gp = { width: 880, height: 2080, content: { x: 140, y: 240, width: 600, height: 1360 } }
+  const d = drawn(img({ left: 400, top: 300, width: 440, height: 1040, scaleX: 0.5, scaleY: 0.5 }),
+    { width: 800, height: 1000, content: { x: 250, y: 0, width: 300, height: 1000 } }, gp)
+  ok('the new jeans are no taller than the jeans GoodPix drew (not its padded box)', d.h <= 340 + 1)
+  ok('the new jeans are no wider than the jeans GoodPix drew', d.w <= 150 + 1)
+  ok('the new jeans fill the jeans GoodPix drew on one side', near(d.w, 150, 1) || near(d.h, 340, 1))
+  ok('the new jeans sit where GoodPix drew the jeans', near(d.cx, 510, 2) && near(d.cy, 530, 2))
+}
+// 3c. GoodPix's photo measured with no see-through space: the whole box is the piece, as in 3.
+{
+  const gp = { width: 440, height: 1040, content: { x: 0, y: 0, width: 440, height: 1040 } }
+  const d = drawn(img({ left: 400, top: 300, width: 440, height: 1040, scaleX: 0.5, scaleY: 0.5 }),
+    { width: 800, height: 1000, content: null }, gp)
+  ok('with a full GoodPix photo the new jeans fill the box on one side', near(d.w, d.box.w, 1) || near(d.h, d.box.h, 1))
+  ok('with a full GoodPix photo the new jeans are centred in the box', near(d.cx, d.box.cx, 2) && near(d.cy, d.box.cy, 2))
 }
 
 // 4. Turned and mirrored pieces land in their box too (the frame math has to follow the node).
