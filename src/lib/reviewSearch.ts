@@ -39,7 +39,11 @@ const wordsOf = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowe
 
 const str = (v: unknown) => (typeof v === 'string' ? v : null)
 
-/** An upload card: what digitizing read off the photos and the label. */
+/**
+ * An upload card: what digitizing read off the photos and the label. Its colors are the ones it is
+ * filed under. `extracted_color` is a sentence ("brown, reading as near-black in the packaging photo"),
+ * so it is searched as description, never as a color.
+ */
 export function intakeSearchFields(item: {
   extracted_name: string | null
   extracted_brand: string | null
@@ -55,10 +59,9 @@ export function intakeSearchFields(item: {
   return {
     name: item.extracted_name,
     brand: item.extracted_brand,
-    color: item.extracted_color,
     colorFamilies: [item.extracted_color_family, ...(item.extracted_color_families ?? [])],
     material: item.extracted_material,
-    description: str(meta.description) ?? str(capture.description),
+    description: [str(meta.description) ?? str(capture.description), item.extracted_color].filter(Boolean).join(' '),
     categories: [item.extracted_category, str(meta.subcategory), str(capture.subcategory)],
   }
 }

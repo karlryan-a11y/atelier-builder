@@ -53,10 +53,15 @@ if (RS) {
     // A red shoe whose description mentions a black tip is not a black piece (the judge, 2026-10-27: 78 of
     // Barbie's 450 "black" results were red, burgundy, white or silver pieces with a black detail).
     card({ id: 'g', extracted_name: 'Patent Slingback', extracted_brand: 'Prada', extracted_color_family: 'Red', extracted_category: 'shoes', extracted_metadata: { description: 'Red patent slingback with a black tip and gold buckle' } }),
+    // The color text is a sentence, not a color (the judge, 2026-10-27: brown tights whose text said "reading as
+    // near-black" showed for "black"). Only the colors a card is filed under count; the sentence is description.
+    card({ id: 'h', extracted_name: 'Rosa Lace Tights', extracted_brand: 'Wolford', extracted_color: 'Deep brown; the packaging photo shows the tights reading as near-black', extracted_color_family: 'Brown', extracted_category: 'hosiery' }),
   ]
   const ids = (xs) => (xs ?? []).map((x) => x.id).sort().join(',')
   for (const [q, want] of [
-    ['black', 'a,c,d,e'], // the color chip, the second color, and the color text
+    ['black', 'a,c,e'], // the color chip and the second color; never the color text (d has only that, h says near-black)
+    ['brown', 'h'],
+    ['packaging', 'h'], // the color text still finds a card by its other words
     ['chanel', 'a,b'],
     ['blazer', 'a,c'], // the name, and the type
     ['black blazer', 'a,c'], // two words narrow it
@@ -66,7 +71,7 @@ if (RS) {
     ['gold', ''], // a color word only finds pieces of that color, never a detail in the description
     ['red', 'g'],
     ['prada black', 'e'],
-    ['', 'a,b,c,d,e,f,g'], // nothing typed is no filter
+    ['', 'a,b,c,d,e,f,g,h'], // nothing typed is no filter
     ['zebra', ''],
   ]) {
     ran++
