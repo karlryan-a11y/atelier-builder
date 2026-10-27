@@ -54,11 +54,15 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
   const [capView, setCapView] = useState<'todo' | 'done'>('todo')
+  // Needs Review: show only pieces whose retailer page gave a description (with or without its photo), or only those without (Karl, 2026-10-27).
+  const [retailView, setRetailView] = useState<'all' | 'with' | 'without'>('all')
+  const hasRetail = (i: CapItem) => i.retail === 'both' || i.retail === 'desc'
+  const retailOk = (i: CapItem) => retailView === 'all' || (retailView === 'with') === hasRetail(i)
   // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
   const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
   useEffect(() => {
@@ -460,14 +464,21 @@ export function IntakeInbox() {
                       ))}
                     </div>
                   )}
+                  {tab.key === 'pending_review' && cap.items.some(i => i.retail !== undefined) && (
+                    <div className="mt-1 mx-3 flex gap-1.5">
+                      {([['all', 'All', cap.items.length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setRetailView(k); const first = cap.items.find(i => k === 'all' || (k === 'with') === hasRetail(i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      ))}
+                    </div>
+                  )}
                   {cap.items.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
-                      {cap.items.filter(i => !cap.items.some(x => x.done) || (capView === 'done') === !!i.done).map(it => (
+                      {cap.items.filter(i => (!cap.items.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || retailOk(i))).map(it => (
                         <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
                             <span className="block truncate text-[11px] text-[#1A1A1A]">{it.title}</span>
-                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Ready to approve' ? 'bg-[#1A1A1A] text-white' : it.chip === 'Stuck' ? 'bg-[#c30319] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>
+                            <span className={`mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase ${it.chip === 'Ready to approve' ? 'bg-[#1A1A1A] text-white' : it.chip === 'Stuck' ? 'bg-[#c30319] text-white' : 'bg-blush text-[#1A1A1A]'}`}>{it.chip}</span>{tab.key === 'pending_review' && hasRetail(it) ? <span className="ml-1 mt-0.5 inline-block px-1.5 py-0.5 text-[8px] tracking-[0.15em] uppercase border border-[#E8E4DF] text-[#1A1A1A]/70">Retailer info</span> : null}
                           </span>
                         </button>
                       ))}
