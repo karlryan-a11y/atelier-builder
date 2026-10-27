@@ -482,7 +482,7 @@ export function IntakeInbox() {
                   )}
                   {tab.key === 'pending_review' && cap.items.length > 0 && (
                     <div className="mt-1 mx-3">
-                      <input value={capSearch} onChange={e => setCapSearch(e.target.value)} placeholder="Search, e.g. Valentino shoe" className="w-full border border-[#E8E4DF] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A]" />
+                      <input value={capSearch} onChange={e => setCapSearch(e.target.value)} placeholder="Search anything: Valentino shoe, size 8, black silk" className="w-full border border-[#E8E4DF] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A]" />
                       {capSearch.trim() ? <div className="mt-1 text-[10px] text-[#1A1A1A]/55">{cap.items.filter(i => retailOk(i) && searchOk(i)).length} match{cap.items.filter(i => retailOk(i) && searchOk(i)).length === 1 ? '' : 'es'} <button onClick={() => setCapSearch('')} className="ml-1 underline">Clear</button></div> : null}
                     </div>
                   )}
