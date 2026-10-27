@@ -25,3 +25,4 @@ dist-ssr
 .vercel
 supabase/.temp/
 dev/harness/dist/
+dist-local/
