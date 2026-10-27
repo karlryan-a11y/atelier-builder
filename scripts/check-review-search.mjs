@@ -129,6 +129,9 @@ checks++
 if (!setQ || !/setSelectedIds\(new Set\(\)\)/.test(setQ[1]) || !/setPieceQ\(v\)/.test(setQ[1])) fail('IntakeInbox.tsx: changing the search keeps the ticked cards, so bulk Approve or Reject acts on pieces the search hides')
 checks++
 if (/setPieceQ\((e\.target\.value|'')\)/.test(INBOX) || !/onChange=\{\(e\) => searchFor\(e\.target\.value\)\}/.test(INBOX) || !/onClick=\{\(\) => searchFor\(''\)\}/.test(INBOX)) fail('IntakeInbox.tsx: the search box or its Clear button changes the search without clearing the ticked cards')
+// Picking another client clears the search, so her list does not open filtered by the last client's word.
+checks++
+if (!/useEffect\(\(\) => \{ searchFor\(''\) \}, \[selectedClientId\]\)/.test(INBOX)) fail('IntakeInbox.tsx: the search stays when she picks another client, so that client opens as "No pieces match"')
 // No match: the pick screen must not keep showing the last piece and its Approve button.
 checks++
 if (!/noCamMatch/.test(INBOX) || !/className=\{`flex-1 overflow-y-auto\$\{noCamMatch \? ' hidden' : ''\}`\}/.test(INBOX)) fail('IntakeInbox.tsx: a camera search with no match still shows the last open piece and its Approve button')

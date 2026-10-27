@@ -356,6 +356,8 @@ export function IntakeInbox() {
   const capList = searching ? capShown : cap.items
   // A new search clears the ticked cards: bulk Approve or Reject must never act on a piece the search hides.
   const searchFor = (v: string) => { setPieceQ(v); setSelectedIds(new Set()) }
+  // Another client starts with the full list: a word typed for the last client would open hers as "No pieces match".
+  useEffect(() => { searchFor('') }, [selectedClientId])
   // No camera piece matches: the pick screen is hidden, so the last piece and its Approve button are not left on screen.
   const noCamMatch = searching && camMode && cap.items.length > 0 && capShown.length === 0
   const shownItems = useMemo(() => (filter === 'pending_review' ? searchReview(items, pieceQ, intakeSearchFields) : items), [items, pieceQ, filter])
