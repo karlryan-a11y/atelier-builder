@@ -209,7 +209,7 @@ function PictureNodeElement({ node, image, isSelected, solo, onSelect, onDragSta
           if (!n) return
           const patch = pictureFromKonva(node, { x: n.x(), y: n.y(), scaleX: n.scaleX(), scaleY: n.scaleY(), rotation: n.rotation() })
           // Settle the scale into width/height now, so what is saved is what is on screen.
-          n.scaleX(node.flipped ? -1 : 1); n.scaleY(node.flipped_y ? -1 : 1)
+          n.setAttrs({ ...pictureKonvaAttrs({ ...node, ...patch }), image })
           onTransformCommit(patch)
         }}
       />
@@ -920,8 +920,9 @@ export function LookCanvas() {
         kn.scaleX(1); kn.scaleY(1)
       } else if (n.type === 'picture') {
         const pn = n as PictureNode
-        patches.push({ id, updates: pictureFromKonva(pn, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() }) as Partial<CanvasNode> })
-        kn.scaleX(pn.flipped ? -1 : 1); kn.scaleY(pn.flipped_y ? -1 : 1)
+        const patch = pictureFromKonva(pn, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() })
+        patches.push({ id, updates: patch as Partial<CanvasNode> })
+        kn.setAttrs(pictureKonvaAttrs({ ...pn, ...patch }))
       } else {
         patches.push({ id, updates: { ...fromKonvaTransform(n as ClosetItemNode, { x: kn.x(), y: kn.y(), scaleX: kn.scaleX(), scaleY: kn.scaleY(), rotation: kn.rotation() }), target_height: undefined } as Partial<CanvasNode> })
       }

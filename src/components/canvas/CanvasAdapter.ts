@@ -103,14 +103,32 @@ export function pictureKonvaAttrs(node: PictureNode) {
 /**
  * Write a Transformer's result back onto a picture: settle any scale into width/height so the
  * saved geometry is the geometry on screen (the same lesson as text, ADR-0093), keep the flip.
+ * Konva hands a flipped picture back as "turned 180 and mirrored the other way" (its decompose
+ * always returns a positive scaleX), so that is folded back into the picture's own flip, and
+ * (x, y) moves by the change in flip offset so every corner of the image stays where it was.
  */
 export function pictureFromKonva(node: PictureNode, n: { x: number; y: number; scaleX: number; scaleY: number; rotation: number }): Partial<PictureNode> {
+  const width = Math.max(8, node.width * Math.abs(n.scaleX))
+  const height = Math.max(8, node.height * Math.abs(n.scaleY))
+  const turned = (n.scaleX < 0) !== !!node.flipped
+  const sx = turned ? -n.scaleX : n.scaleX
+  const sy = turned ? -n.scaleY : n.scaleY
+  let rotation = turned ? n.rotation + 180 : n.rotation
+  if (rotation > 180) rotation -= 360
+  const flipped = sx < 0
+  const flipped_y = sy < 0
+  // Offset Konva drew with (the old box) and the one pictureKonvaAttrs will draw with (the new box).
+  const dx = (flipped ? -width : 0) - sx * (node.flipped ? node.width : 0)
+  const dy = (flipped_y ? -height : 0) - sy * (node.flipped_y ? node.height : 0)
+  const r = (rotation * Math.PI) / 180
   return {
-    x: n.x,
-    y: n.y,
-    width: Math.max(8, node.width * Math.abs(n.scaleX)),
-    height: Math.max(8, node.height * Math.abs(n.scaleY)),
-    rotation: n.rotation,
+    x: n.x + dx * Math.cos(r) - dy * Math.sin(r),
+    y: n.y + dx * Math.sin(r) + dy * Math.cos(r),
+    width,
+    height,
+    rotation,
+    flipped,
+    flipped_y,
   }
 }
 

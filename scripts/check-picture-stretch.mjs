@@ -9,6 +9,7 @@
  * Exits non-zero on a break AND on inspecting nothing.
  */
 import { readFileSync } from 'node:fs'
+import { Transform } from 'konva/lib/Util.js'
 import { pictureFromKonva, pictureKonvaAttrs } from '../src/components/canvas/CanvasAdapter.ts'
 
 const failures = []
@@ -83,6 +84,41 @@ for (const flip of [false, true]) {
   near(`${label} stretched taller saves the new height`, savedH.height, 375)
   const b2 = box(taller), b3 = box(pictureKonvaAttrs({ ...node, ...savedH }))
   near(`${label} stretched taller: bottom edge saved as on screen`, b3.bottom, b2.bottom)
+}
+
+// The real Transformer path. Konva multiplies the drag into the node's transform and writes it
+// back through Transform.decompose(), which always returns a positive scaleX: a picture flipped
+// left to right comes back as "turned 180 and mirrored top to bottom". Whatever Konva writes, the
+// saved picture must draw every corner of the image where Konva had it on screen.
+const local = (a) => { const t = new Transform(); t.translate(a.x, a.y); t.rotate((a.rotation * Math.PI) / 180); t.scale(a.scaleX, a.scaleY); return t }
+const corner = (a, px, py) => local(a).point({ x: px - a.offsetX, y: py - a.offsetY })
+const about = (cx, cy, f) => { const t = new Transform(); t.translate(cx, cy); f(t); t.translate(-cx, -cy); return t }
+const drags = {
+  'stretched wider (right side)': () => about(100, 0, (t) => t.scale(1.5, 1)),
+  'stretched taller (bottom)': () => about(0, 50, (t) => t.scale(1, 1.25)),
+  'stretched taller (top)': () => about(0, 350, (t) => t.scale(1, 1.4)),
+  'rotated': () => about(200, 200, (t) => t.rotate(Math.PI / 6)),
+  'rotated then stretched along its side': () => about(200, 200, (t) => { t.rotate(Math.PI / 6); t.scale(1.5, 1); t.rotate(-Math.PI / 6) }),
+}
+for (const [fx, fy] of [[false, false], [true, false], [false, true], [true, true]]) {
+  for (const rotation of [0, 20]) {
+    const node = { ...pic, flipped: fx, flipped_y: fy, rotation }
+    const label = `a picture${fx ? ' flipped' : ''}${fy ? ' upside down' : ''}${rotation ? ' turned 20' : ''}`
+    for (const [what, delta] of Object.entries(drags)) {
+      const live = pictureKonvaAttrs(node)
+      const m = delta().multiply(local(live)).decompose()
+      const onScreen = { ...live, ...m }
+      const saved = { ...node, ...pictureFromKonva(node, m) }
+      const drawn = pictureKonvaAttrs(saved)
+      const kx = saved.width / node.width, ky = saved.height / node.height
+      for (const [px, py] of [[0, 0], [node.width, 0], [0, node.height], [node.width, node.height]]) {
+        const a = corner(onScreen, px, py), b = corner(drawn, px * kx, py * ky)
+        checked++
+        if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6) failures.push(`${label} ${what}: image corner (${px},${py}) on screen at ${a.x.toFixed(1)},${a.y.toFixed(1)} but saved at ${b.x.toFixed(1)},${b.y.toFixed(1)}`)
+      }
+      is(`${label} ${what} stays flipped as it was`, `${!!saved.flipped},${!!saved.flipped_y}`, `${fx},${fy}`)
+    }
+  }
 }
 
 if (checked === 0) { console.error('check-picture-stretch: inspected nothing'); process.exit(1) }
