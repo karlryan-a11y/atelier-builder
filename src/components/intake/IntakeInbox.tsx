@@ -54,7 +54,7 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string; find?: string }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
@@ -63,6 +63,15 @@ export function IntakeInbox() {
   const [retailView, setRetailView] = useState<'all' | 'with' | 'without'>('all')
   const hasRetail = (i: CapItem) => i.retail === 'both' || i.retail === 'desc'
   const retailOk = (i: CapItem) => retailView === 'all' || (retailView === 'with') === hasRetail(i)
+  // Search Needs Review by what a piece is (Karl, 2026-10-27: "Valentino shoe" shows every Valentino shoe waiting). Every word must match the start of a word in
+  // the name, brand, category, subcategory or color; accents and plurals are ignored (Hermes finds Hermès, shoe finds Shoes).
+  const [capSearch, setCapSearch] = useState('')
+  const words = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean).map(w => w.replace(/(ss|sh|ch|x)es$/, '$1').replace(/([^s])s$/, '$1'))
+  const searchOk = (i: CapItem) => {
+    const q = words(capSearch); if (!q.length) return true
+    const have = words(`${i.title} ${i.sub} ${i.find ?? ''}`)
+    return q.every(w => have.some(h => h.startsWith(w)))
+  }
   // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
   const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
   useEffect(() => {
@@ -471,9 +480,15 @@ export function IntakeInbox() {
                       ))}
                     </div>
                   )}
+                  {tab.key === 'pending_review' && cap.items.length > 0 && (
+                    <div className="mt-1 mx-3">
+                      <input value={capSearch} onChange={e => setCapSearch(e.target.value)} placeholder="Search, e.g. Valentino shoe" className="w-full border border-[#E8E4DF] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A]" />
+                      {capSearch.trim() ? <div className="mt-1 text-[10px] text-[#1A1A1A]/55">{cap.items.filter(i => retailOk(i) && searchOk(i)).length} match{cap.items.filter(i => retailOk(i) && searchOk(i)).length === 1 ? '' : 'es'} <button onClick={() => setCapSearch('')} className="ml-1 underline">Clear</button></div> : null}
+                    </div>
+                  )}
                   {cap.items.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
-                      {cap.items.filter(i => (!cap.items.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || retailOk(i))).map(it => (
+                      {cap.items.filter(i => (!cap.items.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || (retailOk(i) && searchOk(i)))).map(it => (
                         <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
