@@ -35,7 +35,8 @@ async function cutout(paint) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = (y * W + x) * 4
     px[i] = 240; px[i + 1] = 240; px[i + 2] = 240
-    px[i + 3] = paint(x, y) ? 255 : 0
+    const a = paint(x, y)
+    px[i + 3] = a === true ? 255 : a || 0 // true = solid, a number = that see-through value
   }
   return sharp(px, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer()
 }
@@ -48,6 +49,18 @@ ok(whole.ok, `a whole shirt must be kept (holes ${whole.holes})`)
 const stripes = await judgeCutout(await cutout((x, y) => body(x, y) && x % 7 < 2), null, { category: 'shirts', name: 'Pinstripe Dress Shirt' })
 ok(!stripes.ok && stripes.holes > 0.5, `a pinstripe shirt with its white cloth cut out must be refused (holes ${stripes.holes})`)
 ok(/couldn't be removed cleanly/.test(stripes.reason || '') && /unchanged/.test(stripes.reason || ''), 'the refusal must say, in plain words, that the photo is unchanged')
+
+// A light dress the remover left half see-through (the background shows through the cloth).
+const fadedDress = await judgeCutout(await cutout((x, y) => body(x, y) && 170), null, { category: 'dresses', name: 'Ruched Midi Dress' })
+ok(!fadedDress.ok && fadedDress.faded > 0.5, `a dress left half see-through must be refused (faded ${fadedDress.faded})`)
+// The same see-through value on a chiffon blouse or sunglasses is the fabric or the lens.
+const chiffon = await judgeCutout(await cutout((x, y) => body(x, y) && 170), null, { category: 'tops', name: 'Sheer Chiffon Blouse' })
+ok(chiffon.ok, `a sheer chiffon blouse must be kept (faded ${chiffon.faded})`)
+const glasses = await judgeCutout(await cutout((x, y) => body(x, y) && 170), null, { category: 'sunglasses', name: 'Cat-Eye Acetate Sunglasses' })
+ok(glasses.ok, 'sunglasses with tinted lenses must be kept')
+// A fine chain can cover well under 1% of its picture and still be the whole necklace.
+const fine = await judgeCutout(await cutout((x, y) => Math.abs(x - 300) < 2 && y > 100 && y < 700), null, { category: 'necklaces', name: 'Long Delicate Ball Chain Necklace' })
+ok(fine.ok, `a fine chain that covers ${fine.area} of its picture must be kept`)
 
 // Small patches eaten out of the middle of the body (Cynthia's screenshot): 8 px blocks, one in three.
 const speckle = await judgeCutout(await cutout((x, y) => body(x, y) && !(x > 180 && x < 420 && y > 300 && y < 650 && ((x >> 3) + (y >> 3)) % 3 === 0)), null, { category: '', name: 'White Shirt' })
@@ -93,4 +106,4 @@ if (failures.length) {
   for (const f of failures) console.error('  - ' + f)
   process.exit(1)
 }
-console.log(`check-cutout: ok (${checked} assertions: whole, pinstripes, speckle, opening, chain, empty, drop, one route, undo)`)
+console.log(`check-cutout: ok (${checked} assertions: whole, pinstripes, speckle, faded, sheer, opening, chain, empty, drop, one route, undo)`)
