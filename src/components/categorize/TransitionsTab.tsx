@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { RotateCcw, Wand2, Archive, Copy } from 'lucide-react'
 import type { useTransitions, TransitionedItem } from '@/hooks/useTransitions'
-import { OMIT_LABEL, type OmittedPiece } from '@/lib/restyleSelection'
+import { omitLine, type OmittedPiece } from '@/lib/restyleSelection'
 import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 import { groupPulledLooks, orderQueue, queueSummary, queueHeadline, type QueueCard } from '@/lib/transitionQueue'
 import { TileImage } from '@/components/common/TileImage'
@@ -217,7 +217,7 @@ function AlsoGone({ causeItemIds, gonePieces }: { causeItemIds: string[]; gonePi
                 <span className="block text-[9px] tracking-[0.16em] uppercase text-[#8a7a6a] truncate">{piece.brand}</span>
               )}
               <span className="block text-[12px] text-[#1A1A1A] leading-tight truncate" title={piece.name}>{piece.name}</span>
-              <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{OMIT_LABEL[piece.reason]}</span>
+              {omitLine(piece) && <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{omitLine(piece)}</span>}
             </span>
           </li>
         ))}

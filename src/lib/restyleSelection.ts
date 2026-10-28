@@ -59,7 +59,13 @@ export interface RestyleSelection {
   omitted: OmittedPiece[]
 }
 
-export const MISSING_NAME = 'A piece no longer in her collection'
+/** What a piece with no name left in Atelier is called; its picture beside it says which. */
+export const MISSING_NAME = 'No longer in her collection'
+
+/** The reason line under a piece, or null when its name already says it. */
+export function omitLine(o: OmittedPiece): string | null {
+  return o.name === MISSING_NAME ? null : OMIT_LABEL[o.reason]
+}
 
 export const OMIT_LABEL: Record<OmitReason, string> = {
   transitioned: 'Transitioned out',
