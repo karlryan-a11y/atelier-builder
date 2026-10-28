@@ -143,21 +143,21 @@ export function LookGallery({ looks, loading, error, onRetry, currentLookId, onB
                         setPicker({ look, anchor: e.currentTarget.getBoundingClientRect() })
                       }}
                       title="Set this look's categories"
-                      className="mt-0.5 w-full text-left flex items-start gap-1 rounded-sm hover:bg-blush/10"
+                      className="mt-0.5 w-full text-left rounded-sm hover:bg-blush/10"
                     >
-                      <span data-look-categories className="flex flex-wrap gap-0.5 flex-1 min-w-0">
+                      <span data-look-categories className="flex flex-wrap items-center gap-0.5 w-full min-w-0">
                         {f.labels.map((label) => (
-                          <span key={label} className="text-[8px] leading-tight text-text bg-blush/15 rounded-sm px-1 py-px break-words">
+                          <span key={label} className="max-w-full min-w-0 text-[8px] leading-tight text-text bg-blush/15 rounded-sm px-1 py-px [overflow-wrap:anywhere]">
                             {label}
                           </span>
                         ))}
                         {f.uncategorized && (
-                          <span className="text-[8px] leading-tight text-amber-700 border border-amber-300 rounded-sm px-1">
+                          <span className="max-w-full text-[8px] leading-tight text-amber-700 border border-amber-300 rounded-sm px-1">
                             No category
                           </span>
                         )}
+                        <Tag className="h-2.5 w-2.5 shrink-0 text-text-muted" />
                       </span>
-                      <Tag className="h-2.5 w-2.5 mt-px shrink-0 text-text-muted" />
                     </button>
                   )
                 })()}
