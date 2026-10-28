@@ -4,6 +4,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { useLookCategoryVocab } from '@/hooks/useLookCategories'
 import { useLooksSeasons } from '@/hooks/useLooksSeasons'
 import { seasonTargets, type SeasonChoice } from '@/lib/lookSeasons'
+import { saveLookPills, categoryLabelFor } from '@/lib/saveLookPills'
 
 interface SaveLookDialogProps {
   initialName: string
@@ -56,8 +57,9 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
   }
   const noSeasonYet = !!seasonsOn && !inSeason
 
-  const shownCats = [...new Set([...categories.map((c) => c.label), ...sessionNew, ...tags])]
-    .filter((l) => !seasonLabels.has(l.toLowerCase()))
+  // A category hidden in Categorize is off her site, so it is not offered here, unless this look
+  // was already in it: then it stays, ticked, so it can be taken off (Cynthia Dada, 2026-10-01).
+  const shownCats = saveLookPills(categories, [...initialTags, ...sessionNew, ...tags])
 
   // The styling notes for the categories currently ON this look. This is the surface Amaia
   // asked for: the rule ("always a sports jacket, never jeans") has to be readable at the
@@ -73,7 +75,7 @@ export function SaveLookDialog({ initialName, initialClientNote, initialToTry, i
   }
 
   const addNewCat = async () => {
-    const n = newCat.trim()
+    const n = categoryLabelFor(categories, newCat)
     if (!n) return
     if (!shownCats.some((c) => c.toLowerCase() === n.toLowerCase())) setSessionNew((p) => [...p, n])
     if (!tags.some((t) => t.toLowerCase() === n.toLowerCase())) setTags((p) => [...p, n])
