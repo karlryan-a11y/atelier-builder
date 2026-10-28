@@ -89,6 +89,8 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
         // neighbour-steal, whereas a missed earring is the actual complaint.
         sparse = opaque / (bw * bh) < 0.6
         bbox = { x: minX / s, y: minY / s, width: bw / s, height: bh / s }
+        // ✨ fits each piece by this visible box, not its photo's empty margin.
+        useCanvasStore.getState().setNodeContent(node.id, [bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height])
       }
     } catch { /* tainted/unreadable image → fall through to the default (full-rect) hit */ }
 
