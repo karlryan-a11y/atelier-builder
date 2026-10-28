@@ -368,15 +368,18 @@ export function useLookCategories(clientId: string | null) {
     }
   }, [fetchAll, setLooks])
 
-  const assignLook = useCallback(async (lookId: string, categoryId: string, on: boolean) => {
+  // Returns false when the filing did not save; the screen is then re-read from the database.
+  // The row is asked back because a write RLS declines is HTTP 200 with no rows and no error.
+  const assignLook = useCallback(async (lookId: string, categoryId: string, on: boolean): Promise<boolean> => {
     setLooks((prev) => prev.map((l) => l.id !== lookId ? l : {
       ...l, categoryIds: on ? [...new Set([...l.categoryIds, categoryId])] : l.categoryIds.filter((c) => c !== categoryId),
     }))
     const q = on
-      ? supabase.from('look_category_assignments').upsert({ look_id: lookId, category_id: categoryId })
-      : supabase.from('look_category_assignments').delete().eq('look_id', lookId).eq('category_id', categoryId)
-    const { error } = await q
-    if (error) { console.error('assignLook:', error.message); await fetchAll() }
+      ? supabase.from('look_category_assignments').upsert({ look_id: lookId, category_id: categoryId }).select('look_id')
+      : supabase.from('look_category_assignments').delete().eq('look_id', lookId).eq('category_id', categoryId).select('look_id')
+    const { data, error } = await q
+    if (error || !data?.length) { console.error('assignLook:', error?.message ?? 'no row saved'); await fetchAll(); return false }
+    return true
   }, [fetchAll, setLooks])
 
   const assignCapsule = useCallback(async (boardId: string, categoryId: string, on: boolean) => {

@@ -12,7 +12,8 @@ import { supabase } from '@/lib/supabase'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { readLookFiling, applyLookFiling } from '@/lib/lookFiling'
 import { fetchTargetTeamNote, saveTargetTeamNote } from '@/lib/teamNotes'
-import { LookGallery } from '@/components/canvas/LookGallery'
+import { useLookCategories } from '@/hooks/useLookCategories'
+import { LookGallery, type LookGalleryFiling } from '@/components/canvas/LookGallery'
 import { SaveLookDialog } from '@/components/canvas/SaveLookDialog'
 import { CreateCapsuleDialog } from '@/components/canvas/CreateCapsuleDialog'
 import { SaveAsCapsuleDialog } from '@/components/canvas/SaveAsCapsuleDialog'
@@ -64,6 +65,27 @@ export function ChatPanel() {
   const photosLoading = usePhotosLoading((s) => s.count)
   const { looks, loading, error: looksError, fetchLooks, saveLook, deleteLook } = useLooks(activeClient?.id ?? null)
   const { capsules, saveCapsule } = useCapsules(activeClient?.id ?? null)
+  // Where each look is filed, from the same cache and the same assignLook as Categorize, so a
+  // category set on a tile shows in Categorize (and the reverse) without a reload.
+  const { categories: lookCategories, looks: filedLooks, loading: filingLoading, error: filingError, assignLook, refetch: refetchFiling } = useLookCategories(activeClient?.id ?? null)
+  // A look saved or duplicated here is new to that cache: re-read once so its tile shows its filing.
+  const filingAskedFor = useRef(new Set<string>())
+  useEffect(() => {
+    if (filingLoading || filingError || !filedLooks.length) return
+    const known = new Set(filedLooks.map((l) => l.id))
+    const missing = looks.filter((l) => !known.has(l.id) && !filingAskedFor.current.has(l.id))
+    if (!missing.length) return
+    missing.forEach((l) => filingAskedFor.current.add(l.id))
+    void refetchFiling()
+  }, [looks, filedLooks, filingLoading, filingError, refetchFiling])
+  const galleryFiling = useMemo<LookGalleryFiling | null>(() => {
+    if (!activeClient || filingError || !filedLooks.length) return null
+    return {
+      categories: lookCategories,
+      categoryIdsByLook: new Map(filedLooks.map((l) => [l.id, l.categoryIds])),
+      onToggle: assignLook,
+    }
+  }, [activeClient, filingError, filedLooks, lookCategories, assignLook])
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false)
   const [showSaveAsCapsuleDialog, setShowSaveAsCapsuleDialog] = useState(false)
   const [savingCapsule, setSavingCapsule] = useState(false)
@@ -144,6 +166,8 @@ export function ChatPanel() {
    * `lookFilingOk` is false only when the read failed; the save then adds and never removes.
    */
   const filedLookId = currentLookId ?? replacesLookId
+  // Changes when this look is re-filed from its tile, so the Save box opens with what is saved now.
+  const filingKey = filedLooks.find((l) => l.id === filedLookId)?.categoryIds.join(',') ?? ''
   const [lookFiling, setLookFiling] = useState<string[]>([])
   const [lookFilingOk, setLookFilingOk] = useState(true)
   useEffect(() => {
@@ -159,7 +183,7 @@ export function ChatPanel() {
       setLookFilingOk(f.ok)
     })()
     return () => { cancelled = true }
-  }, [filedLookId, activeClient?.id, looks])
+  }, [filedLookId, activeClient?.id, looks, filingKey])
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -710,6 +734,7 @@ export function ChatPanel() {
               onDuplicate={handleDuplicateLook}
               onDelete={(id) => deleteLook(id)}
               onNew={handleNewLook}
+              filing={galleryFiling}
             />
           )}
           {tab === 'looks' && !activeClient && (

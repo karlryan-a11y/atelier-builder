@@ -115,7 +115,7 @@ export function SeasonQueue({
 }: {
   looks: TaggableLook[]
   categories: LookCategory[]
-  assignLook: (lookId: string, categoryId: string, on: boolean) => Promise<void>
+  assignLook: (lookId: string, categoryId: string, on: boolean) => Promise<unknown>
 }) {
   const need = useMemo(() => looksNeedingSeason(looks, categories), [looks, categories])
   if (need.length === 0) return <p className="text-[#888] text-sm">Every look on her lookbook has a season.</p>
