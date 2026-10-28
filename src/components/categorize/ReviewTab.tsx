@@ -116,7 +116,7 @@ export function ReviewTab({ clientId, clientName, deleted }: {
       {pill === 'deleted' && (
         deleted.error ? <p className="text-[#b4443a] text-sm">Couldn’t load deleted looks: {deleted.error}</p>
         : deleted.loading ? <p className="text-[#888] text-sm">Loading…</p>
-        : deleted.waiting.length === 0 && deleted.cleared.length === 0 ? <p className="text-[#888] text-sm">{firstName} hasn’t deleted any looks. When she deletes one from her lookbook, it lands here with her note.</p>
+        : deleted.waiting.length === 0 && deleted.cleared.length === 0 ? <p className="text-[#888] text-sm">{firstName} hasn’t deleted any looks. A look deleted from the lookbook lands here, with the note on why.</p>
         : (
           <>
             <p className="text-[12px] text-[#888] mb-4 max-w-xl">Looks {firstName} deleted from her lookbook, with her note on why. The look itself is unchanged here in the builder. Restore puts it back on her lookbook where it was. Clear takes it off this list and it stays off her lookbook.</p>
