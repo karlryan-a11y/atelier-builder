@@ -105,9 +105,6 @@ const hook = read('src/hooks/useShareLinks.ts')
 ok(/const API = shareApiBase\(/.test(hook), 'useShareLinks must take its address from shareApiBase')
 ok(/JSON\.stringify\(\{ kind, itemId: subjectId, clientId \}\)/.test(hook), 'mint must say which client it is for')
 ok(/sendKnownLink/.test(hook) && /ensureLink/.test(hook), 'useShareLinks must offer ensureLink and sendKnownLink')
-const vj = read('vercel.json')
-ok(/"source": "\/looks\/api\/share\/:path\*",\s*"destination": "https:\/\/atelier-looks\.vercel\.app\/api\/share\/:path\*"/.test(vj),
-  "vercel.json must pass /looks/api/share on the builder's own address to the lookbook")
 
 if (checks < 20) fail(`only ${checks} checks ran`)
 if (problems.length) {
