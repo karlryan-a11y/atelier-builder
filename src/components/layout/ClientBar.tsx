@@ -106,7 +106,8 @@ export function ClientBar({ styleOnly = false }: { styleOnly?: boolean } = {}) {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search clients…"
                   autoFocus
-                  className="w-full pl-9 pr-3 py-2.5 text-sm focus:outline-none placeholder:text-[#bbb]"
+                  // 16px on a phone: a smaller box makes iPhone Safari zoom in when it is tapped.
+                  className="w-full pl-9 pr-3 py-2.5 text-[16px] sm:text-sm focus:outline-none placeholder:text-[#bbb]"
                 />
               </div>
               <div className="max-h-[320px] overflow-y-auto py-1">

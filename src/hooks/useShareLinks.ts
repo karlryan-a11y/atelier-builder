@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { shareApiBase, sendLink, sendMessage } from '@/lib/shareSend'
 
 /**
  * Share links for looks + capsules.
@@ -15,7 +16,8 @@ import { supabase } from '@/lib/supabase'
  * link for a capsule is stable and its open count never splits across two tokens.
  */
 
-const API = 'https://atelierbywatson.com/looks/api/share'
+// Same-origin on atelierbywatson.com/style; the builder's own address calls the live site (lib/shareSend.ts).
+const API = shareApiBase(typeof window === 'undefined' ? null : window.location)
 
 export type ShareKind = 'look' | 'capsule'
 
@@ -119,37 +121,55 @@ export function useShareLinks(clientId: string | null) {
     [links],
   )
 
+  // The link for one look or capsule: the one it already has, or a new one. Minting is idempotent,
+  // so asking twice never makes a second link. clientId rides along only so a test run can tell the
+  // save is a demo client's; the server takes the client from the look itself, never from this.
+  const ensureLink = useCallback(async (kind: ShareKind, subjectId: string): Promise<{ url: string } | { error: string }> => {
+    const key = keyOf(kind, subjectId)
+    const known = links.get(key)
+    if (known?.url) return { url: known.url }
+    const res = await fetch(`${API}/mint`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ kind, itemId: subjectId, clientId }),
+    })
+    const data = await res.json()
+    if (!res.ok) return { error: String(data.error || res.status) }
+    setLinks((prev) => new Map(prev).set(key, {
+      url: data.url,
+      openCount: data.openCount ?? 0,
+      lastOpenedAt: data.lastOpenedAt ?? null,
+    }))
+    return { url: data.url as string }
+  }, [links, clientId])
+
   const copyLink = useCallback(async (kind: ShareKind, subjectId: string) => {
     const key = keyOf(kind, subjectId)
     setBusy(key)
     setStatus(null)
     try {
       // Already minted → write synchronously, which keeps Safari's user gesture.
-      const known = links.get(key)
-      let url = known?.url ?? ''
-      if (!url) {
-        const res = await fetch(`${API}/mint`, {
-          method: 'POST',
-          headers: await authHeaders(),
-          body: JSON.stringify({ kind, itemId: subjectId }),
-        })
-        const data = await res.json()
-        if (!res.ok) { setStatus(`Link failed: ${data.error || res.status}`); return }
-        url = data.url
-        setLinks((prev) => new Map(prev).set(key, {
-          url,
-          openCount: data.openCount ?? 0,
-          lastOpenedAt: data.lastOpenedAt ?? null,
-        }))
-      }
-      const copied = await copyText(url)
-      setStatus(copied ? 'Link copied — paste it into a text or an email' : `Copy failed. The link is ${url}`)
+      const got = await ensureLink(kind, subjectId)
+      if ('error' in got) { setStatus(`Link failed: ${got.error}`); return }
+      const copied = await copyText(got.url)
+      setStatus(copied ? 'Link copied — paste it into a text or an email' : `Copy failed. The link is ${got.url}`)
     } catch {
       setStatus('Link failed')
     } finally {
       setBusy(null)
     }
-  }, [links])
+  }, [ensureLink])
+
+  /**
+   * Send from a phone: the share sheet with the link, or the link copied (lib/shareSend.ts). Called
+   * straight from the tap with a link that is already known (the phone screen gets it when the look
+   * opens), so Safari still counts it as her tap and opens the sheet.
+   */
+  const sendKnownLink = useCallback(async (url: string) => {
+    const result = await sendLink(url, typeof navigator === 'undefined' ? undefined : navigator, copyText)
+    setStatus(sendMessage(result, url) || null)
+    return result
+  }, [])
 
   const revokeLink = useCallback(async (kind: ShareKind, subjectId: string) => {
     const key = keyOf(kind, subjectId)
@@ -173,5 +193,5 @@ export function useShareLinks(clientId: string | null) {
     }
   }, [])
 
-  return { stateFor, copyLink, revokeLink, busy, status, setStatus }
+  return { stateFor, ensureLink, copyLink, sendKnownLink, revokeLink, busy, status, setStatus }
 }
