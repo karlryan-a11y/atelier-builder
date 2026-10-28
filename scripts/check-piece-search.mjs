@@ -50,8 +50,12 @@ const searchInCategory = PS.searchInCategory ?? (() => undefined)
 
 const ROOT = new URL('..', import.meta.url).pathname
 // PIECE_SEARCH_SIBLING: the other app's checkout, when it is not the usual folder (a worktree).
+// Otherwise the checkout beside this one (a change built on both apps on the same branch), then the
+// usual folder. Comparing against an older copy elsewhere fails every change made to both apps.
+const NEXT_DOOR = new URL('../../atelier-looks/', import.meta.url).pathname
 const SIBLING = process.env.PIECE_SEARCH_SIBLING
   ? process.env.PIECE_SEARCH_SIBLING.replace(/\/?$/, '/')
+  : existsSync(NEXT_DOOR + 'src/lib/pieceSearch.ts') ? NEXT_DOOR
   : `${process.env.HOME}/Downloads/atelier-looks/`
 const problems = []
 const fail = (m) => { problems.push(m); if (problems.length <= 14) console.error(`   ❌ ${m}`) }
