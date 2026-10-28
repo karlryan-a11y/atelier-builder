@@ -114,11 +114,11 @@ export const STANDARD_NESTING: Record<string, readonly string[]> = {
   sweaters: ['sweatshirts', 'cardigans', 'knit-tops', 'knit-vests', 'sweater-vests'],
   shoes: ['heels', 'sandals', 'boots', 'sneakers', 'flats', 'loafers', 'mules', 'wedges'],
   swim: ['swimwear', 'bikinis', 'one-piece-swimsuits', 'cover-ups', 'coverups', 'swim-separates', 'bathing-suits'],
-  athleisure: ['sweatpants', 'matching-sets', 'sweatsuits', 'sweat-suits', 'tracksuits'],
-  activewear: ['leggings', 'sports-bras', 'athletic-tops', 'athletic-bottoms', 'athletic-vests', 'tennis-dresses'],
+  athleisure: ['sweatpants', 'matching-sets', 'sweatsuits', 'sweat-suits', 'tracksuits', 'track-jackets-and-pants'],
+  activewear: ['leggings', 'sports-bras', 'athletic-tops', 'athletic-bottoms', 'athletic-vests', 'athletic-jackets', 'tennis-dresses'],
   sets: ['lounge-sets', 'travel-sets', 'knit-sets', 'skirt-sets', 'short-sets'],
   'one-pieces': ['jumpsuits', 'rompers'],
-  bags: ['totes', 'shoulder-bags', 'crossbodies', 'crossbody', 'top-handles', 'top-handle-bags', 'clutches', 'evening-bags', 'travel-bags'],
+  bags: ['totes', 'shoulder-bags', 'crossbodies', 'crossbody', 'top-handles', 'top-handle-bags', 'clutches', 'evening-bags', 'travel-bags', 'bag-charms'],
   accessories: ['belts', 'scarves', 'scarf', 'shawls', 'wraps', 'hats', 'gloves', 'sunglasses', 'hair-accessories'],
   jewelry: ['necklaces', 'earrings', 'rings', 'pendants', 'time-pieces', 'watches', 'brooches', 'bracelets', 'anklets', 'charms', 'cuffs', 'body-jewelry'],
   hosiery: ['tights', 'stockings', 'socks', 'knee-high-socks'],
@@ -156,9 +156,11 @@ export function standardParentOf(slug: string): string | null {
   for (const f of whole) { const p = STANDARD_BY_FORM.children.get(f); if (p) return p }
   // A singular of a parent ("sweater") reads inside it.
   for (const f of whole) { const p = STANDARD_BY_FORM.parents.get(f); if (p && p !== key) return p }
-  // By its last word: costume-earrings, low-heel-jeans, travel-shoes.
-  const words = key.split('-')
-  if (words.length < 2) return null
+  // By its last word: costume-earrings, low-heel-jeans, travel-shoes. In "jeans with flats" the
+  // garment is the word before "with".
+  const garment = key.split('-with-')[0]
+  const words = garment.split('-')
+  if (garment === key && words.length < 2) return null
   for (const f of forms(words[words.length - 1])) {
     const p = STANDARD_BY_FORM.children.get(f) ?? STANDARD_BY_FORM.parents.get(f)
     if (p) return p
