@@ -905,7 +905,8 @@ export function CategorizePanel() {
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Review</p>
               <p className="text-[10px] text-[#888] leading-relaxed">
-                Clean up her collection: recover pieces hidden by mistake, fill in missing designers or
+                See the looks she deleted from her lookbook and why, and restore or clear each one. Clean
+                up her collection: recover pieces hidden by mistake, fill in missing designers or
                 categories so search works, and fix color mismatches. Use the pills on the right.
               </p>
             </>

@@ -239,8 +239,9 @@ function DeletedLookTile({ look, clientName, busy, onRestore, onClear }: {
       <div className="px-3 py-2.5">
         <p className="text-[13px] text-[#1A1A1A] truncate">{look.name}</p>
         <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-1 truncate">
-          Deleted by {look.by && clientName && !clientName.startsWith(look.by) ? look.by : (clientName ?? 'her')} · {shortDate(look.at)}
+          Deleted by {look.by && clientName && !clientName.startsWith(look.by) ? look.by : (clientName ?? 'her')}
         </p>
+        <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-0.5">{shortDate(look.at)}</p>
         <p className={`text-[12px] mt-2 leading-snug whitespace-pre-line ${look.note ? 'text-[#1A1A1A]' : 'text-[#bbb] italic'}`}>
           {look.note ? `“${look.note}”` : 'No note'}
         </p>
