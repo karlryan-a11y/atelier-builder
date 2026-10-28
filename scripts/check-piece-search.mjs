@@ -447,6 +447,66 @@ if (names(lenaDress) !== 'Plaid Belted Dress / Wool Skirt') fail(`"lena dress" w
 ran++
 if ((searchPieces(DRESSES, 'dress', (x) => x, 'client').ranked ?? []).length !== 13) fail('a search made only of a common word must still return every piece that has it')
 
+// ── SHADES (Maegan, Peyton Wheeler, 2026-09-24) ──────────────────────────────────────────
+// "For Ivory we also need to also add cream & winter white", and "type in sea foam green and have
+// all of those items pull up". Pieces as filed in her closet on 2026-10-27.
+const SHADES = [
+  { name: 'Mint Ruffle Cardigan', brand: 'Chanel', color: 'Seafoam Green', colorFamilies: ['Green'] },
+  { name: 'Cotton Crewneck T-Shirt', brand: 'Suuksess', color: 'Seafoam Green', colorFamilies: ['Green'] },
+  { name: 'Crepe De Chine Tie-Neck Silk Blouse Top', brand: 'Valentino', color: 'Mint Green', colorFamilies: ['Green'] },
+  { name: 'Cropped Knit Wool Turtleneck Sweater', brand: 'One Of', color: 'Mint Green', colorFamilies: ['Green'] },
+  { name: 'Iriza', brand: 'Christian Louboutin', color: 'Mint', colorFamilies: ['Green'] },
+  { name: 'Ladycrush Sandal', brand: 'Valentino', color: 'Mint', colorFamilies: ['Green'] },
+  { name: 'Wool Cable Knit Turtleneck Sweater', brand: 'Lena Hoschek', color: 'Salmon Pink', colorFamilies: ['Pink'] },
+  { name: 'Raspberry Ballet Long Sleeve Turtleneck Nylon Blend Bodysuit', brand: 'Commando', color: 'Raspberry', colorFamilies: ['Pink'] },
+  { name: 'Collared Cashmere Turtleneck', brand: 'Prada', color: 'Pink', colorFamilies: ['Pink'] },
+  { name: 'Samia Desert Print Cashmere Turtleneck Sweater', brand: 'Bogner', color: 'Ivory', colorFamilies: ['Ivory'] },
+  { name: 'Mazzy Sleeveless Cashmere Turtleneck Sweater', brand: 'Veronica Beard', color: 'Ivory', colorFamilies: ['Ivory'] },
+  { name: 'Woolf Wool Blend Relaxed Fit Crewneck Sweater', brand: 'One Of', color: 'Cream', colorFamilies: ['Ivory'] },
+  { name: 'White Easton Nylon Lace-Up Winter Boots', brand: 'La Canadienne', color: 'White', colorFamilies: ['White'] },
+  { name: 'Poplin Button Down Shirt', brand: 'Frame', color: 'White', colorFamilies: ['White'] },
+  { name: 'Silk Slip Dress', brand: 'Khaite', color: 'Emerald Green', colorFamilies: ['Green'] },
+  { name: 'Cable Knit Cardigan', brand: 'Ganni', color: 'Kelly Green', colorFamilies: ['Green'] },
+  { name: 'Cleia Heeled Sandal', brand: 'Chloé', color: 'Gold, Burgundy', colorFamilies: ['Gold', 'Burgundy'] },
+  { name: 'Cropped Fitted Jacket in Leather', brand: 'Chloé', color: 'Brown', colorFamilies: ['Brown'] },
+]
+const SEAFOAM = SHADES.slice(0, 6).map((x) => x.name)
+const IVORY = ['Samia Desert Print Cashmere Turtleneck Sweater', 'Mazzy Sleeveless Cashmere Turtleneck Sweater', 'Woolf Wool Blend Relaxed Fit Crewneck Sweater']
+const shade = (q) => (searchPieces(SHADES, q, (x) => x, 'client').ranked ?? []).map((x) => x.name)
+const sameSet = (got, want) => got.length === want.length && want.every((n) => got.includes(n))
+for (const q of ['sea foam green', 'seafoam', 'sea foam', 'mint', 'mint green', 'seafoam green']) {
+  ran++
+  if (!sameSet(shade(q), SEAFOAM)) fail(`"${q}" must return exactly her six seafoam and mint pieces, no other green, got ${shade(q).join(' / ')}`)
+}
+ran++
+// The two labeled Seafoam lead "seafoam"; the one labeled only Seafoam (the tee) is last for "mint".
+if (!sameSet(shade('seafoam').slice(0, 2), ['Mint Ruffle Cardigan', 'Cotton Crewneck T-Shirt']) || shade('mint').at(-1) !== 'Cotton Crewneck T-Shirt') {
+  fail(`a piece labeled the shade she typed must rank above its twin shade: seafoam ${shade('seafoam').join(' / ')}; mint ${shade('mint').join(' / ')}`)
+}
+for (const q of ['winter white', 'winter-white', 'ivory', 'cream', 'off white']) {
+  ran++
+  if (!sameSet(shade(q), IVORY)) fail(`"${q}" must return the ivory and cream pieces and no plain white, got ${shade(q).join(' / ')}`)
+}
+ran++
+if (!sameSet(shade('winter'), ['White Easton Nylon Lace-Up Winter Boots'])) fail(`"winter" alone still means winter (the boots), got ${shade('winter').join(' / ')}`)
+ran++
+if (shade('green').length !== 8) fail(`"green" must still find every green piece, the mint and seafoam ones included (8), got ${shade('green').length}`)
+for (const [q, want] of [
+  ['salmon pink', ['Wool Cable Knit Turtleneck Sweater']],
+  ['salmon', ['Wool Cable Knit Turtleneck Sweater']],
+  ['raspberry pink', ['Raspberry Ballet Long Sleeve Turtleneck Nylon Blend Bodysuit']],
+  ['pink', ['Wool Cable Knit Turtleneck Sweater', 'Raspberry Ballet Long Sleeve Turtleneck Nylon Blend Bodysuit', 'Collared Cashmere Turtleneck']],
+  ['chloe', ['Cleia Heeled Sandal', 'Cropped Fitted Jacket in Leather']],
+  ['chloé', ['Cleia Heeled Sandal', 'Cropped Fitted Jacket in Leather']],
+]) {
+  ran++
+  if (!sameSet(shade(q), want)) fail(`"${q}": expected ${want.join(' / ')}, got ${shade(q).join(' / ')}`)
+}
+// a shade word on a brand ("Mint Velvet") counts for little, like "blue" on "Skarlett Blue"
+ran++
+const mintBrand = searchPieces([{ name: 'Wrap Dress', brand: 'Mint Velvet' }, { name: 'Wrap Dress', color: 'Mint' }], 'mint', (x) => x, 'client').ranked
+if ((mintBrand ?? [])[0]?.color !== 'Mint') fail('"mint" ranked the brand "Mint Velvet" above a mint piece')
+
 console.log(`   rules: ${ran} case(s) run`)
 if (ran === 0 || checks === 0) { console.error('\n❌ piece-search: inspected nothing.\n'); process.exit(1) }
 

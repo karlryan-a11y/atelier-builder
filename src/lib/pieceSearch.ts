@@ -103,7 +103,7 @@ const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'with', 'w', 'in', 'o
 /** Palette words. On a brand ("Skarlett Blue") they count for little, so a blue piece ranks first. */
 const COLOR_WORDS = new Set(['black', 'white', 'ivory', 'cream', 'grey', 'gray', 'beige', 'brown', 'navy',
   'blue', 'green', 'olive', 'teal', 'purple', 'lavender', 'pink', 'blush', 'red', 'burgundy', 'orange',
-  'yellow', 'gold', 'silver', 'tan', 'camel', 'multicolor'])
+  'yellow', 'gold', 'silver', 'tan', 'camel', 'multicolor', 'mint', 'seafoam'])
 
 /**
  * Words that mean the same thing to her. Each group finds every other member. Kept short on
@@ -118,7 +118,10 @@ const SYNONYM_GROUPS: string[][] = [
   ['handbag', 'purse'],
   ['sweater', 'jumper', 'pullover'],
   ['grey', 'gray'],
-  ['ivory', 'cream', 'ecru', 'offwhite'],
+  ['ivory', 'cream', 'ecru', 'offwhite', 'winterwhite'],
+  // Shades (Maegan, Peyton Wheeler, 2026-09-24: "type in sea foam green and have all of those
+  // items pull up"). Her closet files the same green as "Seafoam Green", "Mint" and "Mint Green".
+  ['seafoam', 'mint'],
   ['tan', 'camel'],
   ['leopard', 'cheetah'],
   ['polka', 'polkadot'],
@@ -163,6 +166,8 @@ const PHRASES: [RegExp, string][] = [
   [/\bt[\s-]?shirts?\b/g, 'tshirt'],
   [/\bv[\s-]neck/g, 'vneck'],
   [/\boff[\s-]white\b/g, 'offwhite'],
+  [/\bwinter[\s-]white\b/g, 'winterwhite'],
+  [/\bsea[\s-]?foam\b/g, 'seafoam'],
   [/\bpolka[\s-]dots?\b/g, 'polkadot polka'],
 ]
 
@@ -185,11 +190,26 @@ export function tokenize(text: string | null | undefined): string[] {
   return normalize(text).split(/[^a-z0-9]+/).filter(Boolean)
 }
 
+/**
+ * A SHADE SAYS ITS OWN COLOR. In "sea foam green" or "salmon pink" the last word adds nothing she
+ * means, and kept as a word of its own it would bring in every green or every pink piece as a
+ * near match. So the plain color word right after its shade is dropped from what she typed.
+ * The piece's own words are untouched: "green" still finds a piece labeled "Mint Green".
+ */
+const SHADE_OF: Record<string, string[]> = {
+  seafoam: ['green'],
+  mint: ['green'],
+  salmon: ['pink'],
+  raspberry: ['pink'],
+  blush: ['pink'],
+}
+
 /** The typed words that count: filler dropped, unless filler is all there is. */
 export function queryWords(query: string): string[] {
   const words = tokenize(query)
   const kept = words.filter((w) => !STOP_WORDS.has(w))
-  return kept.length ? kept : words
+  const out = kept.length ? kept : words
+  return out.filter((w, i) => !(i > 0 && SHADE_OF[out[i - 1]]?.includes(w)))
 }
 
 interface Token { t: string; w: number; kind: FieldKind }
