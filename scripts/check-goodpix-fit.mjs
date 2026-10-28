@@ -140,6 +140,9 @@ for (const gp of [undefined, { width: 400, height: 260, content: { x: 4, y: 6, w
   ok('measuring a photo does not load it the board\'s way (no loadBoardImage)', !/loadBoardImage\s*\(/.test(src))
   ok('measuring a photo does not make an <img> of it', !/new\s+(window\.)?Image\s*\(/.test(src))
   ok('measuring a photo reads its own fetched copy', /fetch\(/.test(src) && /createImageBitmap\(/.test(src))
+  // The tester, 2026-10-26: the fetch sent no cookies at all, so on a branch preview every photo
+  // looped in redirects and nothing was fitted. It sends them to our own address, like the board.
+  ok('measuring a photo sends our own sign-in cookie (not credentials: omit)', !/credentials\s*:\s*['"]omit['"]/.test(src) && /credentials\s*:\s*['"]same-origin['"]/.test(src))
 }
 
 if (cases === 0) { console.error('\n❌ goodpix-fit: nothing inspected. Nothing was verified.\n'); process.exit(1) }

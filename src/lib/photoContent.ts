@@ -37,8 +37,12 @@ export async function measurePhoto(url: string, timeoutMs = 6000): Promise<Photo
   }
 }
 
+// Credentials as the board's own <img crossOrigin="anonymous"> sends them: cookies to our own
+// address only. With none at all, a branch preview's sign-in wall answered every photo with a
+// redirect loop, nothing was measured and every piece opened the old way (the tester, 2026-10-26,
+// Chris Cadieux Looks 11 and 24: ERR_TOO_MANY_REDIRECTS).
 async function decode(src: string): Promise<ImageBitmap> {
-  const res = await fetch(src, { mode: 'cors', credentials: 'omit' })
+  const res = await fetch(src, { mode: 'cors', credentials: 'same-origin' })
   if (!res.ok) throw new Error(`photo could not be fetched: ${res.status}`)
   return createImageBitmap(await res.blob())
 }
