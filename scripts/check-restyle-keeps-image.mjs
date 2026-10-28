@@ -88,6 +88,21 @@ assert('the saved board itself is not changed', canvas.nodes.length === 6)
   assert('the GoodPix pool rule is unchanged', sel.keep.join() === 'skirt' && sel.omitted.map((o) => o.reason).join() === 'deleted,transitioned')
 }
 
+{
+  // Saving the restyle keeps the look's name and notes. The look is still pulled while she
+  // restyles it, so it is not in the canvas looks list; the Save dialog used to open blank and
+  // the save renamed Janet's Look 155 to "Untitled Look". ChatPanel reads the open look by id
+  // when the list does not have it, and the dialog is filled from that.
+  const fs = await import('node:fs')
+  const src = fs.readFileSync(new URL('../src/components/layout/ChatPanel.tsx', import.meta.url), 'utf8')
+  const looksHook = fs.readFileSync(new URL('../src/hooks/useLooks.ts', import.meta.url), 'utf8')
+  assert('the canvas looks list still leaves pulled looks out (why the read below is needed)', /\.is\('transitioned_at', null\)/.test(looksHook))
+  assert('ChatPanel reads a pulled look by its id for the Save dialog',
+    /from\('gp_looks'\)[\s\S]{0,300}\.eq\('id', currentLookId\)/.test(src) && /currentLook = listedLook \?\? pulledLook/.test(src))
+  assert('the Save dialog opens with that look\'s name and notes',
+    /initialName=\{currentLook\?\.name/.test(src) && /initialNotes=\{currentLook\?\.notes_internal/.test(src))
+}
+
 if (problems.length) {
   for (const p of problems) console.error(`   ❌ ${p}`)
   console.error(`\n❌ restyle-keeps-image: ${problems.length} failure(s).\n`)
