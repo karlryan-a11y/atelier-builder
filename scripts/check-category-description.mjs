@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: the category styling note (ADR-0110) is readable everywhere it is written.
  *

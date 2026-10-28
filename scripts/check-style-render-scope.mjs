@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Style render-scope guard (styling wave 3, item 1).
  *

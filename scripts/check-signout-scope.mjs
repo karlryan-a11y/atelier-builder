@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 // Every Supabase signOut() must be scope 'local'.
 //
 // supabase-js signOut() defaults to scope 'global': it ends EVERY session the person has, on every

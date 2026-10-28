@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: on the Looks and Capsules tabs, a category click FILTERS, and a card click only
  * re-files a look when the stylist has turned tagging on.

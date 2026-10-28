@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0146. A HIDDEN PIECE IS OFF THE BOARD AND STILL IN THE LOOK.
  *

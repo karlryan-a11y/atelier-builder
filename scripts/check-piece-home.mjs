@@ -1,3 +1,4 @@
+// @checks guard
 // Each piece says which home it is at, and the team can find the ones with none (Madeline +
 // Maegan, Karl 2026-10-09). FAILS before: no homeLine, no NO_HOME filter.
 import { readFileSync } from 'node:fs'

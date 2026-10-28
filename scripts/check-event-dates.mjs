@@ -1,3 +1,4 @@
+// @checks guard
 // Dates on looks and capsules (migration 041; Karl + Maegan, 2026-10-09). FAILS before: no
 // eventDates lib, the cards had no Dates button, and the loader never read event_start/event_end.
 import { readFileSync, existsSync } from 'node:fs'

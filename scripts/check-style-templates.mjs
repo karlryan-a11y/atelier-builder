@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * THE ✨ STYLE BUTTON: DOES IT PUT THINGS WHERE A STYLIST WOULD, AND DOES IT KEEP EVERYTHING?
  * ADR-0128.

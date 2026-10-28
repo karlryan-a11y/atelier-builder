@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0153, the stylist's half. SHE CAN MARK A LOOK SHE ALREADY BUILT, AND MARK MANY AT ONCE.
  *

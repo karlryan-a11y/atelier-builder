@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 /**
  * LOOKS A CLIENT DELETED, IN REVIEW.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 // The Drive picker must offer a view that shows files the stylist OWNS inside a folder someone
 // else shared with her.
 //

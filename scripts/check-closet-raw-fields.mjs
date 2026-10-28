@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Closet raw-field contract (styling wave 3, item 4).
  *

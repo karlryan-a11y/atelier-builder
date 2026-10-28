@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Shared Style data cache (styling wave 3, item 3).
  *

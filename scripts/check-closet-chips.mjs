@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0136. EVERY CATEGORY A CLIENT HAS IS A CHIP ON THE CANVAS RAIL, AND NONE OF THEM HIDE.
  *

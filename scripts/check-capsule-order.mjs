@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * New capsules land on top. Cynthia Dada, 2026-10-05, Peyton Wheeler's London capsule.
  *

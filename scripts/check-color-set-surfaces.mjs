@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Colour-set surface guard (ADR-0115).
  *

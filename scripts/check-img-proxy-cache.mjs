@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * /img-proxy cache headers (styling wave 3, item 5).
  *

@@ -1,3 +1,4 @@
+// @checks guard
 // Size 28 on the canvas text sizes (Cynthia, 2026-10-09). FAILS before: 24 then 32.
 import { readFileSync } from 'node:fs'
 const s = readFileSync('src/components/canvas/CanvasToolbar.tsx', 'utf8')

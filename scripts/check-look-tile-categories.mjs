@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * Looks grid tiles show where a look is FILED, and can file it (Maegan, Zoom clip 2026-09-29).
  * The tile used to print look.tags, which is not filing (ADR-0149): 16 of Janet Foutty's 99 tiles

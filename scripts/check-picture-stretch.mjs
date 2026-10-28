@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * Picture stretch guard (Cynthia, 2026-10-21: "the capability to make images wider or taller").
  * A picture on the board (the sweater-over-shirt image on Chris Cadieux's look) had only the four

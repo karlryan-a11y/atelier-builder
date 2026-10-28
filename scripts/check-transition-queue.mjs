@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * THE TRANSITIONS QUEUE, MEASURED OVER REAL ROWS.
  *

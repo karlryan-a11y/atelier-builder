@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 // Every serverless function must require a signed-in team member.
 //
 // Each file in api/ runs with the SERVICE-ROLE key, which bypasses every row rule in the database,

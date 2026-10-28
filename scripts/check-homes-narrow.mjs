@@ -1,3 +1,4 @@
+// @checks guard
 // A home narrows the piece list; it does not add to it (Cynthia, 2026-10-08, Keil Cadieux:
 // Creekside + Denim showed 1,234 pieces, not Creekside's denim). And "Not in this look" is in the
 // builder's "Styled in N looks" window, where she works ("where does it say not in this look?").

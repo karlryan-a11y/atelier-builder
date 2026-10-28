@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0151. ONE SEARCH, ONE RULE, EVERY SURFACE — AND A DESCRIPTION SHE CAN READ.
  *

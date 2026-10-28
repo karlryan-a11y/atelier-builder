@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: nobody changes a client's front page by mis-tapping.
  *

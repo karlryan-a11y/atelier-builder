@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0149. THE SAVE BOX'S CATEGORY PILLS MEAN THE SAME THING AS CATEGORIZE'S.
  *

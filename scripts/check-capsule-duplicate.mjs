@@ -1,3 +1,4 @@
+// @checks guard
 // Duplicate capsule (Cynthia Dada, 2026-10-06). FAILS before it: the capsule card had Edit and
 // Rename only, and useLookCategories had no duplicateCapsule. Holds the parts that keep a copy safe:
 // it is a draft (never on her site by itself), it is new on top, it keeps the board so it opens on

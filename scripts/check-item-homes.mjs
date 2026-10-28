@@ -1,3 +1,4 @@
+// @checks guard
 // The builder counts a home's pieces the way her Collection page does (Karl, 2026-10-08: "make the
 // builder match the client page"; Keil Cadieux's Carlton Landing read 233 in the builder, 267 on
 // her page). FAILS before: no homesByItem, and both builder filters matched the exact slug only.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * ADR-0168. A BOARD NEVER FREEZES, NEVER SAVES WITHOUT ITS PICTURE, AND A LOOK OPENS AS SAVED.
  *

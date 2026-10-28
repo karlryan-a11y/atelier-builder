@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * SEARCH THE PIECES WAITING IN NEEDS REVIEW, ON BOTH LISTS, OUT OF ALL OF THEM.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0137. PICKING ONE LOOK IS A CLICK, ON EVERY CARD GRID.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Colour-translation guard (ADR-0115, step 2).
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ONE PLACE BUILDS A PICTURE URL, and ONE definition of a small copy (2026-09-19, photo CDN).
  *

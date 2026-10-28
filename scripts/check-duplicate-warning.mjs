@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0164. IS THIS PIECE ALREADY IN HER CLOSET?
  *
