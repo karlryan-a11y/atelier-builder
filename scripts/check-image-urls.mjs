@@ -25,7 +25,8 @@ const ROOT = new URL('..', import.meta.url).pathname
 const HELPER = 'src/lib/imageUrls.ts'
 // Server code that READS R2 through the function to build a small copy. Nothing it builds reaches
 // a screen, so it is not a way around the cache. Named here so the exemption is visible.
-const SERVER_READERS = new Set(['api/derive-image.ts'])
+// api/remove-bg.ts reads a piece's photo and its cutout only to judge whether the cutout cut into it.
+const SERVER_READERS = new Set(['api/derive-image.ts', 'api/remove-bg.ts'])
 const EXT = /\.(tsx?|jsx?|mjs)$/
 const problems = []
 

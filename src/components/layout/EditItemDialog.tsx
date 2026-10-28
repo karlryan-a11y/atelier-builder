@@ -2,7 +2,7 @@ import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { splitCategoryChoices } from '@/lib/categoryChoices'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { useState, useRef } from 'react'
-import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
+import { X, Save, Eraser, Upload, Archive, RotateCw, Plus, Undo2 } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { colorsOf } from '@/lib/colorFamily'
@@ -38,6 +38,10 @@ interface EditItemDialogProps {
   /** When provided, shows a "Remove BG" button that strips the item's image to transparent. */
   onRemoveBackground?: () => void
   removingBg?: boolean
+  /** When provided (the photo showing is a Remove BG result), shows "Undo Remove BG", which puts
+   *  back the photo from before it. */
+  onUndoRemoveBackground?: () => void
+  undoingBg?: boolean
   /** When provided, shows a "Replace Photo" button that uploads a new image for this item. */
   onReplacePhoto?: (file: File) => void
   replacing?: boolean
@@ -63,7 +67,7 @@ function addCare(cur: string, add: string): string {
   return t ? (/[.!?]$/.test(t) ? t + ' ' : t + '. ') + add + '.' : add + '.'
 }
 
-export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onUndoRemoveBackground, undoingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
   const usedCategories = useUsedCategories()
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
   const clientOwns = (f: string) => (clientEditedFields ?? []).includes(f)
@@ -73,7 +77,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       ? <p className="text-[9px] tracking-[0.12em] uppercase text-[#a98b5b] mt-1">✦ {who} set this — change anyway?</p>
       : null
   // Any in-flight image operation locks the others (they all mutate the same stored image).
-  const imgBusy = !!removingBg || !!replacing || !!rotating
+  const imgBusy = !!removingBg || !!undoingBg || !!replacing || !!rotating
   const fileRef = useRef<HTMLInputElement>(null)
   // The name field is pre-filled with the effective name (override or scraped).
   const [name, setName] = useState(item.name_override?.trim() || item.name || '')
@@ -409,7 +413,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
 
         <div className="border-t border-border">
           {/* Image tools — secondary, on their own row so they don't crowd Save. */}
-          {(onRemoveBackground || onReplacePhoto || onRotate) && (
+          {(onRemoveBackground || onUndoRemoveBackground || onReplacePhoto || onRotate) && (
             <div className="flex items-center gap-2 px-5 pt-3 pb-1 flex-wrap">
               {onRotate && (
                 <button
@@ -431,6 +435,17 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                 >
                   <Eraser className="h-3 w-3" />
                   {removingBg ? 'Removing…' : 'Remove BG'}
+                </button>
+              )}
+              {onUndoRemoveBackground && (
+                <button
+                  onClick={onUndoRemoveBackground}
+                  disabled={imgBusy}
+                  title="Put back the photo from before Remove BG (updates it everywhere)"
+                  className="flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted border border-border rounded-sm hover:text-text hover:border-[#ccc] transition-colors disabled:opacity-50"
+                >
+                  <Undo2 className="h-3 w-3" />
+                  {undoingBg ? 'Putting back…' : 'Undo Remove BG'}
                 </button>
               )}
               {onReplacePhoto && (

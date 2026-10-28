@@ -6,6 +6,7 @@ import { useReconciliation, fetchUploadedFingerprints, fetchIngestedPhotos, type
 import { supabase } from '@/lib/supabase'
 import { resolveItemImage, proxyImageUrl, type ClosetItem } from '@/lib/images'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
+import { removeBackground } from '@/lib/removeBackground'
 import { signInAndPickPhotos, downloadDriveFile, isGoogleDriveConfigured, type DriveFile } from '@/lib/googleDrive'
 import { checkDriveFolder, type DriveCheckResult } from '@/lib/driveReconcile'
 import { dHashFromUrl, hamming, pool } from '@/lib/imageHash'
@@ -402,16 +403,11 @@ export function ReconciliationPanel() {
     if (!editing) return
     setRemovingBg(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: editing.id, image_url: resolveItemImage(toClosetItem(editing)) }),
-      })
-      const d = await resp.json().catch(() => ({}))
-      if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      // A result that cut into the piece is refused and the photo stays as it was (api/remove-bg).
+      const d = await removeBackground(editing.id, resolveItemImage(toClosetItem(editing)), editing.client_id)
+      if (!d.ok) { alert(d.reason); return }
       setEditing(null); refetch()
-    } catch { alert('Failed to remove background — try again.') } finally { setRemovingBg(false) }
+    } finally { setRemovingBg(false) }
   }
   async function replacePhoto(file: File) {
     if (!editing) return

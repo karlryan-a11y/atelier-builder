@@ -13,6 +13,7 @@ import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFrom
 import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
+import { removeBackground, undoRemoveBackground, isRemoveBgResult } from '@/lib/removeBackground'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
@@ -87,6 +88,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   const [editing, setEditing] = useState<ClosetItem | null>(null)
   const [saving, setSaving] = useState(false)
   const [removingBg, setRemovingBg] = useState(false)
+  const [undoingBg, setUndoingBg] = useState(false)
   const [replacing, setReplacing] = useState(false)
   const [rotating, setRotating] = useState(false)
   // Pending Archive/Transition confirmation (elegant in-app dialog, replaces window.confirm).
@@ -415,28 +417,36 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     if (kind === 'transition') onTransitioned?.()
   }
 
-  // Remove the item's background → transparent (deterministic strip; declines gracefully when it
-  // can't). Updates raw.processed_image (reversible). On success, refetch so the new image shows.
+  // Remove the item's background → transparent. The server refuses a result that cut into the
+  // piece (the photo stays as it was, and the alert says so). On success, refetch so it shows.
   async function removeBg() {
     if (!editing) return
     setRemovingBg(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: editing.id, image_url: resolveItemImage(editing) }),
-      })
-      const d = await resp.json().catch(() => ({}))
-      if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      const d = await removeBackground(editing.id, resolveItemImage(editing), clientId)
+      if (!d.ok) { alert(d.reason); return }
       // Photo changed → re-bake every look / capsule hero this item is styled into.
       void requestHeroRefresh(editing.id)
       setEditing(null)
       refetch()
-    } catch {
-      alert('Failed to remove background — try again.')
     } finally {
       setRemovingBg(false)
+    }
+  }
+
+  // Undo a Remove BG: put back the photo from before it, everywhere, the same way Replace photo
+  // updates everywhere (heroes re-baked).
+  async function undoRemoveBg() {
+    if (!editing) return
+    setUndoingBg(true)
+    try {
+      const d = await undoRemoveBackground(editing.id, clientId)
+      if (!d.ok) { alert(d.reason); return }
+      void requestHeroRefresh(editing.id)
+      setEditing(null)
+      refetch()
+    } finally {
+      setUndoingBg(false)
     }
   }
 
@@ -450,21 +460,14 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     const byId = new Map(visible.map((i) => [i.id, i]))
     const items = ids.map((id) => byId.get(id)).filter((x): x is ClosetItem => !!x)
     setBgBusy(true); setBgProgress({ done: 0, total: items.length })
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token ?? ''
     let ok = 0, fail = 0, done = 0
     const okIds: string[] = []
     const run = async (item: ClosetItem) => {
       try {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item_id: item.id, image_url: resolveItemImage(item) }),
-        })
-        const d = await resp.json().catch(() => ({}))
-        if (resp.ok && d?.ok) { ok++; okIds.push(item.id) } else fail++
-      } catch { fail++ }
-      finally { done++; setBgProgress({ done, total: items.length }) }
+        // A result that cut into the piece is refused (photo unchanged) and counts as not processed.
+        const d = await removeBackground(item.id, resolveItemImage(item), clientId)
+        if (d.ok) { ok++; okIds.push(item.id) } else fail++
+      } finally { done++; setBgProgress({ done, total: items.length }) }
     }
     const CONC = 3
     let idx = 0
@@ -476,7 +479,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     setBgBusy(false); setBgProgress({ done: 0, total: 0 })
     setSelected(new Set())
     refetch()
-    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (thin/jewelry items or the remover was unavailable — try those individually)` : ''}.`)
+    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (the background couldn't be removed cleanly, or the remover was unavailable). Their photos are unchanged.` : ''}.`)
   }
 
   // Replace an item's image with a stylist-uploaded photo (cleaned through Photoroom on the way in).
@@ -801,7 +804,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
       )}
 
       {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
-      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
+      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onUndoRemoveBackground={isRemoveBgResult(editing) ? undoRemoveBg : undefined} undoingBg={undoingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
 
       {confirmState && (() => {
         const name = displayName(confirmState.item) || 'this piece'
