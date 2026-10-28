@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 /**
  * Guard: Categorize reads EVERY filing, not the first 1000.
  *

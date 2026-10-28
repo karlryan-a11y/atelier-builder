@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * CLIENT DIRECTORY: every client picker says which twin to use (ADR-0122).
  *

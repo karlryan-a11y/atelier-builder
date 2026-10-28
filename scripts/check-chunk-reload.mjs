@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: a tab left open across a deploy reloads ONCE when a lazy chunk is gone, never in a loop.
  *

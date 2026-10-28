@@ -1,3 +1,4 @@
+// @checks guard
 // Her homes come first where a stylist picks pieces (Cynthia, 2026-10-08, Keil Cadieux: "how do I
 // know what garments belong to what residence? I don't see the categories for the residence").
 // FAILS before: Canvas chips were one A to Z list (Creekside behind "Show all 45 categories"), the

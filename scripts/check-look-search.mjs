@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0150. SHE CAN FIND ONE LOOK BY NAME, AND OPEN IT FROM THE PIECE THAT IS IN IT.
  *

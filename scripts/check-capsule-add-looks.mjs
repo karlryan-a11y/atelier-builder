@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0152. A CAPSULE IS A SET OF LOOKS: SHE CAN ADD AS MANY AS SHE WANTS, AND SAVING UPDATES
  * THE ONE SHE HAS.

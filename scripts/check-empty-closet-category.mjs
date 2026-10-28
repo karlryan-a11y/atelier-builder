@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * A COLLECTION CATEGORY WITH NO PIECES IN IT YET (Cynthia Dada, #watson-atelier, 2026-10-20):
  * "Can you make a way to add categories without adding items to it? Like how you can add

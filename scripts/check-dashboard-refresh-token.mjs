@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 // Proves the builder never stores or uses the DASHBOARD's refresh token, and signs out locally.
 //
 // Why: the dashboard's /api/auth/session handed the builder its refresh token; both apps then

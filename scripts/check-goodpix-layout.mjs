@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * A GOODPIX LOOK OPENS THE WAY THE STYLIST LEFT IT — measured over the layouts actually stored.
  *

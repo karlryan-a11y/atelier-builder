@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: no browser read of gp_looks / looks downloads the stored base64 pictures.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Styled-coverage guard.
  *

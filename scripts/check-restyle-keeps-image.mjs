@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * RESTYLE KEEPS HER OWN IMAGE ON HER OWN BOARD.
  *

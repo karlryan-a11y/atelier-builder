@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: the Digitize screen does not poll the database from a hidden tab, and does not leak
  * a photo's memory on every render.

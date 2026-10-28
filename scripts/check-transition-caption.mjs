@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * TRANSITION CAPTION — the real wording, over real production rows.
  *

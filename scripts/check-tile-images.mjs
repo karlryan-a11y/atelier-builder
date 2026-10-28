@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: a grid tile never downloads a full-size look or piece picture.
  *

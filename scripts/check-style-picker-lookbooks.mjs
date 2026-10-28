@@ -1,3 +1,4 @@
+// @checks guard
 // The Style picker lists clients with a lookbook (Cynthia, 2026-10-08: "remove the Keil Cadieux
 // ... closets"). FAILS before: every directory row was listed, so Keil's QuickBooks billing record
 // (no lookbook, holds her hours) sat beside her real account, and migration 040 did not exist.

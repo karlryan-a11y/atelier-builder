@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * THE COLLECTION RAIL SHOWS A SUBCATEGORY UNDER ITS CATEGORY (Cynthia Dada for Chris Cadieux,
  * #watson-atelier, 2026-10-16): "Blazers & Suit Jackets: Blazers & Sport Coats, Suit Jackets, Other

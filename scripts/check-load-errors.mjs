@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: a failed read of looks shows "Couldn't load" with a Retry, never an empty grid.
  *

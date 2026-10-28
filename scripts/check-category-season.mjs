@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 /**
  * Guard: a season is a property of a category, set in Categorize (ADR-0147).
  *

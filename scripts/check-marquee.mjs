@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * ADR-0169. THE SELECTION BOX WORKS FROM THE MARGIN AND PAST THE EDGE.
  *

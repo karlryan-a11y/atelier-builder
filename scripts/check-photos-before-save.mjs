@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * ADR-0194. A BOARD'S PICTURE IS NEVER TAKEN WHILE ITS PHOTOS ARE STILL LOADING.
  *

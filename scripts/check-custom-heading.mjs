@@ -1,3 +1,4 @@
+// @checks guard
 // A stylist names the "Custom" heading per client in Categorize > Nesting (Cynthia for Keil Cadieux,
 // 11/04), and the lookbook shows that name. FAILS before: no lib/customHeading.ts and no box in Nesting.
 // The builder writes gp_clients.raw.custom_heading; atelier-looks reads it with its own twin, so the

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Add an image to a look (ADR-0171). Cynthia Dada, 2026-09-15 / 09-23 / 10-01: "add an image of
  * this scarf tied around the waist but need to keep the item on the board invisible so it's still

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * Uncategorized guard (Paige 10/13, Karl 10/14). A look is uncategorized when it is in no category
  * she files by: a home or a season alone does not count, nor does a hidden category. The Looks rail

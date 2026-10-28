@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Style tabs stay mounted (styling wave 3, item 2).
  *

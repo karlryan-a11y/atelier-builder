@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * THE ✨ BUTTON LAYS OUT EVERY LOOK LIKE THE MICHELE SAMPLE LOOKS.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0165. TEAM NOTES LIVE IN THEIR OWN TABLE, AND NOTHING WRITES THEM ONTO THE PIECE ROW.
  *

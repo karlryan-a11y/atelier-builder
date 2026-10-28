@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 // Every converted HEIC must leave convertHeicToJpeg() named .jpg.
 //
 // The upload server rejects any file NAMED .heic/.heif, even when its bytes are now JPEG. The

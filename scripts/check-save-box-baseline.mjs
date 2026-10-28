@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 /**
  * A NEW LOOK SAVED WITH CATEGORIES TICKED IS FILED IN THEM. Cynthia Dada, 2026-11-05.
  *

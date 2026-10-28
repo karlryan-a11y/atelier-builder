@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Garment names are read as the garment they are. Chris Cadieux, 2026-10-06 (Cynthia Dada): a sync
  * showed his shirts and trousers under "Dresses" and a T-shirt under jewelry. detectCategory read

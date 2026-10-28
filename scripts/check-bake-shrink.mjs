@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * A SHRUNK PIECE BAKES FROM A PROPERLY SHRUNK PHOTO (lib/bakeShrink). Runs in every build.
  *

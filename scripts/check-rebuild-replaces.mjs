@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * ADR-0148. REBUILD REPLACES THE LOOK IT OPENED. IT DOES NOT DUPLICATE IT.
  *

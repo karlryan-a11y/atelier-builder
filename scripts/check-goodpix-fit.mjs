@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * A RESTYLED GOODPIX LOOK KEEPS EVERY PIECE IN ITS BOX, WHATEVER PHOTO ATELIER HAS FOR IT.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build
 // Add Item: the AI's suggestions may only fill fields the stylist has left EMPTY at the moment
 // they arrive, never ones she typed into while the photo was processing.
 //

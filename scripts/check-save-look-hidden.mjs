@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * Guard: the Save Look box on the Canvas never offers a category she hid in Categorize.
  *

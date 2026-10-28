@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 // A secret may never ship in browser code.
 //
 // This exists because an Anthropic key (VITE_ANTHROPIC_API_KEY, used by src/lib/compose.ts with

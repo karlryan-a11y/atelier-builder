@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Category dropdowns list HER categories first (Karl, 2026-10-07). Chris Cadieux's dropdowns opened
  * on Dresses, Tops, Skirts... with Jewelry, Handbags and Swim above his own Shirts and Jackets.

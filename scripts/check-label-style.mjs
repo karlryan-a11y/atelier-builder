@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * New labels come in styled like her last one (Cynthia Dada, 2026-10-20: "you style a label the
  * way you like (say Neue Haas, 32, bold, underlined) → you start the next look or capsule and tap

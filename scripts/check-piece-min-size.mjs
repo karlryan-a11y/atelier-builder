@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks build guard
 /**
  * Piece resize floor guard (Cynthia, 2026-10-14: a horsebit flat on a Landscape capsule would not
  * get smaller). Only the LONGER side has a floor (MIN_PIECE_SCREEN_PX), so a wide, short shoe can

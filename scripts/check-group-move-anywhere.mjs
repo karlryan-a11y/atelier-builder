@@ -1,3 +1,4 @@
+// @checks guard
 // With 2+ pieces selected, a press on empty space inside the selection box moves them, and pieces
 // inside the box stay clickable (Cynthia, 2026-10-08; review 2026-10-08). FAILS before: the gap
 // started a new selection box; then shouldOverdrawWholeArea covered the pieces so nothing inside

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @checks guard
 /**
  * Guard: a home is a property of a category, and the builder is where it is set (ADR-0111).
  *
