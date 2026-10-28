@@ -208,9 +208,14 @@ function AlsoGone({ causeItemIds, gonePieces }: { causeItemIds: string[]; gonePi
         {extra.map((piece) => (
           <li key={piece.id} className="flex items-center gap-2">
             <span className="h-7 w-7 shrink-0 bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm overflow-hidden flex items-center justify-center">
-              {piece.image
-                ? <TileImage src={piece.image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
-                : <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>}
+              {!piece.image
+                ? <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>
+                : piece.reason === 'missing'
+                  // A piece with no row of hers has no small copy (copies are made for pieces in a
+                  // closet), so the card loads the picture the board showed, as the Restyle panel
+                  // does. Asking for a copy left 6 of Alicia's 66 blank. full-size: no copy exists
+                  ? <img src={piece.image} alt="" className="max-w-full max-h-full object-contain p-0.5" />
+                  : <TileImage src={piece.image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />}
             </span>
             <span className="min-w-0">
               {piece.brand && (

@@ -217,7 +217,8 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
             {omitted.map((o) => (
               <li key={o.id} className="leading-tight flex items-center gap-2">
                 {o.image && (
-                  // a 28px reference so a piece with no name left is still recognisable
+                  // A 28px reference so a piece with no name left is still recognisable.
+                  // full-size: a piece she no longer has has no small copy to ask for
                   <img src={o.image} alt="" className="h-7 w-7 shrink-0 object-contain bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm" loading="lazy" />
                 )}
                 <span className="min-w-0">
