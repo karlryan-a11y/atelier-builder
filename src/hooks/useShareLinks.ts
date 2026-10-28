@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { shareApiBase, sendLink, sendMessage } from '@/lib/shareSend'
+import { shareApiBase, shareEndpoint, sendLink, sendMessage } from '@/lib/shareSend'
 
 /**
  * Share links for looks + capsules.
@@ -94,7 +94,7 @@ export function useShareLinks(clientId: string | null) {
     if (!clientId) { setLinks(new Map()); return }
     ;(async () => {
       try {
-        const res = await fetch(`${API}/status?clientId=${encodeURIComponent(clientId)}`, {
+        const res = await fetch(shareEndpoint(API, 'status', `clientId=${encodeURIComponent(clientId)}`), {
           headers: await authHeaders(),
         })
         if (!res.ok) return
@@ -128,7 +128,7 @@ export function useShareLinks(clientId: string | null) {
     const key = keyOf(kind, subjectId)
     const known = links.get(key)
     if (known?.url) return { url: known.url }
-    const res = await fetch(`${API}/mint`, {
+    const res = await fetch(shareEndpoint(API, 'mint'), {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ kind, itemId: subjectId, clientId }),
@@ -177,10 +177,10 @@ export function useShareLinks(clientId: string | null) {
     setBusy(key)
     setStatus(null)
     try {
-      const res = await fetch(`${API}/revoke`, {
+      const res = await fetch(shareEndpoint(API, 'revoke'), {
         method: 'POST',
         headers: await authHeaders(),
-        body: JSON.stringify({ kind, itemId: subjectId }),
+        body: JSON.stringify({ kind, itemId: subjectId, clientId }),
       })
       const data = await res.json()
       if (!res.ok) { setStatus(`Revoke failed: ${data.error || res.status}`); return }
@@ -191,7 +191,7 @@ export function useShareLinks(clientId: string | null) {
     } finally {
       setBusy(null)
     }
-  }, [])
+  }, [clientId])
 
   return { stateFor, ensureLink, copyLink, sendKnownLink, revokeLink, busy, status, setStatus }
 }

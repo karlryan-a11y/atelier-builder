@@ -4,11 +4,11 @@
  *
  * Two rules live here so the phone screen and its check share them:
  *
- * 1. WHERE THE SHARE ENDPOINTS ARE. Always /looks/api/share on the page's own address: on
- *    atelierbywatson.com/style the dashboard passes /looks to the lookbook, and on the builder's own
- *    addresses (its previews included) vercel.json passes /looks/api/share there too. Same-origin, so
- *    no CORS, and a preview can make a link. Only the local dev server (Vite, port 5173) has no
- *    /looks and calls atelierbywatson.com, as everything did before.
+ * 1. WHERE THE SHARE ENDPOINTS ARE. Always on the page's own address, so there is no CORS and a
+ *    branch preview can make a link: on atelierbywatson.com/style (and a local copy of it) the
+ *    dashboard passes /looks/api/share to the lookbook; on the builder's own addresses (its previews
+ *    included) api/share-link.ts passes the call on. Only the local dev server (Vite, port 5173) has
+ *    neither and calls atelierbywatson.com, as everything did before.
  *
  * 2. HOW A LINK IS SENT. The iPhone share sheet (navigator.share) when the phone has one, with the
  *    link alone, so Messages draws the look's picture card and pastes a bare link. If she closes the
@@ -20,8 +20,19 @@
 
 const LIVE_API = 'https://atelierbywatson.com/looks/api/share'
 
+const OWN_API = '/api/share-link'
+
 export function shareApiBase(loc: { hostname: string; port: string } | null | undefined): string {
-  return !loc || (loc.hostname === 'localhost' && loc.port === '5173') ? LIVE_API : '/looks/api/share'
+  if (!loc || (loc.hostname === 'localhost' && loc.port === '5173')) return LIVE_API
+  if (loc.hostname === 'atelierbywatson.com' || loc.hostname === 'localhost') return '/looks/api/share'
+  return OWN_API
+}
+
+/** The address of one share call (mint, status or revoke) under a base from shareApiBase. */
+export function shareEndpoint(base: string, action: 'mint' | 'status' | 'revoke', query = ''): string {
+  return base === OWN_API
+    ? `${base}?action=${action}${query ? `&${query}` : ''}`
+    : `${base}/${action}${query ? `?${query}` : ''}`
 }
 
 export type SendResult = 'shared' | 'cancelled' | 'copied' | 'failed'

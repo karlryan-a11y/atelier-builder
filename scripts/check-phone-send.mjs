@@ -58,7 +58,13 @@ if (existsSync(LIB)) {
   ok(failed === 'failed' && sendMessage(failed, URL_).includes(URL_), 'a failed copy must show the link')
   ok(sendMessage('copied', URL_) === 'Link copied. Paste it into a text.', 'the copied line changed')
   ok(shareApiBase({ hostname: 'atelierbywatson.com', port: '' }) === '/looks/api/share', 'atelierbywatson.com/style must call /looks/api/share on its own address')
-  ok(shareApiBase({ hostname: 'atelier-builder-abc123-wsgautomations-projects.vercel.app', port: '' }) === '/looks/api/share', 'a builder preview must call its own address (vercel.json passes it on)')
+  ok(shareApiBase({ hostname: 'localhost', port: '3177' }) === '/looks/api/share', 'a local copy of atelierbywatson.com must call its own /looks')
+  ok(shareApiBase({ hostname: 'atelier-builder-abc123-wsgautomations-projects.vercel.app', port: '' }) === '/api/share-link', 'a builder preview must call its own address (api/share-link.ts passes it on)')
+  ok(shareApiBase({ hostname: 'atelier-builder.vercel.app', port: '' }) === '/api/share-link', "the builder's own address must call api/share-link")
+  const { shareEndpoint } = await import(LIB)
+  ok(shareEndpoint('/looks/api/share', 'status', 'clientId=x') === '/looks/api/share/status?clientId=x', 'status address on atelierbywatson.com')
+  ok(shareEndpoint('/api/share-link', 'status', 'clientId=x') === '/api/share-link?action=status&clientId=x', 'status address on the builder')
+  ok(shareEndpoint('/api/share-link', 'mint') === '/api/share-link?action=mint', 'mint address on the builder')
   ok(shareApiBase({ hostname: 'localhost', port: '5173' }) === 'https://atelierbywatson.com/looks/api/share', 'the local dev server must call the live site')
   // sendLink must ask for the sheet before it waits on anything, or Safari has lost the tap.
   let calledSync = false
@@ -105,6 +111,11 @@ const hook = read('src/hooks/useShareLinks.ts')
 ok(/const API = shareApiBase\(/.test(hook), 'useShareLinks must take its address from shareApiBase')
 ok(/JSON\.stringify\(\{ kind, itemId: subjectId, clientId \}\)/.test(hook), 'mint must say which client it is for')
 ok(/sendKnownLink/.test(hook) && /ensureLink/.test(hook), 'useShareLinks must offer ensureLink and sendKnownLink')
+ok((hook.match(/fetch\(shareEndpoint\(API, '(status|mint|revoke)'/g) ?? []).length === 3 && !/\$\{API\}/.test(hook), 'every share call must go through shareEndpoint')
+const fn = read('api/share-link.ts')
+ok(/requireStaff\(req, res\)/.test(fn), 'api/share-link.ts must let only the team in')
+ok(/const ACTIONS = new Set\(\['mint', 'status', 'revoke'\]\)/.test(fn), 'api/share-link.ts passes on the three share calls and nothing else')
+ok(/Authorization: String\(req\.headers\.authorization/.test(fn) && !/SERVICE_ROLE|SERVICE_KEY/.test(fn), "api/share-link.ts must pass on the caller's own sign-in, never a key of its own")
 
 if (checks < 20) fail(`only ${checks} checks ran`)
 if (problems.length) {
