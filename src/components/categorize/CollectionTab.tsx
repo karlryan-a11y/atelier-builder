@@ -479,7 +479,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     setBgBusy(false); setBgProgress({ done: 0, total: 0 })
     setSelected(new Set())
     refetch()
-    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (the background couldn't be removed cleanly, or the remover was unavailable). Their photos are unchanged.` : ''}.`)
+    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (the background couldn't be removed cleanly, or the remover was unavailable). Their photos are unchanged` : ''}.`)
   }
 
   // Replace an item's image with a stylist-uploaded photo (cleaned through Photoroom on the way in).
