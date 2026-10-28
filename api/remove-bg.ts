@@ -116,7 +116,8 @@ async function removeBg(token: string, item: any, imageUrl: string, res: any) {
   // It cut into the piece: put the photo from before straight back, with the backup it had, so the
   // piece is exactly as it was (its own Undo, if it had one, still goes to the right photo).
   const restored = await writeItem(token, item.id, patchFor(after || item, before, item.raw?.bg_backup ?? null))
-  return res.status(200).json({ ok: false, damaged: true, restored, reason: DAMAGED_REASON, check: verdict })
+  // `cutout` is the refused picture, for the team to look at; it is no longer on the piece.
+  return res.status(200).json({ ok: false, damaged: true, restored, reason: DAMAGED_REASON, check: verdict, cutout: d.url ?? null })
 }
 
 async function undo(token: string, item: any, res: any) {
