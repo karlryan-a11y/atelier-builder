@@ -365,10 +365,8 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
               onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle(styleWith({ font_size: Number(e.target.value) })) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer w-12"
             >
-              {/* A ✨ label is 26 (the Michele looks' size), which is not in the list: show it as
-                  it is rather than as 12. */}
-              {[...new Set([...FONT_SIZES, tn.font_size])].sort((a, b) => a - b).map((s) => (
-                <option key={s} value={s}>{Math.round(s * 10) / 10}</option>
+              {FONT_SIZES.map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
             <div className="flex items-center gap-0.5 ml-1">
