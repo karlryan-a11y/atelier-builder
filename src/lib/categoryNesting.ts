@@ -80,6 +80,127 @@ export function parentMapFrom(rows: NestingRow[]): CategoryTree {
   return m
 }
 
+/**
+ * THE STANDARD NESTING SET (2026-10-28). Every client's Collection starts nested this way, so
+ * a stylist no longer sets up Jewelry > Earrings by hand for each one (5 of 996 had any).
+ *
+ * Karl's list wins: Outerwear (Jackets, Coats), Pants (Denim), Shoes (Heels, Sandals, Boots,
+ * Sneakers, Flats), Tops (Sleeveless, Short Sleeve, Long Sleeve, Bodysuits), Sweaters
+ * (Sweatshirts), Jewelry (Necklaces, Earrings, Rings, Pendants, Time Pieces, Brooches). Maegan's
+ * Suits, Swimwear, Blazers, Athleisure and Underpinnings, and the rest of Julia and Paige's
+ * "Standard Nesting Categories" doc (wsg-dashboard src/lib/captureV2/categories.ts), are merged in.
+ * Blazers stay on their own (Maegan), not inside Suits.
+ *
+ * Parents are the slugs pieces are already filed under (`jeans` is the Denim chip, `swim` the
+ * Swim chip, `bags` the Handbags chip), so a parent's chip is the one she already has.
+ *
+ * ONE LEVEL ONLY. The sidebar draws a heading and the chips inside it; a grandchild would have
+ * no chip. So no parent here is ever a child, and a child whose parent a stylist nested goes to
+ * the top group instead (withStandardNesting).
+ *
+ * A name matches in every spelling pieces use: singular or plural (heel, heels), with or
+ * without spaces or dashes (shortsleeves, short-sleeve), and by its last word, so
+ * "costume-earrings" is jewelry and "low-heel-jeans" is under Pants. A child that would be
+ * ambiguous on its own (Mini, Denim under Shorts) is matched only that way ("mini-skirts").
+ */
+export const STANDARD_NESTING: Record<string, readonly string[]> = {
+  outerwear: ['jackets', 'coats', 'vests', 'capes', 'trench-coats', 'puffers', 'parkas'],
+  suits: ['suit-pants', 'suit-skirts', 'suit-jackets'],
+  pants: ['jeans', 'denim', 'trousers', 'leather-pants', 'cargo-pants'],
+  shorts: ['denim-shorts', 'non-denim-shorts', 'tailored-shorts', 'leather-shorts'],
+  skirts: ['mini-skirts', 'midi-skirts', 'maxi-skirts', 'denim-skirts', 'leather-skirts'],
+  dresses: ['cocktail-dresses', 'gowns', 'sweater-dresses', 'shirt-dresses', 'mini-dresses', 'midi-dresses', 'maxi-dresses'],
+  tops: ['sleeveless', 'short-sleeve', 'long-sleeve', 'long-sleeve-tops', 'bodysuits', 'underpinnings', 'blouses', 'button-downs', 't-shirts', 'tees', 'cropped'],
+  sweaters: ['sweatshirts', 'cardigans', 'knit-tops', 'knit-vests', 'sweater-vests'],
+  shoes: ['heels', 'sandals', 'boots', 'sneakers', 'flats', 'loafers', 'mules', 'wedges'],
+  swim: ['swimwear', 'bikinis', 'one-piece-swimsuits', 'cover-ups', 'coverups', 'swim-separates', 'bathing-suits'],
+  athleisure: ['sweatpants', 'matching-sets', 'sweatsuits', 'sweat-suits', 'tracksuits'],
+  activewear: ['leggings', 'sports-bras', 'athletic-tops', 'athletic-bottoms', 'athletic-vests', 'tennis-dresses'],
+  sets: ['lounge-sets', 'travel-sets', 'knit-sets', 'skirt-sets', 'short-sets'],
+  'one-pieces': ['jumpsuits', 'rompers'],
+  bags: ['totes', 'shoulder-bags', 'crossbodies', 'crossbody', 'top-handles', 'top-handle-bags', 'clutches', 'evening-bags', 'travel-bags'],
+  accessories: ['belts', 'scarves', 'scarf', 'shawls', 'wraps', 'hats', 'gloves', 'sunglasses', 'hair-accessories'],
+  jewelry: ['necklaces', 'earrings', 'rings', 'pendants', 'time-pieces', 'watches', 'brooches', 'bracelets', 'anklets', 'charms', 'cuffs', 'body-jewelry'],
+  hosiery: ['tights', 'stockings', 'socks', 'knee-high-socks'],
+  intimates: ['bras', 'underwear', 'shapewear', 'slips', 'camisoles'],
+  sleepwear: ['pajama-sets', 'pajamas', 'nightgowns', 'robes', 'sleep-separates'],
+}
+/** Other spellings of a parent that are read as inside it. */
+const PARENT_ALIASES: Record<string, readonly string[]> = { jewelry: ['jewellery'], accessories: ['accessory'] }
+
+/** A name with its dashes gone, and its singular forms: heels -> heels, heel; dresses -> dress. */
+function forms(key: string): string[] {
+  const k = key.replace(/-/g, '')
+  const out = [k]
+  if (k.endsWith('es') && k.length - 2 >= 3) out.push(k.slice(0, -2))
+  if (k.endsWith('s') && k.length - 1 >= 3) out.push(k.slice(0, -1))
+  return out
+}
+const STANDARD_BY_FORM = (() => {
+  const parents = new Map<string, string>()
+  const children = new Map<string, string>()
+  for (const [parent, kids] of Object.entries(STANDARD_NESTING)) {
+    for (const f of forms(parent)) parents.set(f, parent)
+    for (const a of PARENT_ALIASES[parent] ?? []) for (const f of forms(a)) children.set(f, parent)
+    for (const kid of kids) for (const f of forms(kid)) children.set(f, parent)
+  }
+  return { parents, children }
+})()
+
+/** The standard parent of a category, or null when it stays on top. */
+export function standardParentOf(slug: string): string | null {
+  const key = categoryKey(slug)
+  if (!key) return null
+  if (STANDARD_NESTING[key]) return null
+  const whole = forms(key)
+  for (const f of whole) { const p = STANDARD_BY_FORM.children.get(f); if (p) return p }
+  // A singular of a parent ("sweater") reads inside it.
+  for (const f of whole) { const p = STANDARD_BY_FORM.parents.get(f); if (p && p !== key) return p }
+  // By its last word: costume-earrings, low-heel-jeans, travel-shoes.
+  const words = key.split('-')
+  if (words.length < 2) return null
+  for (const f of forms(words[words.length - 1])) {
+    const p = STANDARD_BY_FORM.children.get(f) ?? STANDARD_BY_FORM.parents.get(f)
+    if (p) return p
+  }
+  return null
+}
+
+/** Is the standard set on for this client? Off only where `gp_clients.raw.standard_nesting` is false. */
+export function standardNestingOn(raw: { standard_nesting?: unknown } | null | undefined): boolean {
+  return raw?.standard_nesting !== false
+}
+
+/** A client's request for a group, stored beside her tree until a stylist applies it (never part of it). */
+export const isRequestRow = (r: { slug?: string | null; kind?: string | null }) =>
+  r.kind === 'request' || (r.slug ?? '').startsWith('request:')
+
+/**
+ * Her stored rows plus the standard set for every category she uses that she has no row for.
+ * A row of hers always wins, including one that takes a category back out (parent null).
+ * `slugsInUse` are the categories her pieces carry, as categoriesOf gives them with no tree.
+ */
+export function withStandardNesting(rows: NestingRow[], slugsInUse: Iterable<string>): NestingRow[] {
+  const own = rows.filter((r) => !isRequestRow(r as any))
+  const stored = new Set(own.map((r) => categoryKey(r.slug)))
+  const storedParents = parentMapFrom(own)
+  const out = [...own]
+  const added = new Set<string>()
+  for (const slug of slugsInUse) {
+    const key = categoryKey(slug)
+    if (!key || stored.has(key) || added.has(key)) continue
+    const parent = standardParentOf(key)
+    if (!parent) continue
+    // One level only: if she put this parent inside another, go to the top of that chain.
+    const above = ancestorsOf(parent, storedParents)
+    const top = above.length ? above[above.length - 1] : parent
+    if (categoryKey(top) === key) continue
+    added.add(key)
+    out.push({ slug: key, label: null, parent_slug: top, sort_order: 0 })
+  }
+  return out
+}
+
 /** Does this tree change anything? Nesting or a SAME AS row. */
 export function treeIsEmpty(tree: CategoryTree | undefined | null): boolean {
   return !tree || (tree.size === 0 && !(tree.sameAs?.size))

@@ -7,6 +7,7 @@ import { parentMapFrom } from '@/lib/categoryNesting'
 import { pairingsFrom } from '@/lib/categoryPairings'
 import { NestingEditor, type NestingEntry } from './NestingEditor'
 import { CategoryMapPanel } from './CategoryMapPanel'
+import { NestingRequests } from './NestingRequests'
 
 /**
  * The "Nesting categories" tab. One screen, two taxonomies. (ADR-0113)
@@ -27,7 +28,7 @@ import { CategoryMapPanel } from './CategoryMapPanel'
 
 type Which = 'collection' | 'looks'
 
-export function NestingTab({ clientId, clientName }: { clientId: string | null; clientName?: string }) {
+export function NestingTab({ clientId, clientName, onChanged }: { clientId: string | null; clientName?: string; onChanged?: () => void }) {
   const [which, setWhich] = useState<Which>('collection')
   const who = clientName ? clientName.split(' ')[0] : 'this client'
 
@@ -52,10 +53,18 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
     const seen = new Set(out.map((e) => e.slug))
     for (const r of closet.rows) {
       if (seen.has(r.slug)) continue
+      seen.add(r.slug)
       out.push({ slug: r.slug, label: r.label ?? labelForCategory(r.slug), count: 0, pairs: [] })
     }
+    // A standard group none of her pieces is filed on directly (Thea Guido's Jewelry) still holds
+    // her Necklaces and Earrings, so it is listed, or its members would show nowhere.
+    for (const parent of new Set(closet.parentBySlug.values())) {
+      if (seen.has(parent)) continue
+      seen.add(parent)
+      out.push({ slug: parent, label: labelForCategory(parent), count: 0, pairs: [] })
+    }
     return out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-  }, [itemCatSets, closet.rows])
+  }, [itemCatSets, closet.rows, closet.parentBySlug])
 
   // ── LOOKS ─────────────────────────────────────────────────────────────────
   const { categories, looks, loading: looksLoading, error: looksError, setCategoryParent, createCategory } = useLookCategories(clientId)
@@ -114,6 +123,20 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
             : `Office Casual on top, the seasonal ones inside it. On ${who}'s Looks page the group returns every look in it, and she can still tap one season on its own. Nothing is merged, so no look is re-tagged.`}
         </p>
       </div>
+
+      {which === 'collection' && closet.requests.length > 0 && (
+        <NestingRequests
+          who={who}
+          requests={closet.requests}
+          labelOf={(slug) => pieceEntries.find((e) => e.slug === slug)?.label ?? labelForCategory(slug)}
+          apply={async (group, groupLabel, slugs) => {
+            const res = await closet.applyRequest(group, groupLabel, slugs, (slug) => pieceEntries.find((e) => e.slug === slug)?.label ?? labelForCategory(slug))
+            onChanged?.()
+            return res
+          }}
+          dismiss={async (slugs) => { const res = await closet.dismissRequest(slugs); onChanged?.(); return res }}
+        />
+      )}
 
       {which === 'collection' && (
         <CategoryMapPanel

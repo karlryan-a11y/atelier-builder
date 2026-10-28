@@ -922,7 +922,9 @@ export function CategorizePanel() {
                 pieces filed on it directly.
               </p>
               <p className="text-[10px] text-[#888] leading-relaxed mt-3">
-                Nothing is filled in for you, and anything left as a main category stays where it is.
+                Every client starts with the standard groups (Jewelry holding Necklaces, Earrings and the
+                rest). Anything you change here wins over the standard, and a group she asks for from her
+                Collection waits at the top until you apply it.
               </p>
             </>
           ) : mode === 'collection' ? (
@@ -1303,6 +1305,9 @@ export function CategorizePanel() {
                 {m === 'review' && deletedLooks.waiting.length > 0 && (
                   <span data-review-count className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle" title="Looks she deleted, waiting for review">{deletedLooks.waiting.length}</span>
                 )}
+                {m === 'nesting' && closetCategories.requests.length > 0 && (
+                  <span title="Waiting: groups she asked for" className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{closetCategories.requests.length}</span>
+                )}
                 {m === 'residences' && residenceReview.openCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{residenceReview.openCount}</span>
                 )}
@@ -1465,7 +1470,7 @@ export function CategorizePanel() {
           {mode === 'looks' && seasonQueue ? (
             <SeasonQueue looks={looks} categories={categories} assignLook={assignLook} />
           ) : mode === 'nesting' ? (
-            <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
+            <NestingTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} onChanged={closetCategories.refetch} />
           ) : mode === 'collection' ? (
             <CollectionTab
               clientId={activeClient?.id ?? null}
