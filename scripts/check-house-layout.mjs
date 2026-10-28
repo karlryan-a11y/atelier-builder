@@ -74,14 +74,15 @@ if (H) {
     const pieces = keys.map((k) => ({ nodeId: `n_${k}`, pieceId: `p_${k}`, type: TYPE[k], brand: BRAND[k], ...P[k] }))
     return { nodes: [...nodes, ...extra], pieces }
   }
-  // A label's drawn box, from its own font size (Amalfi Coast runs about 0.55 em a letter).
-  const measure = (t, size) => t.length * size * 0.55
+  // A label's ink, as Amalfi Coast draws it (its swashes reach about 0.8 of the size above the
+  // line and 1.45 below): the same model the button falls back on without a browser.
+  const measure = H.estimateInk
   const visible = (n, p) => {
     const [l, t, r, b] = p.content
     const s = n.scale
     return n.flipped ? [n.x - r * s, n.y + t * s, n.x - l * s, n.y + b * s] : [n.x + l * s, n.y + t * s, n.x + r * s, n.y + b * s]
   }
-  const glyphs = (tx) => { const w = measure(tx.content, tx.font_size); const x = tx.x + ((tx.width ?? w) - w) / 2; return [x, tx.y, x + w, tx.y + tx.font_size * 1.1] }
+  const glyphs = (tx) => { const i = measure(tx.content, tx.font_size); const start = tx.x + ((tx.width ?? i.width) - i.width) / 2; return [start + i.left, tx.y + i.top, start + i.right, tx.y + i.bottom] }
   const cross = (a, b) => Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > 0.5 && Math.min(a[3], b[3]) - Math.max(a[1], b[1]) > 0.5
 
   const grade = (name, keys, bd, variant) => {
@@ -114,7 +115,7 @@ if (H) {
     }
     for (const t of texts) {
       ok(`${name}: label "${t.content}" is in Amalfi Coast`, /Amalfi Coast/.test(t.font_family))
-      ok(`${name}: label "${t.content}" is one line`, t.width === undefined || measure(t.content, t.font_size) <= t.width)
+      ok(`${name}: label "${t.content}" is one line`, t.width === undefined || measure(t.content, t.font_size).width <= t.width)
       const g = glyphs(t)
       ok(`${name}: label "${t.content}" is on the board`, g[0] >= 0 && g[2] <= bd.width && g[3] <= bd.height)
       for (const [id, b] of boxes) ok(`${name}: label "${t.content}" does not touch ${id}`, !cross(g, b))
@@ -148,7 +149,7 @@ if (H) {
     for (const [what, keys, parts, only] of cases) {
       const want = L.lookCanvas(parts)
       const { nodes, pieces } = board(keys)
-      const got = H.houseLayout(SQUARE, nodes, pieces, { measure: (t) => t.length * 4 })
+      const got = H.houseLayout(SQUARE, nodes, pieces, { measure: (t) => ({ width: t.length * 4, top: 0, bottom: 34, left: 0, right: t.length * 4 }) })
       for (const w of want.nodes.filter((n) => n.type === 'closet_item' && (!only || only.includes(n.closet_item_id)))) {
         const g = got.nodes.find((n) => n.closet_item_id === w.closet_item_id)
         ok(`${what}: same spot as lookCanvas for ${w.closet_item_id} (want ${w.x},${w.y} x${w.scale}, got ${g?.x},${g?.y} x${g?.scale})`, g && Math.abs(g.x - w.x) < 0.02 && Math.abs(g.y - w.y) < 0.02 && Math.abs(g.scale - w.scale) < 1e-4)

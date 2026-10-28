@@ -18,7 +18,7 @@ import {
   pieceType, mixKey, typesKey, rankTemplates, arrangeFromTemplate,
   type LookTemplate, type BoardPiece, type PieceType,
 } from './styleFromTemplates'
-import { houseLayout, type HousePiece, type Box } from './houseLayout'
+import { houseLayout, type HousePiece, type Box, type Ink } from './houseLayout'
 
 // detectCategory() returns the grouped CLOSET vocabulary (categorize.ts: 'dresses', 'tops', …);
 // the compose engine uses its own extraction vocabulary ('dress', 'top', …). Bridge the two so the
@@ -171,7 +171,7 @@ export async function styleHouse(opts: {
   board: { width: number; height: number }
   attempt: number
   photoOf: (nodeId: string) => { w: number; h: number; content: Box | null } | null
-  measure?: (text: string, size: number) => number
+  measure?: (text: string, size: number) => Ink
 }): Promise<HouseStyle> {
   const closetNodes = opts.nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item' && !n.hidden)
   if (closetNodes.length === 0) throw new Error('No pieces on the board to style')

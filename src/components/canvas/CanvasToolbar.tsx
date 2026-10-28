@@ -136,10 +136,19 @@ export function CanvasToolbar() {
         const d = store.nodeDims[id]
         return d && d.w && d.h ? { w: d.w, h: d.h, content: store.nodeContent[id] ?? null } : null
       }
-      // Labels are measured in the font they are drawn in, so a long brand never wraps.
+      // Labels are measured in the font they are drawn in, the way Konva draws a line (alphabetic
+      // baseline centred on the font's 'M' box, line height 1), so a long brand never wraps and its
+      // swashes never reach the piece above.
+      await document.fonts?.load("26px 'Amalfi Coast'").catch(() => null)
       const ctx = document.createElement('canvas').getContext('2d')
       const measure = ctx
-        ? (text: string, size: number) => { ctx.font = `${size}px 'Amalfi Coast', cursive`; return ctx.measureText(text).width }
+        ? (text: string, size: number) => {
+            ctx.font = `${size}px 'Amalfi Coast', cursive`
+            ctx.textBaseline = 'alphabetic'
+            const M = ctx.measureText('M'), m = ctx.measureText(text)
+            const base = ((M.fontBoundingBoxAscent ?? M.actualBoundingBoxAscent) - (M.fontBoundingBoxDescent ?? M.actualBoundingBoxDescent)) / 2 + size / 2
+            return { width: m.width, top: base - m.actualBoundingBoxAscent, bottom: base + m.actualBoundingBoxDescent, left: -m.actualBoundingBoxLeft, right: m.actualBoundingBoxRight }
+          }
         : undefined
       const r = await styleHouse({ nodes: store.state.nodes, board: store.state.canvas, attempt, photoOf, measure })
       store.setCanvasState({ ...store.state, nodes: r.nodes })
