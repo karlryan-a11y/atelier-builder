@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Search, Send, X } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { useLookCategories } from '@/hooks/useLookCategories'
@@ -33,10 +33,16 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
   const [tab, setTab] = useState<Tab>('looks')
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState<{ kind: ShareKind; item: Item } | null>(null)
-  const [link, setLink] = useState<{ url: string } | { error: string } | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
 
-  // A new client starts on her looks, with no search and nothing open.
-  useEffect(() => { setTab('looks'); setSearch(''); setOpen(null) }, [activeClient?.id])
+  // A new client starts on her looks, with no search and nothing open. (Adjusted during render,
+  // React's pattern for state that follows a prop, as App.tsx does.)
+  const [shownClient, setShownClient] = useState(activeClient?.id ?? null)
+  if ((activeClient?.id ?? null) !== shownClient) {
+    setShownClient(activeClient?.id ?? null)
+    setTab('looks'); setSearch(''); setOpen(null)
+  }
 
   const shownLooks = useMemo(() => looks.filter((l) => !l.archived), [looks])
   const shownCapsules = useMemo(() => capsules.filter((c) => !c.archived), [capsules])
@@ -45,22 +51,34 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
     [tab, shownLooks, shownCapsules, search],
   )
 
-  // Fetch the link as the look opens, so Send has it in hand when she taps.
-  const { ensureLink, setStatus } = share
-  useEffect(() => {
-    let cancelled = false
-    setLink(null)
-    setStatus(null)
-    if (!open) return
-    ensureLink(open.kind, open.item.id)
-      .then((r) => { if (!cancelled) setLink(r) })
-      .catch(() => { if (!cancelled) setLink({ error: 'no connection' }) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per look opened, not per new link map
-  }, [open?.kind, open?.item.id])
+  // Opening a look makes nothing: a link exists only once she taps Send, so a look she only looked
+  // at never shows "link live" on the desktop card.
+  function openItem(kind: ShareKind, item: Item) {
+    setLinkError(null)
+    setWorking(false)
+    share.setStatus(null)
+    setOpen({ kind, item })
+  }
 
   const st = open ? share.stateFor(open.kind, open.item.id) : null
-  const url = link && 'url' in link ? link.url : null
+
+  // A look that already has a link sends it straight from the tap. One without asks for it first;
+  // sendLink then opens the sheet before waiting on anything else (lib/shareSend.ts).
+  async function onSend() {
+    if (!open) return
+    if (st?.url) { void share.sendKnownLink(st.url); return }
+    setWorking(true)
+    setLinkError(null)
+    try {
+      const got = await share.ensureLink(open.kind, open.item.id)
+      if ('error' in got) { setLinkError(got.error); return }
+      void share.sendKnownLink(got.url)
+    } catch {
+      setLinkError('no connection')
+    } finally {
+      setWorking(false)
+    }
+  }
 
   return (
     <div data-phone-send className="flex flex-col h-full w-full overflow-hidden bg-[#F8F7F5]">
@@ -125,7 +143,7 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
                   <button
                     key={item.id}
                     data-send-tile={tab}
-                    onClick={() => setOpen({ kind: tab === 'looks' ? 'look' : 'capsule', item })}
+                    onClick={() => openItem(tab === 'looks' ? 'look' : 'capsule', item)}
                     className="text-left bg-white rounded-lg border border-[#E8E4DF] overflow-hidden"
                   >
                     <div className="relative aspect-[4/5] bg-[#F8F7F5]">
@@ -164,17 +182,17 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
             <p className="font-serif italic text-[22px] leading-tight text-[#1A1A1A]">{open.item.name}</p>
             <button
               data-send-button
-              onClick={() => { if (url) void share.sendKnownLink(url) }}
-              disabled={!url}
+              onClick={() => void onSend()}
+              disabled={working}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-full bg-[#1A1A1A] text-white text-[13px] tracking-[0.2em] uppercase disabled:opacity-40"
             >
               <Send className="h-4 w-4" />
-              {url ? 'Send' : link && 'error' in link ? 'No link' : 'Getting the link…'}
+              {working ? 'Making the link…' : 'Send'}
             </button>
             <p data-send-status className="min-h-[20px] text-center text-[13px] text-[#666] break-all">
-              {link && 'error' in link
-                ? `The link could not be made (${link.error}). Close and try again.`
-                : share.status ?? (st ? (st.openCount > 0 ? `She ${openedAgo(st.lastOpenedAt) ?? 'opened it'}` : 'Private link, no login needed') : '')}
+              {linkError
+                ? `The link could not be made (${linkError}). Tap Send to try again.`
+                : share.status ?? (st ? (st.openCount > 0 ? `She ${openedAgo(st.lastOpenedAt) ?? 'opened it'}` : 'Link sent before, not opened yet') : 'Private link, no login needed')}
             </p>
           </div>
         </div>

@@ -4,23 +4,24 @@
  *
  * Two rules live here so the phone screen and its check share them:
  *
- * 1. WHERE THE SHARE ENDPOINTS ARE. On atelierbywatson.com the builder is served at /style, and the
- *    lookbook's /looks/api is on the same address, so the call is same-origin (no CORS, and a test
- *    copy of the site at another address reaches its own /looks too). The builder's own Vercel
- *    address has no /looks, so there it keeps calling atelierbywatson.com, as it always has.
+ * 1. WHERE THE SHARE ENDPOINTS ARE. Always /looks/api/share on the page's own address: on
+ *    atelierbywatson.com/style the dashboard passes /looks to the lookbook, and on the builder's own
+ *    addresses (its previews included) vercel.json passes /looks/api/share there too. Same-origin, so
+ *    no CORS, and a preview can make a link. Only the local dev server (Vite, port 5173) has no
+ *    /looks and calls atelierbywatson.com, as everything did before.
  *
  * 2. HOW A LINK IS SENT. The iPhone share sheet (navigator.share) when the phone has one, with the
  *    link alone, so Messages draws the look's picture card and pastes a bare link. If she closes the
  *    sheet, nothing else happens. If the sheet is refused or missing, the link is copied instead.
- *    The caller must already HAVE the url: Safari only opens the sheet inside the tap itself, and a
- *    network wait before it loses the tap. That is why the phone screen fetches the link when a
- *    look is opened, before Send is pressed.
+ *    sendLink calls the sheet before it waits on anything, so it runs inside her tap. A link is made
+ *    only when Send is tapped (never when a look is merely opened), and a look that already has one
+ *    sends it straight from the tap.
  */
 
 const LIVE_API = 'https://atelierbywatson.com/looks/api/share'
 
-export function shareApiBase(loc: { pathname: string } | null | undefined): string {
-  return loc && (loc.pathname === '/style' || loc.pathname.startsWith('/style/')) ? '/looks/api/share' : LIVE_API
+export function shareApiBase(loc: { hostname: string; port: string } | null | undefined): string {
+  return !loc || (loc.hostname === 'localhost' && loc.port === '5173') ? LIVE_API : '/looks/api/share'
 }
 
 export type SendResult = 'shared' | 'cancelled' | 'copied' | 'failed'

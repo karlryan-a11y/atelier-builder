@@ -57,9 +57,14 @@ if (existsSync(LIB)) {
   const failed = await sendLink(URL_, {}, async () => false)
   ok(failed === 'failed' && sendMessage(failed, URL_).includes(URL_), 'a failed copy must show the link')
   ok(sendMessage('copied', URL_) === 'Link copied. Paste it into a text.', 'the copied line changed')
-  ok(shareApiBase({ pathname: '/style' }) === '/looks/api/share', 'atelierbywatson.com/style must call /looks/api/share on its own address')
-  ok(shareApiBase({ pathname: '/style/' }) === '/looks/api/share', '/style/ must call its own address')
-  ok(shareApiBase({ pathname: '/' }) === 'https://atelierbywatson.com/looks/api/share', "the builder's own address must call the live site")
+  ok(shareApiBase({ hostname: 'atelierbywatson.com', port: '' }) === '/looks/api/share', 'atelierbywatson.com/style must call /looks/api/share on its own address')
+  ok(shareApiBase({ hostname: 'atelier-builder-abc123-wsgautomations-projects.vercel.app', port: '' }) === '/looks/api/share', 'a builder preview must call its own address (vercel.json passes it on)')
+  ok(shareApiBase({ hostname: 'localhost', port: '5173' }) === 'https://atelierbywatson.com/looks/api/share', 'the local dev server must call the live site')
+  // sendLink must ask for the sheet before it waits on anything, or Safari has lost the tap.
+  let calledSync = false
+  const p = sendLink(URL_, { share: () => { calledSync = true; return Promise.resolve() } }, async () => true)
+  ok(calledSync, 'sendLink must open the share sheet in the same moment as the tap (no wait before it)')
+  await p
   for (const r of ['shared', 'cancelled', 'copied', 'failed']) ok(!/[—–]/.test(sendMessage(r, URL_)), `"${r}" line has a dash`)
 } else {
   fail('src/lib/shareSend.ts: file not found')
@@ -75,8 +80,18 @@ ok(/activeView === 'style' && phone && !fullStyleOnPhone[\s\S]{0,200}<PhoneSend 
 const ps = read('src/components/phone/PhoneSend.tsx')
 ok(/useShareLinks\(activeClient\?\.id/.test(ps), 'PhoneSend must send the Copy link link (useShareLinks)')
 ok(!/fetch\(/.test(ps), 'PhoneSend must not call an endpoint of its own: one kind of link, made in useShareLinks')
-ok(/ensureLink\(open\.kind, open\.item\.id\)/.test(ps), 'PhoneSend must fetch the link when a look opens')
-ok(/onClick=\{\(\) => \{ if \(url\) void share\.sendKnownLink\(url\) \}\}/.test(ps), 'Send must hand over a link it already has, straight from the tap')
+// A link is made only by Send: opening a look must not make one (the desktop "link live" line).
+const openItem = ps.match(/function openItem\([^)]*\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+ok(openItem.length > 0 && /setOpen\(\{ kind, item \}\)/.test(openItem), 'PhoneSend: opening a look goes through openItem')
+ok(!/ensureLink|sendKnownLink|fetch/.test(openItem), 'opening a look must not make or send a link (only the Send tap may)')
+ok(!/useEffect/.test(ps), 'PhoneSend must not make a link from an effect (only the Send tap may)')
+ok((ps.match(/ensureLink\(/g) ?? []).length === 1, 'PhoneSend may ask for a link in one place only, onSend')
+const onSend = ps.match(/async function onSend\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+ok(onSend.length > 0, 'PhoneSend: onSend not found')
+ok(/^\s*if \(!open\) return\s*\n\s*if \(st\?\.url\) \{ void share\.sendKnownLink\(st\.url\); return \}/.test(onSend),
+  'a look that already has a link must send it straight from the tap, before any wait')
+ok(/await share\.ensureLink\(open\.kind, open\.item\.id\)[\s\S]*void share\.sendKnownLink\(got\.url\)/.test(onSend), 'a look with no link gets one on Send, then sends it')
+ok(/onClick=\{\(\) => void onSend\(\)\}/.test(ps), 'the Send button must call onSend')
 ok(/useLookCategories\(activeClient\?\.id/.test(ps), "PhoneSend must read the client's looks and capsules from the shared Style cache")
 ok(/!l\.archived/.test(ps) && /!c\.archived/.test(ps), 'archived looks and capsules must not be offered to send')
 const inputs = ps.match(/<input[\s\S]*?\/>/g) ?? []
@@ -90,6 +105,9 @@ const hook = read('src/hooks/useShareLinks.ts')
 ok(/const API = shareApiBase\(/.test(hook), 'useShareLinks must take its address from shareApiBase')
 ok(/JSON\.stringify\(\{ kind, itemId: subjectId, clientId \}\)/.test(hook), 'mint must say which client it is for')
 ok(/sendKnownLink/.test(hook) && /ensureLink/.test(hook), 'useShareLinks must offer ensureLink and sendKnownLink')
+const vj = read('vercel.json')
+ok(/"source": "\/looks\/api\/share\/:path\*",\s*"destination": "https:\/\/atelier-looks\.vercel\.app\/api\/share\/:path\*"/.test(vj),
+  "vercel.json must pass /looks/api/share on the builder's own address to the lookbook")
 
 if (checks < 20) fail(`only ${checks} checks ran`)
 if (problems.length) {
