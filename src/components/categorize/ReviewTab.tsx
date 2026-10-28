@@ -10,7 +10,6 @@ import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { updateClosetItem } from '@/lib/teamNotes'
 import { useDeletedLooks, type DeletedLookCard } from '@/hooks/useDeletedLooks'
-import { useAuthStore } from '@/stores/authStore'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
 
 // The "Review" tab — one home for a client's data cleanup: HIDDEN pieces (recover ones hidden by
@@ -27,8 +26,7 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, {
 
 /** Read once in CategorizePanel, so the Review tab can carry the count of looks waiting. */
 export function useReviewDeletedLooks(clientId: string | null) {
-  const stylistName = useAuthStore((s) => s.user?.displayName ?? null)
-  return useDeletedLooks(clientId, stylistName)
+  return useDeletedLooks(clientId)
 }
 
 export function ReviewTab({ clientId, clientName, deleted }: {

@@ -13,7 +13,13 @@ export interface DeletedLookCard extends DeletedLook {
   image: string | null
 }
 
-export function useDeletedLooks(clientId: string | null, stylistName: string | null) {
+/** Who is signed in, for the record of who restored or cleared it. */
+async function whoAmI(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user?.email ?? null
+}
+
+export function useDeletedLooks(clientId: string | null) {
   const [waiting, setWaiting] = useState<DeletedLookCard[]>([])
   const [cleared, setCleared] = useState<DeletedLookCard[]>([])
   const [loading, setLoading] = useState(false)
@@ -76,16 +82,18 @@ export function useDeletedLooks(clientId: string | null, stylistName: string | n
       .select('target_id')
     if (e) throw e
     if (!data?.length) throw new Error('not allowed to change this client')
-    await stampRaw((raw) => withRestored(raw, lookId, stylistName, new Date().toISOString()))
+    const by = await whoAmI()
+    await stampRaw((raw) => withRestored(raw, lookId, by, new Date().toISOString()))
     setTick((t) => t + 1)
-  }, [clientId, stylistName, stampRaw])
+  }, [clientId, stampRaw])
 
   /** Off this list; the look stays off her site. */
   const clear = useCallback(async (lookId: string) => {
     if (!clientId) return
-    await stampRaw((raw) => withCleared(raw, lookId, stylistName, new Date().toISOString()))
+    const by = await whoAmI()
+    await stampRaw((raw) => withCleared(raw, lookId, by, new Date().toISOString()))
     setTick((t) => t + 1)
-  }, [clientId, stylistName, stampRaw])
+  }, [clientId, stampRaw])
 
   return { waiting, cleared, loading, error, restore, clear }
 }
