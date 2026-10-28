@@ -1,6 +1,8 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { splitCategoryChoices } from '@/lib/categoryChoices'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
+import { useClosetTree } from '@/hooks/useClosetTree'
+import { STANDARD_COLLECTIONS } from '@/lib/standardTree'
 import { useState, useRef } from 'react'
 import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
@@ -100,6 +102,8 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   const [colorSet, setColorSet] = useState<string[]>(() => colorsOf(item))
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
+  // Her Wardrobe's standard categories and Collections, when she is on them.
+  const tree = useClosetTree(item.client_id ?? null)
   // Offer every fixed category + this client's customs, minus the current primary and ones already added.
   const split = splitCategoryChoices(customCategories, usedCategories)
   const alsoInOptions: { slug: string; label: string }[] = [
@@ -240,7 +244,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
               >
                 <option value="">Auto — detect from name</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} />
+                <CategoryOptions custom={customCategories} used={usedCategories} tree={tree} />
                 <option value="__new__">＋ New category…</option>
               </select>
             )}
@@ -257,7 +261,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {alsoIn.map((slug) => (
                     <span key={slug} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-tile text-[11px] text-text">
-                      {labelForCategory(slug)}
+                      {STANDARD_COLLECTIONS.find((c) => c.slug === slug)?.label ?? labelForCategory(slug)}
                       <button
                         onClick={() => setAlsoIn((p) => p.filter((s) => s !== slug))}
                         className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text"
@@ -284,7 +288,15 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                     className="w-full bg-tile rounded-sm pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
                   >
                     <option value="">Add another category…</option>
-                    {alsoInOptions.map((o) => (
+                    {/* Her Wardrobe's Collections first (Maegan, 2026-10-20): Eveningwear, Resort & Beach. */}
+                    {tree && (
+                      <optgroup label="Collections">
+                        {STANDARD_COLLECTIONS.filter((c) => c.slug !== primarySlug && !alsoIn.includes(c.slug)).map((c) => (
+                          <option key={c.slug} value={c.slug}>{c.label}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {alsoInOptions.filter((o) => !tree || !STANDARD_COLLECTIONS.some((c) => c.slug === o.slug)).map((o) => (
                       <option key={o.slug} value={o.slug}>{o.label}</option>
                     ))}
                     <option value="__new__">＋ New category…</option>

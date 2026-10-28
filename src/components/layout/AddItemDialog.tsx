@@ -9,6 +9,7 @@ import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { ColorSetField } from '@/components/common/ColorSetField'
 import { useClosetItems } from '@/hooks/useClosetItems'
+import { useClosetTree } from '@/hooks/useClosetTree'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -82,6 +83,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   // IS IT ALREADY IN HER CLOSET? (ADR-0164) The closet hook is cached and shared, so this is not a
   // second read. The warning names the match; the stylist decides with one extra, deliberate click.
   const { items: closetItems } = useClosetItems(clientId)
+  const closetTree = useClosetTree(clientId)
   const dupes = useMemo(() => possibleDuplicates({ name, brand }, closetItems), [name, brand, closetItems])
   const [dupeConfirmed, setDupeConfirmed] = useState(false)
   useEffect(() => { setDupeConfirmed(false) }, [name, brand])
@@ -93,6 +95,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
   const [alsoIn, setAlsoIn] = useState<string[]>([])
 
   const currentInList = FIXED.some(([s]) => s === category) || customCategories.some(c => c.slug === category)
+    || !!closetTree?.subs.some((s) => s.slug === category) || !!closetTree?.categories.some((c) => c.slug === category)
   const ready = !!draftId && !!processedUrl && !processing
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
@@ -247,7 +250,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} />
+                <CategoryOptions custom={customCategories} used={usedCategories} tree={closetTree} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>
               </select>
