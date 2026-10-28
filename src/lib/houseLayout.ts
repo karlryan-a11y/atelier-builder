@@ -174,29 +174,17 @@ export function boxesFor(layout: string, roles: string[]): Record<string, Box> {
 }
 
 /**
- * How a label is drawn, in board pixels: `width` is the line's advance (what Konva centres), and
- * the ink (what you see) runs from `left` to `right` of the line's start and from `top` to
- * `bottom` of the text box's top, both of which a script font overshoots.
- */
-export interface Ink { width: number; top: number; bottom: number; left: number; right: number }
-const inkWidth = (i: Ink) => i.right - i.left
-// Without a browser to measure Amalfi Coast: its measured extents at 26 px (2026-10-28), scaled.
-export const estimateInk = (t: string, size: number): Ink => {
-  const width = t.length * size * 0.55
-  return { width, top: -0.8 * size, bottom: 1.45 * size, left: -0.4 * size, right: width + 0.8 * size }
-}
-
-/**
- * Lay the board out the house way. `measure(text, size)` gives a label's ink (the browser measures
- * Amalfi Coast; without it an estimate is used). `variant` odd = the mirror image.
+ * Lay the board out the house way. `measure(text, size)` gives a label's drawn width in board
+ * pixels (the browser measures Amalfi Coast; without it an estimate is used). `variant` odd = the
+ * mirror image.
  */
 export function houseLayout(
   board: { width: number; height: number },
   nodes: CanvasNode[],
   pieces: HousePiece[],
-  opts: { variant?: number; measure?: (text: string, size: number) => Ink } = {},
+  opts: { variant?: number; measure?: (text: string, size: number) => number } = {},
 ): HouseResult {
-  const measure = opts.measure ?? estimateInk
+  const measure = opts.measure ?? ((t: string, size: number) => t.length * size * 0.55)
   const mirror = (opts.variant ?? 0) % 2 === 1
   const sx = board.width / 1080, sy = board.height / 1080, k = Math.min(sx, sy)
   const byId = new Map(nodes.map((n) => [n.id, n]))
@@ -220,26 +208,12 @@ export function houseLayout(
 
   const next = new Map<string, CanvasNode>()
   const moved = new Map<string, { dx: number; dy: number }>()
-  const spots: { piece: HousePiece; cx: number; bottom: number; width: number; size: number; ink: Ink | null }[] = []
+  const spots: { piece: HousePiece; cx: number; bottom: number; width: number }[] = []
   roles.forEach(({ role, piece: p }, z) => {
     const box = boxes[role]
     if (!box) return
     const [x0, y0, x1, y1] = toBoard(box)
-    // The label first: one line, centred under the piece. A long brand in a narrow box is set a
-    // little smaller rather than wrapped into a stack over the piece below.
-    let size = FS * k, ink: Ink | null = null
-    if (p.brand) {
-      const room = x1 - x0 + 12 * k
-      while (size > MIN_FS * k && inkWidth(measure(p.brand, size)) > room) size -= 1
-      size = Math.round(size * 10) / 10
-      ink = measure(p.brand, size)
-    }
-    // The piece fits above the room its label's ink needs. Amalfi Coast's swashes reach well
-    // above and below the line (about 0.8 and 1.4 of the size), so the room is measured, not
-    // assumed: lookCanvas's fixed 30 px let a capital touch the piece above it. The ink may hang
-    // 10 px past the box, as in lookCanvas.
-    const band = ink ? GAP * k + (ink.bottom - ink.top) - 10 * k : (LABEL_H - 10) * k
-    const fit: Box = [x0, y0, x1, y1 - band]
+    const fit: Box = [x0, y0, x1, y1 - (LABEL_H - 10) * k]
     const [l, t, r, b] = p.content ?? [0, 0, p.natW, p.natH]
     const s = Math.min((fit[2] - fit[0]) / Math.max(1, r - l), (fit[3] - fit[1]) / Math.max(1, b - t))
     const cw = (r - l) * s, ch = (b - t) * s
@@ -254,7 +228,7 @@ export function houseLayout(
     next.set(n.id, placed)
     const after = drawn(placed, p)
     moved.set(n.id, { dx: after.x - before.x, dy: after.y - before.y })
-    spots.push({ piece: p, cx: left + cw / 2, bottom: top + ch, width: x1 - x0, size, ink })
+    spots.push({ piece: p, cx: left + cw / 2, bottom: top + ch, width: x1 - x0 })
   })
 
   // Text already on the board: a piece's brand is its label; anything else is a note.
@@ -278,14 +252,17 @@ export function houseLayout(
   const topZ = Math.max(0, ...out.map((n) => n.z_index)) + 1
   let labelsAdded = 0, labelsMoved = 0
   const unlabeled: string[] = []
-  spots.forEach(({ piece, cx, bottom, width, size, ink }, j) => {
-    if (!piece.brand || !ink) { unlabeled.push(piece.pieceId); return }
-    // The text box is at least as wide as the line (so it never wraps) and placed so the INK is
-    // centred under the piece and its top sits GAP below the piece's lowest point.
-    const w = Math.max(width, ink.width + 12 * k)
-    const lineStart = (w - ink.width) / 2
-    const x = Math.max(4 - lineStart - ink.left, Math.min(board.width - 4 - lineStart - ink.right, cx - lineStart - (ink.left + ink.right) / 2))
-    const at = { x: round(x), y: round(bottom + GAP * k - ink.top), width: round(w), align: 'center' as const, font_family: LABEL_FONT, font_size: size, rotation: 0, z_index: topZ + j }
+  spots.forEach(({ piece, cx, bottom, width }, j) => {
+    if (!piece.brand) { unlabeled.push(piece.pieceId); return }
+    // One line, Amalfi Coast, centred under the piece. A long brand in a narrow box is set a
+    // little smaller rather than wrapped into a stack over the piece below.
+    let size = FS * k
+    const room = width + 40 * k
+    while (size > MIN_FS * k && measure(piece.brand, size) > room) size -= 1
+    size = Math.round(size * 10) / 10
+    const w = Math.max(width, measure(piece.brand, size) + 12 * k)
+    const x = Math.max(4, Math.min(board.width - w - 4, cx - w / 2))
+    const at = { x: round(x), y: round(bottom + GAP * k), width: round(w), align: 'center' as const, font_family: LABEL_FONT, font_size: size, rotation: 0, z_index: topZ + j }
     const existing = labelOf.get(piece.nodeId)
     if (existing) {
       const i = out.findIndex((n) => n.id === existing.id)
