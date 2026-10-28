@@ -25,7 +25,7 @@ import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
-import { selectRestylePieces, type RestylePiece } from '@/lib/restyleSelection'
+import { boardPieceIds, restyleSavedBoard, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { searchByName } from '@/lib/lookSearch'
@@ -354,38 +354,44 @@ export function CategorizePanel() {
     setOpeningLookId(look.id)
     try {
       // The pieces AS THEY STAND NOW, not as the look remembers them.
-      const { data: pieceRows, error: pErr } = await supabase
-        .from('gp_closet_items')
-        .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
-        .in('id', look.closetItemIds.slice(0, 500))
-      if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return }
-      const pieces = new Map<string, RestylePiece>(
-        (pieceRows ?? []).map((r: any) => [r.id, {
-          id: r.id,
-          name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
-          brand: r.brand && r.brand !== 'None' ? r.brand : null,
-          transitionedAt: r.transitioned_at ?? null,
-          isDeleted: r.is_deleted ?? null,
-          deletedAt: r.deleted_at ?? null,
-        }]),
-      )
-      const { omitted } = selectRestylePieces(look.closetItemIds, pieces)
-      const gone = new Set(omitted.map((o) => o.id))
+      async function readPieces(ids: string[]): Promise<Map<string, RestylePiece> | null> {
+        const out = new Map<string, RestylePiece>()
+        for (let i = 0; i < ids.length; i += 200) {   // a big .in() fails silently: chunk it
+          const { data: pieceRows, error: pErr } = await supabase
+            .from('gp_closet_items')
+            .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
+            .in('id', ids.slice(i, i + 200))
+          if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return null }
+          for (const r of (pieceRows ?? []) as any[]) {
+            out.set(r.id, {
+              id: r.id,
+              name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
+              brand: r.brand && r.brand !== 'None' ? r.brand : null,
+              transitionedAt: r.transitioned_at ?? null,
+              isDeleted: r.is_deleted ?? null,
+              deletedAt: r.deleted_at ?? null,
+            })
+          }
+        }
+        return out
+      }
+      let omitted: OmittedPiece[] = []
 
       if (look.source === 'builder') {
         // Restyle IN PLACE: same row, so saving clears its transition block and the look
-        // returns to the lookbook in its old slot.
+        // returns to the lookbook in its old slot. Only a transitioned piece comes off her own
+        // board; an archived picture she placed and her hidden pieces stay as they were
+        // (lib/restyleSelection.ts restyleSavedBoard). The pieces are read by the BOARD's own
+        // ids, so a piece the stored closet_item_ids does not list is not taken for missing.
         const { data } = await supabase.from('gp_looks').select('canvas_state').eq('id', look.id).single()
         const canvasState = (data?.canvas_state ?? null) as LookCanvasState | null
         if (!canvasState) { alert('This look has no saved canvas to restyle.'); return }
-        const stripped: LookCanvasState = {
-          ...canvasState,
-          nodes: canvasState.nodes.filter(
-            (n: any) => n.type !== 'closet_item' || !gone.has(n.closet_item_id),
-          ),
-        }
-        const imageUrls = await resolveClosetImageUrls(stripped)
-        useCanvasStore.getState().loadLook(look.id, stripped, imageUrls)
+        const pieces = await readPieces(boardPieceIds(canvasState))
+        if (!pieces) return
+        const restyled = restyleSavedBoard(canvasState, pieces)
+        omitted = restyled.omitted
+        const imageUrls = await resolveClosetImageUrls(restyled.canvas)
+        useCanvasStore.getState().loadLook(look.id, restyled.canvas, imageUrls)
       } else {
         // GoodPix look: never edited in place (ADR-0076 — a save would overwrite `raw` and lose
         // the original composed image). Rebuild from the pieces she still owns as a NEW look
