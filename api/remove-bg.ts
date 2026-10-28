@@ -9,8 +9,8 @@
 //       lib/cutoutCheck.mjs, and if it cut into the piece puts the earlier photo straight back
 //       (within seconds; nothing re-bakes a look in between, since heroes refresh only on success)
 //       and answers { ok: false, damaged: true, reason } in plain words. The photo is unchanged.
-//   { action: 'undo', item_id }  puts back the photo from before the last Remove BG (raw.bg_backup,
-//       which the remover writes) and keeps the cutout in bg_backup, so nothing is lost.
+//   { action: 'undo', item_id }  puts back the photo from right before the last Remove BG
+//       (raw.bg_backup, set here after every kept cutout) and keeps the cutout in bg_undone.
 //
 // Reads and writes go out with the CALLER's sign-in, so the database's own rules decide which
 // pieces she may touch: a stylist limited to some clients cannot reach anyone else's piece.
@@ -126,7 +126,17 @@ async function removeBg(token: string, item: any, imageUrl: string, res: any, pr
     ? await judgeCutout(afterBytes, beforeBytes, { category: item.category, name: item.name_override || item.name || item.raw?.item_name })
     : { ok: false, reason: DAMAGED_REASON, holes: null, drop: null, area: null, thin: false }
   console.log('[remove-bg]', item.id, JSON.stringify({ ...verdict, reason: undefined }))
-  if (verdict.ok) return res.status(200).json({ ...d, ok: true, check: verdict })
+  if (verdict.ok) {
+    // Undo goes back exactly one step. The remover writes bg_backup only when the piece has none,
+    // so after a Replace photo (or an earlier Undo) its backup is an older photo: record the photo
+    // from right before this Remove BG instead, keeping the remover's first one in bg_original.
+    if (after) {
+      const raw = { ...(after.raw || {}), bg_backup: before }
+      if (after.raw?.bg_backup && !after.raw?.bg_original) raw.bg_original = after.raw.bg_backup
+      await writeItem(token, item.id, { raw })
+    }
+    return res.status(200).json({ ...d, ok: true, check: verdict })
+  }
 
   // It cut into the piece: put the photo from before straight back, with the backup it had, so the
   // piece is exactly as it was (its own Undo, if it had one, still goes to the right photo).
@@ -146,7 +156,11 @@ async function undo(token: string, item: any, res: any) {
     primary_image_hash: backup.primary_image_hash ?? null,
     processed_image_hash: backup.processed_image_hash ?? null,
   }
-  const ok = await writeItem(token, item.id, patchFor(item, previous, photoOf(item)))
+  // The backup is used up (a second tap has nothing earlier to go to); the cutout it replaces is
+  // kept in bg_undone, so nothing is lost.
+  const patch = patchFor(item, previous, null)
+  patch.raw.bg_undone = photoOf(item)
+  const ok = await writeItem(token, item.id, patch)
   if (!ok) return res.status(200).json({ ok: false, reason: 'Could not put the earlier photo back. Try again.' })
   return res.status(200).json({ ok: true })
 }
