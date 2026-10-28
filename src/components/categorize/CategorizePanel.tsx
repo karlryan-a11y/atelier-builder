@@ -20,7 +20,7 @@ import { EventDatesDialog } from './EventDatesDialog'
 import { formatEventDates } from '@/lib/eventDates'
 import { NO_HOME } from '@/hooks/useItemHomes'
 import { NestingTab } from './NestingTab'
-import { ReviewTab } from './ReviewTab'
+import { ReviewTab, useReviewDeletedLooks } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
@@ -152,6 +152,8 @@ export function CategorizePanel() {
   // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
   const transitions = useTransitions(activeClient?.id ?? null)
   const transitionCount = transitions.items.length + transitions.looks.length
+  // Looks she deleted from her lookbook, waiting in Review (lib/deletedLooks.ts): the tab carries the count.
+  const deletedLooks = useReviewDeletedLooks(activeClient?.id ?? null)
   // This panel stays mounted behind the canvas now (App.tsx), so it no longer re-reads everything
   // by being remounted. When it comes back into view, refresh in the background the lists the
   // canvas can change (hooks/useStyleTabRefresh.ts): a rebuilt look leaves the Transitions queue.
@@ -1297,6 +1299,9 @@ export function CategorizePanel() {
                 {m === 'transitions' && transitionCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{transitionCount}</span>
                 )}
+                {m === 'review' && deletedLooks.waiting.length > 0 && (
+                  <span data-review-count className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle" title="Looks she deleted, waiting for review">{deletedLooks.waiting.length}</span>
+                )}
                 {m === 'residences' && residenceReview.openCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{residenceReview.openCount}</span>
                 )}
@@ -1412,7 +1417,7 @@ export function CategorizePanel() {
         ) : mode === 'review' ? (
           <ErrorBoundary label="Review couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
-              <ReviewTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
+              <ReviewTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} deleted={deletedLooks} />
             </div>
           </ErrorBoundary>
         ) : mode === 'transitions' ? (
