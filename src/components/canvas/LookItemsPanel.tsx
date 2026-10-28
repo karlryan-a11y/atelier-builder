@@ -215,10 +215,16 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
         {omitted.length > 0 && (
           <ul className="mt-1.5 space-y-1">
             {omitted.map((o) => (
-              <li key={o.id} className="leading-tight">
-                {o.brand && <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{o.brand}</span>}
-                <span className="block text-[11px] text-[#1A1A1A] truncate" title={o.name}>{o.name}</span>
-                <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{OMIT_LABEL[o.reason]}</span>
+              <li key={o.id} className="leading-tight flex items-center gap-2">
+                {o.image && (
+                  // a 28px reference so a piece with no name left is still recognisable
+                  <img src={o.image} alt="" className="h-7 w-7 shrink-0 object-contain bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm" loading="lazy" />
+                )}
+                <span className="min-w-0">
+                  {o.brand && <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{o.brand}</span>}
+                  <span className="block text-[11px] text-[#1A1A1A] truncate" title={o.name}>{o.name}</span>
+                  <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{OMIT_LABEL[o.reason]}</span>
+                </span>
               </li>
             ))}
           </ul>

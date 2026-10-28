@@ -48,6 +48,8 @@ export interface OmittedPiece {
   name: string
   brand: string | null
   reason: OmitReason
+  /** Its picture, so a piece with no name left in Atelier is still recognisable. */
+  image?: string | null
 }
 
 export interface RestyleSelection {
@@ -56,6 +58,8 @@ export interface RestyleSelection {
   /** Pieces deliberately left off, with the reason she is shown. */
   omitted: OmittedPiece[]
 }
+
+export const MISSING_NAME = 'A piece no longer in her collection'
 
 export const OMIT_LABEL: Record<OmitReason, string> = {
   transitioned: 'Transitioned out',
@@ -84,8 +88,9 @@ export function selectRestylePieces(
 
     const piece = pieces.get(id)
     if (!piece) {
-      // The row is gone entirely. Counted and named, never silently dropped.
-      omitted.push({ id, name: id, brand: null, reason: 'missing' })
+      // No row of hers: gone from GoodPix, or someone else's piece. Counted and named, never
+      // silently dropped; callers that can find its name elsewhere put it in.
+      omitted.push({ id, name: MISSING_NAME, brand: null, reason: 'missing' })
       continue
     }
     const reason = omitReason(piece)
@@ -144,7 +149,7 @@ export function boardPieceIds(canvasState: LookCanvasState): string[] {
 
 /** The sentence on the canvas panel. Here so the build guard checks the shipped wording. */
 export function omittedHeadline(omitted: OmittedPiece[]): string {
-  if (omitted.length === 0) return 'Nothing was left off — every piece in this look is still hers.'
+  if (omitted.length === 0) return 'Nothing was left off: every piece in this look is still hers.'
   const n = omitted.length
   return `${n} ${n === 1 ? 'piece is' : 'pieces are'} not on the board because she no longer has ${n === 1 ? 'it' : 'them'}.`
 }

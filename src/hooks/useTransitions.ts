@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { piecesGoneFromLooks } from '@/lib/goodpixBoard'
+import type { GpLayout } from '@/lib/goodpixLayout'
+import type { OmittedPiece } from '@/lib/restyleSelection'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -32,6 +35,13 @@ export interface TransitionedLook {
    * on 2026-09-17 — so the queue collapses them into one card. See lib/transitionQueue.ts.
    */
   boardId: string | null
+  /**
+   * Every piece in the look she no longer has: the recorded causes AND anything else the board
+   * shows that is not in her closet today, the same answer Restyle's board gives
+   * (lib/restyleBoard.ts). Paige Berndt, 2026-09-24: the tall black boots were on the board and
+   * not on the card.
+   */
+  gonePieces: OmittedPiece[]
 }
 
 function itemImage(row: any): string | null {
@@ -71,7 +81,9 @@ export function useTransitions(clientId: string | null) {
         supabase.from('gp_looks')
           // canvas_state is deliberately NOT selected: it is large, and only the one look a
           // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
-          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
+          // gp_layout is read so each card can name every piece its board shows that she no
+          // longer has (lib/restyleBoard.ts); it is a few KB per look, unlike canvas_state.
+          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, gp_layout')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -91,6 +103,18 @@ export function useTransitions(clientId: string | null) {
         transitionedAt: r.transitioned_at ?? null,
         image: itemImage(r),
       })))
+      let gone = new Map<string, OmittedPiece[]>()
+      try {
+        gone = await piecesGoneFromLooks(clientId, (looksRes.data ?? []).map((l: any) => ({
+          id: l.id,
+          closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+          layout: (l.gp_layout ?? null) as GpLayout | null,
+          boardId: l.source_board_id ?? null,
+        })))
+      } catch (e) {
+        console.error('[transitions] could not check which pieces she still has', e)
+      }
+      if (cancelled) return
       setLooks((looksRes.data ?? []).map((l: any) => {
         const rawImg = lookImageUrl(l.raw)
         return {
@@ -102,6 +126,7 @@ export function useTransitions(clientId: string | null) {
           source: l.source ?? null,
           transitionedAt: l.transitioned_at ?? null,
           boardId: l.source_board_id ?? null,
+          gonePieces: gone.get(l.id) ?? [],
         }
       }))
       setLoading(false)

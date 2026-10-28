@@ -138,12 +138,15 @@ function isText(o: GpLayoutObject) {
  * resolves here. The order is deliberate: an explicit `closetItemId` wins, then the photo hash,
  * and `productId` is consulted only when neither answered.
  */
-function pieceFor(o: GpLayoutObject, byHash: Map<string, string>, known: Set<string>): string | null {
+function pieceFor(o: GpLayoutObject, byHash: Map<string, string>, known: Set<string>, gone?: Set<string>): string | null {
   if (o.closetItemId && known.has(o.closetItemId)) return o.closetItemId
   const h = goodPixPhotoHash(o.src ? unwrapGoodPixUrl(o.src) : null)
   const byPhoto = h ? byHash.get(h) : undefined
   if (byPhoto) return byPhoto
   if (o.productId && known.has(o.productId)) return o.productId
+  // A piece the caller says she no longer has: it counts as one of her pieces, so `keep` leaves
+  // it off and it is named, instead of riding onto the board as an anonymous picture.
+  if (o.productId && gone?.has(o.productId)) return o.productId
   return o.closetItemId ?? null
 }
 
@@ -153,14 +156,53 @@ function pieceFor(o: GpLayoutObject, byHash: Map<string, string>, known: Set<str
  * `closet_item_ids` is only the board's pool (Alicia Hidalgo Look 93: 10 in the pool, 7 in the
  * picture, and the piece recorded as pulling it not in the picture at all).
  */
-export function piecesInLayout(layout: GpLayout, extraUrls?: Map<string, string[]>): string[] {
+export function piecesInLayout(layout: GpLayout, extraUrls?: Map<string, string[]>, gone?: Set<string>): string[] {
   const byHash = photoIndex(layout, extraUrls)
   const known = new Set([...(layout.pool ?? []).map((p) => p.id), ...(extraUrls?.keys() ?? [])])
   const out: string[] = []
   for (const o of layout.objects ?? []) {
     if (!isImage(o) || o.visible === false) continue
-    const id = pieceFor(o, byHash, known)
+    const id = pieceFor(o, byHash, known, gone)
     if (id && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+/** Pictures GoodPix serves itself. A store product clipped from a retailer's site is not one. */
+const GOODPIX_HOST = /^https?:\/\/([a-z0-9-]+\.)*(goodpix\.co|goodpix-co\.s3\.amazonaws\.com|d1h0n5niljcjo3\.cloudfront\.net)\//i
+
+/**
+ * PIECES SHE NO LONGER HAS THAT THE BOARD WOULD DRAW AS PICTURES. Paige Berndt, 2026-09-24:
+ * "these tall black boots do not show up as a transition item when I click on the look and they
+ * show up on the board but they are not in her closet."
+ *
+ * GoodPix puts a closet piece's id in `productId` (ADR-0132). When that id is not one of HER
+ * pieces today, the converter used to treat the object as a shop product and draw it. On
+ * 2026-10-27 that was 83 pictures across Alicia Hidalgo's 18 pulled looks, and not one was a shop
+ * product: none is on its board's product list, and they are her old pieces GoodPix no longer
+ * sends (their ids sit beside her current pieces: 649efba6...5100/02/04 are hers, 5101/03/05
+ * are the pictures). So an id that is not hers is a piece she no longer has, unless it is a real
+ * store product: listed on the board's product list, or a picture GoodPix does not host.
+ *
+ * Returns each such id once, with the picture the board showed, so it can be named with it.
+ */
+export function piecesNotHers(
+  layout: GpLayout,
+  extraUrls: Map<string, string[]> | undefined,
+  storeProducts: Set<string>,
+  mirrorUrl: (key: string) => string,
+): { id: string; image: string | null }[] {
+  const byHash = photoIndex(layout, extraUrls)
+  const known = new Set([...(layout.pool ?? []).map((p) => p.id), ...(extraUrls?.keys() ?? [])])
+  const out: { id: string; image: string | null }[] = []
+  for (const o of layout.objects ?? []) {
+    if (!isImage(o) || o.visible === false) continue
+    if (!o.productId || pieceFor(o, byHash, known)) continue
+    if (storeProducts.has(o.productId)) continue
+    const src = o.src ? unwrapGoodPixUrl(o.src) : null
+    if (src && !src.startsWith('data:') && !GOODPIX_HOST.test(src)) continue
+    if (out.some((x) => x.id === o.productId)) continue
+    out.push({ id: o.productId, image: o.mirror ? mirrorUrl(o.mirror) : src })
   }
   return out
 }
@@ -246,6 +288,8 @@ export interface ConvertOptions {
   mirrorUrl: (key: string) => string
   /** Build ids deterministic per look, so a re-open does not churn node identity. */
   idPrefix?: string
+  /** Ids of pieces she no longer has (piecesNotHers): treated as her pieces, so `keep` decides. */
+  gone?: Set<string>
 }
 
 export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): LayoutConversion {
@@ -274,7 +318,7 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
     const b = boxOf(o)
 
     if (isImage(o)) {
-      const piece = pieceFor(o, byHash, known)
+      const piece = pieceFor(o, byHash, known, opts.gone)
       if (piece) {
         if (!opts.keep(piece)) { if (!leftOff.includes(piece)) leftOff.push(piece); return }
         // Konva mirrors a negative scaleX about the node's own x, so a flipped piece is anchored

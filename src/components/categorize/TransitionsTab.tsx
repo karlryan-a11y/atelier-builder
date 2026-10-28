@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { RotateCcw, Wand2, Archive, Copy } from 'lucide-react'
 import type { useTransitions, TransitionedItem } from '@/hooks/useTransitions'
+import { OMIT_LABEL, type OmittedPiece } from '@/lib/restyleSelection'
 import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 import { groupPulledLooks, orderQueue, queueSummary, queueHeadline, type QueueCard } from '@/lib/transitionQueue'
 import { TileImage } from '@/components/common/TileImage'
@@ -39,6 +40,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
   // above (checked on production 2026-09-10), so this join costs nothing: no extra query, no
   // extra fetch, both lists are already on this screen.
   const itemById = new Map(items.map((i) => [i.id, i]))
+  const goneByLook = new Map(looks.map((l) => [l.id, l.gonePieces]))
   // Ref guard: blocks a second restore firing before React re-renders the disabled button
   // (state alone can lag a rapid double-tap / a stalled-then-retried click).
   const inFlight = useRef(false)
@@ -154,6 +156,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
                     itemById={itemById}
                     transitionedAt={look.transitionedAt}
                   />
+                  <AlsoGone causeItemIds={look.causeItemIds} gonePieces={goneByLook.get(look.id) ?? []} />
                   <div className="mt-2.5 flex items-center gap-4">
                     <button
                       onClick={() => onRestyle(card)}
@@ -181,6 +184,44 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * The rest of what she no longer has. The causes above are the pieces that pulled the look; the
+ * board can also show pieces that left her closet another way (GoodPix stopped sending them, or
+ * they belong to someone else now). Paige Berndt, 2026-09-24: "these tall black boots do not show
+ * up as a transition item when I click on the look and they show up on the board but they are not
+ * in her closet." Restyle leaves every one of these off the board; this names them first.
+ */
+function AlsoGone({ causeItemIds, gonePieces }: { causeItemIds: string[]; gonePieces: OmittedPiece[] }) {
+  const causes = new Set(causeItemIds)
+  const extra = gonePieces.filter((p) => !causes.has(p.id))
+  if (extra.length === 0) return null
+  return (
+    <div className="mt-2" data-testid="also-gone">
+      <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa]">
+        Also not in her collection · {extra.length} {extra.length === 1 ? 'piece' : 'pieces'}
+      </p>
+      <ul className="mt-1.5 space-y-1.5">
+        {extra.map((piece) => (
+          <li key={piece.id} className="flex items-center gap-2">
+            <span className="h-7 w-7 shrink-0 bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm overflow-hidden flex items-center justify-center">
+              {piece.image
+                ? <TileImage src={piece.image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
+                : <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>}
+            </span>
+            <span className="min-w-0">
+              {piece.brand && (
+                <span className="block text-[9px] tracking-[0.16em] uppercase text-[#8a7a6a] truncate">{piece.brand}</span>
+              )}
+              <span className="block text-[12px] text-[#1A1A1A] leading-tight truncate" title={piece.name}>{piece.name}</span>
+              <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{OMIT_LABEL[piece.reason]}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

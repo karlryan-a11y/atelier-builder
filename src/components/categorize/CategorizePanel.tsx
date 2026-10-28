@@ -353,7 +353,8 @@ export function CategorizePanel() {
     if (useCanvasStore.getState().isDirty && !confirm('You have unsaved changes on the canvas. Discard them and open this look to restyle?')) return
     setOpeningLookId(look.id)
     try {
-      // The pieces AS THEY STAND NOW, not as the look remembers them.
+      // The pieces AS THEY STAND NOW, not as the look remembers them, and only HERS: a piece that
+      // belongs to someone else is not on her board (it comes back as no longer in her collection).
       async function readPieces(ids: string[]): Promise<Map<string, RestylePiece> | null> {
         const out = new Map<string, RestylePiece>()
         for (let i = 0; i < ids.length; i += 200) {   // a big .in() fails silently: chunk it
@@ -361,6 +362,7 @@ export function CategorizePanel() {
             .from('gp_closet_items')
             .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
             .in('id', ids.slice(i, i + 200))
+            .eq('client_id', activeClient?.id ?? '')
           if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return null }
           for (const r of (pieceRows ?? []) as any[]) {
             out.set(r.id, {
