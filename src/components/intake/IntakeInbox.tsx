@@ -29,6 +29,7 @@ import { r2ImageUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
+import { searchReview, intakeSearchFields, capSearchFields, type CapFacets } from '@/lib/reviewSearch'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -54,7 +55,7 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string; find?: string; ready?: boolean }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; find?: string; facets?: CapFacets; retail?: string; ready?: boolean }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
@@ -65,17 +66,11 @@ export function IntakeInbox() {
   // Ready (Karl, 2026-10-28): retailer description found and the details rewritten by the new system; Paige approves these first.
   const viewOk = (k: 'all' | 'ready' | 'with' | 'without', i: CapItem) => k === 'all' || (k === 'ready' ? !!i.ready : (k === 'with') === hasRetail(i))
   const retailOk = (i: CapItem) => viewOk(retailView, i)
-  // Search Needs Review by what a piece is (Karl, 2026-10-27: "Valentino shoe" shows every Valentino shoe waiting). Every word must match the start of a word in
-  // the name, brand, category, subcategory or color; accents and plurals are ignored (Hermes finds Hermès, shoe finds Shoes).
-  const [capSearch, setCapSearch] = useState('')
-  const words = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean).map(w => w.replace(/(ss|sh|ch|x)es$/, '$1').replace(/([^s])s$/, '$1'))
-  const searchOk = (i: CapItem) => {
-    const q = words(capSearch); if (!q.length) return true
-    const have = words(`${i.title} ${i.sub} ${i.find ?? ''}`)
-    return q.every(w => have.some(h => h.startsWith(w)))
-  }
   // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
   const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
+  // Search the pieces waiting in Needs Review by brand, color or style (Paige, 2026-10-26: Barbie had 1,338 to scroll). Both lists, every piece.
+  const [pieceQ, setPieceQ] = useState('')
+  const capShown = useMemo(() => searchReview(cap.items, pieceQ, capSearchFields), [cap.items, pieceQ])
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || !e.data || e.data.source !== 'capture-queue' || e.data.type !== 'state') return
@@ -358,6 +353,22 @@ export function IntakeInbox() {
   }, [items, refreshBackground, selectedIds])
 
   const camMode = queueCount !== null && (filter === 'queue' || (filter === 'pending_review' && reviewSrc === 'camera'))
+  // The search is Needs Review's alone; the Queue and the other tabs list everything, as before.
+  const searching = filter === 'pending_review' && pieceQ.trim() !== ''
+  const capList = searching ? capShown : cap.items
+  // A new search clears the ticked cards: bulk Approve or Reject must never act on a piece the search hides.
+  const searchFor = (v: string) => { setPieceQ(v); setSelectedIds(new Set()) }
+  // Another client starts with the full list: a word typed for the last client would open hers as "No pieces match".
+  useEffect(() => { searchFor('') }, [selectedClientId])
+  // No camera piece matches: the pick screen is hidden, so the last piece and its Approve button are not left on screen.
+  const noCamMatch = searching && camMode && cap.items.length > 0 && capShown.length === 0
+  const shownItems = useMemo(() => (filter === 'pending_review' ? searchReview(items, pieceQ, intakeSearchFields) : items), [items, pieceQ, filter])
+  // The pick screen opens the piece selected in the sidebar: when that piece is not in the results (or was just approved), open the first match.
+  useEffect(() => {
+    const shown = capShown.filter(retailOk)
+    if (!searching || !camMode || !shown.length) return
+    if (!shown.some((i) => i.id === cap.selectedId)) tellFrame({ type: 'select', id: shown[0].id })
+  },[searching, camMode, capShown, cap.selectedId, retailView])
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
@@ -458,6 +469,30 @@ export function IntakeInbox() {
                   <span className={`inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full text-[10px] font-medium px-1.5 ${tab.key === 'in_progress' ? 'bg-emerald-100 text-emerald-700' : tab.key === 'pending_review' ? 'bg-blush text-[#1A1A1A]' : 'bg-[#E8E4DF] text-[#888]'}`}>{tab.count}</span>
                 )}
               </button>
+              {tab.key === 'pending_review' && filter === 'pending_review' && (
+                <div className="mt-1 mx-4 relative">
+                  <input
+                    type="search"
+                    value={pieceQ}
+                    onChange={(e) => searchFor(e.target.value)}
+                    placeholder="Search anything: Valentino shoe, size 8, black silk"
+                    aria-label="Search pieces"
+                    className="w-full border border-[#E8E4DF] bg-white px-2.5 py-1.5 pr-7 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A] [&::-webkit-search-cancel-button]:appearance-none"
+                  />
+                  {pieceQ && (
+                    <button type="button" onClick={() => searchFor('')} aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#888] hover:text-[#1A1A1A]">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {searching && (
+                    <div className="mt-1 px-0.5 text-[11px] text-[#888]">
+                      {camMode
+                        ? `${capShown.filter(retailOk).length} of ${cap.items.filter(retailOk).length} match`
+                        : `${shownItems.length} of ${items.length} match`}
+                    </div>
+                  )}
+                </div>
+              )}
               {((tab.key === 'queue' && filter === 'queue') || (tab.key === 'pending_review' && filter === 'pending_review' && queueCount !== null)) && (
                 <div className="pb-2">
                   {tab.key === 'pending_review' && (
@@ -468,29 +503,24 @@ export function IntakeInbox() {
                     </div>
                   )}
                   {tab.key === 'queue' || reviewSrc === 'camera' ? <>
-                  {cap.items.some(i => i.done) && (
+                  {capList.some(i => i.done) && (
                     <div className="mt-1 mx-3 flex gap-1.5">
-                      {([['todo', 'To do', cap.items.filter(i => !i.done).length], ['done', 'Finished', cap.items.filter(i => i.done).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setCapView(k); const first = cap.items.find(i => (k === 'done') === !!i.done); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.2em] uppercase border ${capView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      {([['todo', 'To do', capList.filter(i => !i.done).length], ['done', 'Finished', capList.filter(i => i.done).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setCapView(k); const first = capList.find(i => (k === 'done') === !!i.done); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.2em] uppercase border ${capView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                   )}
                   {tab.key === 'pending_review' && cap.items.some(i => i.retail !== undefined) && (
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['all', 'All', cap.items.length], ['ready', 'Ready', cap.items.filter(i => !!i.ready).length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setRetailView(k); const first = cap.items.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                   )}
-                  {tab.key === 'pending_review' && cap.items.length > 0 && (
-                    <div className="mt-1 mx-3">
-                      <input value={capSearch} onChange={e => setCapSearch(e.target.value)} placeholder="Search anything: Valentino shoe, size 8, black silk" className="w-full border border-[#E8E4DF] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A]" />
-                      {capSearch.trim() ? <div className="mt-1 text-[10px] text-[#1A1A1A]/55">{cap.items.filter(i => retailOk(i) && searchOk(i)).length} match{cap.items.filter(i => retailOk(i) && searchOk(i)).length === 1 ? '' : 'es'} <button onClick={() => setCapSearch('')} className="ml-1 underline">Clear</button></div> : null}
-                    </div>
-                  )}
-                  {cap.items.length > 0 && (
+                  {searching && cap.items.length > 0 && capList.length === 0 && <div className="mt-1 mx-4 text-[11px] text-[#888]">No pieces match. Try one word, like a brand or a color.</div>}
+                  {capList.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
-                      {cap.items.filter(i => (!cap.items.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || (retailOk(i) && searchOk(i)))).map(it => (
+                      {capList.filter(i => (!capList.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || retailOk(i))).map(it => (
                         <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
@@ -550,8 +580,13 @@ export function IntakeInbox() {
       )}
 
       {/* Content — In Progress tab or item cards */}
+      {noCamMatch && (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-sm text-[#888]">No pieces match. Try one word, like a brand or a color.</p>
+        </div>
+      )}
       {camMode ? (
-        <div className="flex-1 overflow-y-auto">
+        <div className={`flex-1 overflow-y-auto${noCamMatch ? ' hidden' : ''}`}>
           <iframe ref={frameRef} key={`${filter}-${selectedClientId ?? 'all'}`} src={`/capture-queue?view=${filter === 'queue' ? 'queue' : 'review'}${selectedClientId ? `&client=${encodeURIComponent(selectedClientId)}` : ''}`} title="Capture queue" className="w-full border-0" style={{ height: 'calc(100vh - 60px)', minHeight: 480 }} />
         </div>
       ) : filter === 'in_progress' ? (
@@ -720,7 +755,10 @@ export function IntakeInbox() {
               </div>
             )}
 
-            {items.map(item => (
+            {shownItems.length === 0 && (
+              <p className="py-16 text-center text-sm text-[#888]">No pieces match. Try one word, like a brand or a color.</p>
+            )}
+            {shownItems.map(item => (
               <InlineItemCard key={item.id} item={item} onAction={refreshBackground} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} customCategories={customCats} />
             ))}
           </div>

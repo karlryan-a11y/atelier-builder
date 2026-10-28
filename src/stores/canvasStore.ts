@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas'
 import { createDefaultLookCanvas } from '@/types/canvas'
 import type { OmittedPiece } from '@/lib/restyleSelection'
+import { labelStyleFor, rememberLabelStyle, type LabelStyle } from '@/lib/labelStyle'
+import { useAuthStore } from '@/stores/authStore'
 
 /** The original look a rebuild stands in for, shown beside the board while she restyles it. */
 export interface RestyleReference {
@@ -35,6 +37,10 @@ function saveDraft(state: LookCanvasState) {
   try {
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state))
   } catch {}
+}
+
+function deviceStorage(): Storage | null {
+  try { return typeof localStorage === 'undefined' ? null : localStorage } catch { return null }
 }
 
 function loadImageUrls(): Record<string, string> {
@@ -112,9 +118,6 @@ interface CanvasStoreState {
   // When a text node is added, we ask the canvas to open its inline editor immediately so the
   // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
   pendingEditTextId: string | null
-  // Remembers the last font + size the stylist used on a text node, so the NEXT text they add
-  // reuses it (fast when labelling many items). Transient, session-only.
-  lastTextStyle: { font_family: string; font_size: number } | null
 }
 
 // Export function registered by LookCanvas, called by ChatPanel
@@ -236,7 +239,10 @@ interface CanvasStoreActions {
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
   requestTextEdit: (id: string | null) => void
-  rememberTextStyle: (style: { font_family: string; font_size: number }) => void
+  // The style a new hand-made label starts with, and remembering it when she styles one. Saved
+  // per stylist on the device (lib/labelStyle.ts), so it carries over looks, capsules and reloads.
+  newLabelStyle: () => LabelStyle
+  rememberTextStyle: (style: LabelStyle) => void
 }
 
 type CanvasStore = CanvasStoreState & CanvasStoreActions
@@ -263,10 +269,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   buildingCapsule: false,
   isDirty: false,
   pendingEditTextId: null,
-  lastTextStyle: null,
 
   requestTextEdit: (id) => set({ pendingEditTextId: id }),
-  rememberTextStyle: (style) => set({ lastTextStyle: style }),
+  newLabelStyle: () => labelStyleFor(deviceStorage(), useAuthStore.getState().user?.id),
+  rememberTextStyle: (style) => rememberLabelStyle(deviceStorage(), useAuthStore.getState().user?.id, style),
 
   setCanvasState: (newState) => {
     const { state: current, past } = get()

@@ -20,7 +20,28 @@ This is how you message clients through Atelier. You never leave Slack. Clients 
 3. **Reply in the thread.** What you type is what the client sees. Write it like you're texting the client directly — because you are.
 4. The client gets it instantly (live if their app is open, as a notification + badge if it's closed).
 
-**Always reply in the thread, never in the main channel.** A message in the main channel does **not** reach the client and breaks the conversation routing.
+**Everything you post in her channel reaches her,** in the main channel or in a thread, with a notification. The only exceptions are a note marked team only (below) and replies under a trip check-in, which always stay with the team.
+
+### Team-only notes
+Start the post with **`team:`** (any capitalization, bold is fine), for example `team: she returned the loafers, don't resend`.
+- It stays in Slack. She never sees it and gets no notification.
+- **Every reply in that post's thread stays in Slack too,** so the team can talk it over under the note.
+- The marker has to be at the very start. "The team loved this" still goes to her.
+- A reply in any other thread still goes to her as usual.
+- Before a thread reply goes to her, Atelier checks the thread's first post. If it can't check, it holds the reply back to be safe. If she says a thread reply never arrived, tell Karl.
+- Adding `team:` to a message she already has does not take it back. Delete it instead (below).
+
+### Unsending a message
+Sent something to her by mistake? Delete it in Slack.
+1. On a computer, hover over the message. On your phone, press and hold it.
+2. On a computer, click **More actions** (the three dots). Skip this on your phone.
+3. Tap **Delete message**.
+4. Confirm with **Delete**.
+
+It disappears from her chat, photos and voice notes too. If her chat is open, that takes a few seconds. Otherwise it's gone the next time she opens it.
+- **This can't take back a notification.** If her phone already showed the push or a lock-screen preview, she may have read it there. When in doubt, use `team:` before you post.
+- Editing a message in Slack does not change what she already has. Deleting it is the only way to take it back. Then post it again.
+- A message you deleted in Slack before unsend existed (October 2026) is still in her chat. Ask Karl to remove it.
 
 ### Sending a look
 You can drop a look card straight into the chat from the dashboard ("here's the dress I mentioned"). Clients can also send a look into the chat to say "more like this." Use it — it's the best part of the experience.
@@ -66,7 +87,7 @@ Once that's done it behaves like a real app: tap the icon, message you, see thei
 - Onboard clients to the Home Screen app in person.
 
 **Don't**
-- Don't reply in the main channel (the client won't get it).
+- Don't post a note about her in her channel without `team:` at the start (she will get it).
 - Don't paste client message content into `#escalations`.
 - Don't let a channel sit muted on your phone.
 - Don't promise a turnaround faster than 2 business hours unless you mean it.

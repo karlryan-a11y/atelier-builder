@@ -79,6 +79,7 @@ export function useIntakeItems(
           tag_photo:intake_photos!tag_photo_id(id, r2_key)
         `)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: true }) // a stable order, so the pages below never skip or repeat a row
         .neq('inbox_archived', true) // hide approved items that were auto/ manually cleared
 
       if (filter === 'pending_review') {
@@ -97,7 +98,18 @@ export function useIntakeItems(
         query = query.eq('client_id', clientId)
       }
 
-      const { data, error: fetchError } = await query
+      // Every row, page by page: the database answers at most 1,000 at a time, and a client can have
+      // more waiting than that (Barbie, 1,338). The piece search in Needs Review reads the whole list.
+      // The other tabs read one page, as before.
+      const upTo = filter === 'pending_review' ? 50_000 : 1000
+      const data: Record<string, unknown>[] = []
+      let fetchError: { message: string } | null = null
+      for (let from = 0; from < upTo; from += 1000) {
+        const { data: page, error: pe } = await query.range(from, from + 999)
+        if (pe) { fetchError = pe; break }
+        data.push(...((page ?? []) as unknown as Record<string, unknown>[]))
+        if ((page?.length ?? 0) < 1000) break
+      }
 
       if (fetchError) {
         setError(fetchError.message)
