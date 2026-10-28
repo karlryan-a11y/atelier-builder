@@ -145,6 +145,7 @@ export function NestingTab({ clientId, clientName, onChanged }: { clientId: stri
           items={items}
           catsByItem={rawCatsByItem}
           rows={closet.rows}
+          parentBySlug={closet.parentBySlug}
           setSameAs={closet.setSameAs}
           setParent={closet.setParent}
         />

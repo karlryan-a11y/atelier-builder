@@ -220,6 +220,8 @@ export function CategorizePanel() {
   // Collection categories she made before filing anything in them (Cynthia, 2026-10-20). They sit
   // in the rail at 0 and in every picker on the Collection tab. lib/savedClosetCategories.ts.
   const closetCategories = useClientCategories(activeClient?.id ?? null)
+  // Groups she asked for from her Collection, waiting on the Nesting tab (one per group, not per category).
+  const nestingRequestGroups = new Set(closetCategories.requests.map((r) => r.group)).size
   const savedClosetCats = useMemo(() => savedCustomCategories(closetCategories.rows), [closetCategories.rows])
   async function handleCreateClosetCategory() {
     const n = newClosetCat.trim()
@@ -1305,8 +1307,8 @@ export function CategorizePanel() {
                 {m === 'review' && deletedLooks.waiting.length > 0 && (
                   <span data-review-count className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle" title="Looks she deleted, waiting for review">{deletedLooks.waiting.length}</span>
                 )}
-                {m === 'nesting' && closetCategories.requests.length > 0 && (
-                  <span title="Waiting: groups she asked for" className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{closetCategories.requests.length}</span>
+                {m === 'nesting' && nestingRequestGroups > 0 && (
+                  <span title="Waiting: groups she asked for" className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{nestingRequestGroups}</span>
                 )}
                 {m === 'residences' && residenceReview.openCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{residenceReview.openCount}</span>

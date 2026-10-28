@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { labelForCategory } from '@/lib/garmentCategory'
 import { displayName, type ClosetItem } from '@/lib/images'
-import type { NestingRow } from '@/lib/categoryNesting'
+import { categoryKey, STANDARD_NESTING, type NestingRow } from '@/lib/categoryNesting'
 
 /**
  * HER CATEGORY MAP (ADR-0163). Stylists own it, one client at a time (Karl, 2026-10-02).
@@ -28,18 +28,22 @@ import type { NestingRow } from '@/lib/categoryNesting'
 const STANDARD = Object.entries(CATEGORY_LABELS)
   .filter(([slug]) => slug !== 'other')
   .map(([slug, label]) => ({ slug, label }))
+// Inside also offers every group of the standard nesting set (Accessories, Suits, Sweaters...).
+const INSIDE = [...STANDARD, ...Object.keys(STANDARD_NESTING).filter((s) => !(s in CATEGORY_LABELS)).map((slug) => ({ slug, label: labelForCategory(slug) }))]
 const isStandard = (slug: string) => slug in CATEGORY_LABELS
 const SCREENSHOT = /^(screen ?shot|screenshot|img[_ -]?\d|s-l\d)/i
 
 export interface MapEntry { slug: string; label: string; count: number; samples: string[] }
 
-export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSameAs, setParent }: {
+export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, parentBySlug, setSameAs, setParent }: {
   clientId: string
   who: string
   items: ClosetItem[]
   /** Each piece's categories as resolved WITHOUT the map, so every spelling she has is listed. */
   catsByItem: Map<string, string[]>
   rows: NestingRow[]
+  /** Her whole tree, the standard set included, so a category the standard placed shows where it is. */
+  parentBySlug?: Map<string, string>
   setSameAs: (slug: string, target: string | null, label?: string) => Promise<{ ok: boolean; message?: string }>
   setParent: (slug: string, parent: string | null, label?: string) => Promise<{ ok: boolean; message?: string }>
 }) {
@@ -65,7 +69,9 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
     const r = rowBySlug.get(slug)
     if (r?.same_as) return `same:${r.same_as}`
     if (r?.parent_slug) return `in:${r.parent_slug}`
-    return ''
+    if (r) return ''
+    const standard = parentBySlug?.get(categoryKey(slug))
+    return standard ? `in:${standard}` : ''
   }
 
   async function choose(e: MapEntry, value: string) {
@@ -155,7 +161,7 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
                   {STANDARD.map((c) => <option key={`same:${c.slug}`} value={`same:${c.slug}`}>Same as {c.label}</option>)}
                 </optgroup>
                 <optgroup label="Inside">
-                  {STANDARD.map((c) => <option key={`in:${c.slug}`} value={`in:${c.slug}`}>Inside {c.label}</option>)}
+                  {INSIDE.map((c) => <option key={`in:${c.slug}`} value={`in:${c.slug}`}>Inside {c.label}</option>)}
                 </optgroup>
               </select>
               {note?.slug === e.slug && (
