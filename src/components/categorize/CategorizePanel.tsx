@@ -46,7 +46,8 @@ import type { ClosetItem } from '@/lib/images'
 import { searchPieces, type PieceSearchFields } from '@/lib/pieceSearch'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useClientCategories } from '@/hooks/useClientCategories'
-import { savedCustomCategories, customRailSlugs } from '@/lib/savedClosetCategories'
+import { savedCustomCategories, customRailSlugs, nestRailSlugs } from '@/lib/savedClosetCategories'
+import { categoryKey } from '@/lib/categoryNesting'
 
 type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
@@ -73,12 +74,14 @@ type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
  * NOT blush. Blush is #F8E5E7, lighter than the #EFEBE6 track it sits on, so a fully styled
  * category rendered as a pale line indistinguishable from an empty one. Checked in WebKit.
  */
-function CategoryRow({ label, count, coverage, on, onClick }: {
+function CategoryRow({ label, count, coverage, on, onClick, depth = 0 }: {
   label: string
   count: number
   coverage?: StyledCoverage
   on: boolean
   onClick: () => void
+  /** A subcategory sits indented under its category (Nesting). 0 = top level. */
+  depth?: number
 }) {
   const styled = coverage?.styled ?? 0
   const draftOnly = coverage?.draftOnly ?? 0
@@ -92,6 +95,7 @@ function CategoryRow({ label, count, coverage, on, onClick }: {
         ? `${styled} of ${count} in a look she can see${draftOnly > 0 ? `, ${draftOnly} more only in unpublished looks` : ''}`
         : undefined}
       className={`w-full px-3 py-2 rounded text-[12px] transition-colors ${on ? 'bg-[#1A1A1A] text-white' : 'text-[#1A1A1A] hover:bg-[#F8F7F5]'}`}
+      style={depth > 0 ? { paddingLeft: 12 + depth * 14 } : undefined}
     >
       <span className="flex items-baseline justify-between gap-2">
         <span className="truncate">{label}</span>
@@ -1014,13 +1018,19 @@ export function CategorizePanel() {
                   )
                 })}
                 {(() => {
-                  // Her pieces' categories, plus the ones she made from the New category box at 0.
-                  const customSlugs = customRailSlugs(garmentCounts, savedClosetCats.map((c) => c.slug), (s) => s !== TOTAL_SLUG && !isFixedCategory(s) && s !== NO_HOME && !(showResidences && residenceSlugs.has(s)))
-                  if (customSlugs.length === 0) return null
+                  // Her pieces' categories, plus the ones she made from the New category box at 0, each
+                  // subcategory under its category (Nesting), as her lookbook shows them.
+                  const sortOrder = new Map(closetCategories.rows.map((r) => [categoryKey(r.slug), r.sort_order]))
+                  const customRows = nestRailSlugs(
+                    customRailSlugs(garmentCounts, savedClosetCats.map((c) => c.slug), (s) => s !== TOTAL_SLUG && !isFixedCategory(s) && s !== NO_HOME && !(showResidences && residenceSlugs.has(s))),
+                    (s) => closetCategories.parentBySlug.get(categoryKey(s)),
+                    (s) => sortOrder.get(categoryKey(s)) ?? 0,
+                  )
+                  if (customRows.length === 0) return null
                   return (
                     <div className="mt-1">
                       <p className="text-[8px] tracking-[0.3em] uppercase text-[#bbb] px-3 mb-0.5">Custom</p>
-                      {customSlugs.map((slug) => {
+                      {customRows.map(({ slug, depth }) => {
                         const on = activeGarmentCats.has(slug)
                         return (
                           <CategoryRow
@@ -1030,6 +1040,7 @@ export function CategorizePanel() {
                             coverage={garmentCoverage.get(slug)}
                             on={on}
                             onClick={() => toggleGarment(slug)}
+                            depth={depth}
                           />
                         )
                       })}

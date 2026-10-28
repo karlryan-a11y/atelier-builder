@@ -64,3 +64,44 @@ export function customRailSlugs(
   for (const s of savedSlugs) if (!(s in CATEGORY_LABELS) && keep(s)) out.add(s)
   return [...out].sort()
 }
+
+export interface RailRow { slug: string; depth: number }
+
+/**
+ * The Custom rows with each subcategory right under its category, indented by `depth`. (Cynthia
+ * Dada for Chris Cadieux, 2026-10-16: Blazers & Suit Jackets over Blazers & Sport Coats, Suit
+ * Jackets and Other Tailored Jackets.) His lookbook already nested them; this rail listed them
+ * alphabetically among everything else.
+ *
+ * `parentOf` is the client's tree (Nesting). A category nests only when its parent is in this
+ * list too; one whose parent is a standard category (Jackets inside Outerwear) stays at the top,
+ * as before. Children follow `rank` (the order she saved them in), then the alphabet. With no tree
+ * this returns the list it was given, in its order.
+ */
+export function nestRailSlugs(
+  slugs: string[],
+  parentOf: (slug: string) => string | undefined,
+  rank: (slug: string) => number = () => 0,
+): RailRow[] {
+  const listed = new Set(slugs)
+  const children = new Map<string, string[]>()
+  const tops: string[] = []
+  for (const s of slugs) {
+    const p = parentOf(s)
+    if (p && p !== s && listed.has(p)) children.set(p, [...(children.get(p) ?? []), s])
+    else tops.push(s)
+  }
+  const out: RailRow[] = []
+  const seen = new Set<string>()
+  const walk = (s: string, depth: number) => {
+    if (seen.has(s)) return
+    seen.add(s)
+    out.push({ slug: s, depth })
+    const kids = [...(children.get(s) ?? [])].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    for (const k of kids) walk(k, depth + 1)
+  }
+  for (const s of tops) walk(s, 0)
+  // A tree that loops (A inside B inside A) has no top: what is left is listed so nothing drops out.
+  for (const s of slugs) walk(s, 0)
+  return out
+}
