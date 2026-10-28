@@ -16,8 +16,9 @@ import { composeNodes, pickLayout, type ResolvedItem, type ExtractedItem } from 
 import type { ClosetItemNode, CanvasNode, TextNode } from '@/types/canvas'
 import {
   pieceType, mixKey, typesKey, rankTemplates, arrangeFromTemplate,
-  type LookTemplate, type BoardPiece,
+  type LookTemplate, type BoardPiece, type PieceType,
 } from './styleFromTemplates'
+import { houseLayout, type HousePiece, type Box } from './houseLayout'
 
 // detectCategory() returns the grouped CLOSET vocabulary (categorize.ts: 'dresses', 'tops', …);
 // the compose engine uses its own extraction vocabulary ('dress', 'top', …). Bridge the two so the
@@ -125,7 +126,77 @@ export async function styleCanvas(
   }
 }
 
-// ── ✨ from past looks (ADR-0128) ─────────────────────────────────────────────────────────────
+// ── ✨ the house layout (Amaia Anderson's request, Karl 2026-10-27) ──────────────────────────
+
+// Saved categories the builder's own list doesn't know but that plainly name a role (custom and
+// GoodPix-era spellings on real pieces, 2026-10-28). Read only when the category and the name
+// together still give no type, so a stylist's own filing always wins.
+const ROLE_WORDS: [RegExp, PieceType][] = [
+  [/bag|purse|clutch|tote|backpack/, 'bag'],
+  [/dress top|blouse|shirt|tee|tank|top|sweater|knit|bodysuit|polo|turtleneck|hoodie|sweatshirt/, 'top'],
+  [/dress|gown|jumpsuit|romper/, 'dress'],
+  [/jean|trouser|pant|skirt|short|legging|bottom/, 'bottom'],
+  [/jacket|blazer|coat|vest|kimono|cape|poncho|fur|outer/, 'outerwear'],
+  [/shoe|boot|heel|sandal|sneaker|flat|loafer|pump/, 'shoes'],
+  [/earring|necklace|bracelet|ring|pendant|brooch|watch|time-piece|jewel/, 'jewelry'],
+  [/belt/, 'belt'], [/scarf|scarves|shawl|wrap/, 'scarf'], [/hat|headband|hair/, 'hat'],
+  [/sunglass|eyewear|glasses|accessor|glove|tie/, 'accessory'],
+]
+function roleType(name: string | null | undefined, category: string | null | undefined): PieceType {
+  const t = pieceType(name, category)
+  if (t !== 'other') return t
+  const c = (category ?? '').toLowerCase()
+  return ROLE_WORDS.find(([re]) => re.test(c))?.[1] ?? 'other'
+}
+
+export interface HouseStyle {
+  nodes: CanvasNode[]
+  layout: string
+  /** 0 = the house layout, 1 = its mirror image. Press again for the other. */
+  option: number
+  placed: number
+  labelsAdded: number
+  /** Pieces with no brand saved, so no label was written for them. */
+  unlabeled: number
+}
+
+/**
+ * The ✨ button. Lays the pieces out the way the Michele sample looks were (lib/houseLayout.ts):
+ * a set box per role, each piece fitted by its visible bounds, its brand in Amalfi Coast under it.
+ * `photoOf(nodeId)` gives a piece's loaded photo size and visible box; a piece whose photo has not
+ * loaded yet stops the button with a message rather than being placed blind.
+ */
+export async function styleHouse(opts: {
+  nodes: CanvasNode[]
+  board: { width: number; height: number }
+  attempt: number
+  photoOf: (nodeId: string) => { w: number; h: number; content: Box | null } | null
+  measure?: (text: string, size: number) => number
+}): Promise<HouseStyle> {
+  const closetNodes = opts.nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item' && !n.hidden)
+  if (closetNodes.length === 0) throw new Error('No pieces on the board to style')
+  if (closetNodes.some((n) => !opts.photoOf(n.id))) throw new Error('Some photos are still loading. Try ✨ again in a moment.')
+
+  const ids = [...new Set(closetNodes.map((n) => n.closet_item_id))]
+  const { data: rows, error } = await supabase
+    .from('gp_closet_items').select('id, name, name_override, brand, category').in('id', ids)
+  if (error) throw new Error(`Could not read the pieces: ${error.message}`)
+  const byId = new Map((rows ?? []).map((r: any) => [r.id, r]))
+  const pieces: HousePiece[] = closetNodes.map((n) => {
+    const r: any = byId.get(n.closet_item_id)
+    const brand = r?.brand && r.brand !== 'None' && String(r.brand).trim() ? String(r.brand).trim() : null
+    const photo = opts.photoOf(n.id)!
+    return {
+      nodeId: n.id, pieceId: n.closet_item_id, type: roleType(r?.name_override?.trim() || r?.name, r?.category), brand,
+      natW: photo.w, natH: photo.h, content: photo.content,
+    }
+  })
+  const option = opts.attempt % 2
+  const r = houseLayout(opts.board, opts.nodes, pieces, { variant: option, measure: opts.measure })
+  return { nodes: r.nodes, layout: r.layout, option, placed: r.placed, labelsAdded: r.labelsAdded, unlabeled: r.unlabeled.length }
+}
+
+// ── ✨ from past looks (ADR-0128). No longer on the button: ✨ uses the house layout above. ─────
 
 
 export interface PastLookStyle {

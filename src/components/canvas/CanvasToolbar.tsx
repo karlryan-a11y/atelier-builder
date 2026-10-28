@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
-import { styleFromPastLooks } from '@/lib/style'
+import { styleHouse } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
 import type { CanvasNode, ClosetItemNode, PictureNode, TextNode } from '@/types/canvas'
 import { addPictureFilesToBoard, removePictureBackground } from '@/lib/addPicture'
@@ -120,9 +120,10 @@ export function CanvasToolbar() {
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
 
-  // ✨ (ADR-0128). Arranges the pieces like a real look the team styled with the same mix of
-  // pieces, her own looks first, and labels only brands saved on the pieces. It never deletes:
-  // text and pictures stay, notes travel with their piece, and the whole change is ONE undo step.
+  // ✨ The house layout, the way the Michele sample looks were laid out (Amaia Anderson's request;
+  // Karl, 2026-10-27). Each piece gets its set spot and size and its brand in Amalfi Coast under
+  // it. It never deletes: text and pictures stay, notes travel with their piece, and the whole
+  // change is ONE undo step. Pressing again gives the mirror image.
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
     setStyling(true)
@@ -131,23 +132,20 @@ export function CanvasToolbar() {
       const pieceKey = store.state.nodes.filter((n) => n.type === 'closet_item')
         .map((n) => (n as ClosetItemNode).closet_item_id).sort().join(',')
       const attempt = styleRun && styleRun.key === pieceKey ? styleRun.attempt + 1 : 0
-      const displayOf = (id: string) => {
-        const n = store.state.nodes.find((x) => x.id === id) as ClosetItemNode | undefined
+      const photoOf = (id: string) => {
         const d = store.nodeDims[id]
-        if (!n || !d || !d.h) return null
-        const h = n.target_height ?? d.h * Math.abs(n.scale_y ?? n.scale)
-        return { w: (d.w / d.h) * h, h }
+        return d && d.w && d.h ? { w: d.w, h: d.h, content: store.nodeContent[id] ?? null } : null
       }
-      const r = await styleFromPastLooks({
-        nodes: store.state.nodes, board: store.state.canvas, clientId: activeClientId,
-        attempt, displayOf, imageUrls: store.imageUrls,
-      })
+      // Labels are measured in the font they are drawn in, so a long brand never wraps.
+      const ctx = document.createElement('canvas').getContext('2d')
+      const measure = ctx
+        ? (text: string, size: number) => { ctx.font = `${size}px 'Amalfi Coast', cursive`; return ctx.measureText(text).width }
+        : undefined
+      const r = await styleHouse({ nodes: store.state.nodes, board: store.state.canvas, attempt, photoOf, measure })
       store.setCanvasState({ ...store.state, nodes: r.nodes })
-      const note = r.template
-        ? `Arranged like ${r.template.look_name ?? 'a past look'}${r.sameClient ? ' (hers)' : ''}, option ${r.option + 1} of ${r.of}. Press again for another.`
-        : 'No past look has these pieces, so the standard arrangement was used.'
-      const short = r.template ? `${r.option + 1}/${r.of}` : 'standard'
-      setStyleRun({ key: pieceKey, attempt, note, short })
+      const missing = r.unlabeled ? ` ${r.unlabeled} piece${r.unlabeled === 1 ? ' has' : 's have'} no brand saved, so no label.` : ''
+      const note = `${r.option === 0 ? 'House layout' : 'House layout, mirrored'}. Press again for the ${r.option === 0 ? 'mirror image' : 'first one'}.${missing}`
+      setStyleRun({ key: pieceKey, attempt, note, short: `${r.option + 1}/2` })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       alert(`Style failed: ${message}`)
@@ -261,7 +259,7 @@ export function CanvasToolbar() {
         onClick={handleStyle}
         disabled={styling || !hasClosetItems}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
-        title={styleRun?.note ?? 'Style: arrange the pieces and brand labels like a past look. Nothing is deleted.'}
+        title={styleRun?.note ?? 'Style: lay the pieces out the house way, each brand under its piece. Nothing is deleted.'}
       >
         {styling ? (
           <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />
