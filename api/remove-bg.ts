@@ -92,7 +92,16 @@ function patchFor(item: any, photo: ReturnType<typeof photoOf>, backup: unknown)
   return { raw, primary_image_hash: photo.primary_image_hash, processed_image_hash: photo.processed_image_hash }
 }
 
-async function removeBg(token: string, item: any, imageUrl: string, res: any) {
+/**
+ * Branch previews only, never live: { practice_cutout: 'closet/nobg/...' } stands in a damaged
+ * cutout the remover really made (it does so when Photoroom is unavailable and its colour method
+ * takes over, which a test cannot cause), so the refusal can be walked end to end before GO.
+ */
+const practiceCutout = (body: any): string | null =>
+  process.env.VERCEL_ENV === 'preview' && typeof body?.practice_cutout === 'string' && body.practice_cutout.startsWith(NOBG)
+    ? body.practice_cutout : null
+
+async function removeBg(token: string, item: any, imageUrl: string, res: any, practice: string | null) {
   const before = photoOf(item)
   // The stored photo, never an address from the browser.
   const beforeBytes = await bytes(before.processed_image_hash ? proxyUrl(before.processed_image_hash) : before.processed_image || before.image)
@@ -104,6 +113,12 @@ async function removeBg(token: string, item: any, imageUrl: string, res: any) {
   })
   const d = await r.json().catch(() => ({}))
   if (!r.ok || !d?.ok) return res.status(200).json({ ok: false, reason: d?.reason || d?.error || 'Could not remove the background.' })
+  if (practice) {
+    const saved = await readItem(token, item.id)
+    const raw = { ...(saved?.raw || {}), processed_image: proxyUrl(practice) }
+    await writeItem(token, item.id, { raw, primary_image_hash: practice, processed_image_hash: practice })
+    d.url = proxyUrl(practice)
+  }
 
   const after = await readItem(token, item.id)
   const afterBytes = await bytes(d.url) ?? await bytes(after?.processed_image_hash ? proxyUrl(after.processed_image_hash) : null)
@@ -153,7 +168,7 @@ export default async function handler(req: any, res: any) {
     const item = await readItem(token, id)
     if (!item) return res.status(404).json({ ok: false, reason: 'This piece could not be found.' })
     if (body.action === 'undo') return await undo(token, item, res)
-    return await removeBg(token, item, typeof body.image_url === 'string' ? body.image_url : '', res)
+    return await removeBg(token, item, typeof body.image_url === 'string' ? body.image_url : '', res, practiceCutout(body))
   } catch (e) {
     return res.status(500).json({ ok: false, reason: 'Could not remove the background. Try again.', error: e instanceof Error ? e.message : 'failed' })
   }

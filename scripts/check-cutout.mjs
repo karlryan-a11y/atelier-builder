@@ -76,6 +76,7 @@ const api = readFileSync(join(ROOT, 'api/remove-bg.ts'), 'utf8')
 ok(/intake-remove-bg-item/.test(api) && /judgeCutout\(/.test(api), 'api/remove-bg.ts must run the remover and then the check')
 ok(/damaged: true/.test(api) && /patchFor\([^)]*before/.test(api), 'a refused cutout must put the photo from before back')
 ok(/action === 'undo'/.test(api) && /bg_backup/.test(api), 'api/remove-bg.ts must put back raw.bg_backup on Undo')
+ok(!/practice_cutout/.test(api) || /process\.env\.VERCEL_ENV === 'preview' && typeof body\?\.practice_cutout/.test(api), 'the practice cutout must only ever work on a branch preview, never live')
 ok(/requireStaff\(req, res\)/.test(api) && /Authorization: `Bearer \$\{token\}`/.test(api), 'reads and writes must go out with the caller\'s own sign-in (a limited stylist reaches only her clients)')
 
 const lib = readFileSync(join(ROOT, 'src/lib/removeBackground.ts'), 'utf8')
