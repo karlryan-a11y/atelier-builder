@@ -54,15 +54,17 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string; find?: string }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; retail?: string; find?: string; ready?: boolean }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
   const [capView, setCapView] = useState<'todo' | 'done'>('todo')
   // Needs Review: show only pieces whose retailer page gave a description (with or without its photo), or only those without (Karl, 2026-10-27).
-  const [retailView, setRetailView] = useState<'all' | 'with' | 'without'>('all')
+  const [retailView, setRetailView] = useState<'all' | 'ready' | 'with' | 'without'>('all')
   const hasRetail = (i: CapItem) => i.retail === 'both' || i.retail === 'desc'
-  const retailOk = (i: CapItem) => retailView === 'all' || (retailView === 'with') === hasRetail(i)
+  // Ready (Karl, 2026-10-28): retailer description found and the details rewritten by the new system; Paige approves these first.
+  const viewOk = (k: 'all' | 'ready' | 'with' | 'without', i: CapItem) => k === 'all' || (k === 'ready' ? !!i.ready : (k === 'with') === hasRetail(i))
+  const retailOk = (i: CapItem) => viewOk(retailView, i)
   // Search Needs Review by what a piece is (Karl, 2026-10-27: "Valentino shoe" shows every Valentino shoe waiting). Every word must match the start of a word in
   // the name, brand, category, subcategory or color; accents and plurals are ignored (Hermes finds Hermès, shoe finds Shoes).
   const [capSearch, setCapSearch] = useState('')
@@ -475,8 +477,8 @@ export function IntakeInbox() {
                   )}
                   {tab.key === 'pending_review' && cap.items.some(i => i.retail !== undefined) && (
                     <div className="mt-1 mx-3 flex gap-1.5">
-                      {([['all', 'All', cap.items.length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setRetailView(k); const first = cap.items.find(i => k === 'all' || (k === 'with') === hasRetail(i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      {([['all', 'All', cap.items.length], ['ready', 'Ready', cap.items.filter(i => !!i.ready).length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setRetailView(k); const first = cap.items.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                   )}
