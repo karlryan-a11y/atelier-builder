@@ -46,6 +46,8 @@ for (const [file, src, what, re, want] of [
   ['LookGallery.tsx', gallery, 'a click on the picker does not load the look', /data-look-categories-button[\s\S]{0,400}stopPropagation/, true],
   ['ChatPanel.tsx', panel, 'the grid files through the same assignLook as Categorize', /useLookCategories\(/, true],
   ['ChatPanel.tsx', panel, 'the Save box re-reads a filing changed from a tile', /filingKey/, true],
+  ['ChatPanel.tsx', panel, 'the Save box takes a tile change from the shared copy, not a racing read', /filingKey !== null\s*\?\s*\{ labels: lookCategories/, true],
+  ['ChatPanel.tsx', panel, 'the tiles re-read after Update Look files the look', /setLookFilingOk\(f\.ok\)\s*\n[^\n]*\n\s*await refetchFiling\(\)/, true],
 ]) {
   checked++
   if (re.test(src) !== want) failures.push(`${file}: ${what}`)

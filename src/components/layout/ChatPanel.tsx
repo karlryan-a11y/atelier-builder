@@ -166,14 +166,19 @@ export function ChatPanel() {
    * `lookFilingOk` is false only when the read failed; the save then adds and never removes.
    */
   const filedLookId = currentLookId ?? replacesLookId
-  // Changes when this look is re-filed from its tile, so the Save box opens with what is saved now.
-  const filingKey = filedLooks.find((l) => l.id === filedLookId)?.categoryIds.join(',') ?? ''
+  // The look's filing as the Looks grid holds it (the shared Categorize copy). A tick on its tile
+  // changes this at once, so the Save box opens with what the tile shows; reading the database
+  // here instead would race the tile's write and open with the old ticks.
+  const cachedFiling = filedLooks.find((l) => l.id === filedLookId)?.categoryIds ?? null
+  const filingKey = cachedFiling ? cachedFiling.join(',') : null
   const [lookFiling, setLookFiling] = useState<string[]>([])
   const [lookFilingOk, setLookFilingOk] = useState(true)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const f = await readLookFiling(filedLookId, activeClient?.id ?? null)
+      const f = filingKey !== null
+        ? { labels: lookCategories.filter((c) => filingKey.split(',').includes(c.id)).map((c) => c.label), ok: true }
+        : await readLookFiling(filedLookId, activeClient?.id ?? null)
       if (cancelled) return
       // A look filed in nothing falls back to its old `tags`, so the 72 looks that were ticked
       // into a column nothing files by still open with their pills on — and the next save files
@@ -183,7 +188,7 @@ export function ChatPanel() {
       setLookFilingOk(f.ok)
     })()
     return () => { cancelled = true }
-  }, [filedLookId, activeClient?.id, looks, filingKey])
+  }, [filedLookId, activeClient?.id, looks, filingKey, lookCategories])
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -252,6 +257,8 @@ export function ChatPanel() {
         const f = await readLookFiling(savedId, activeClient.id)
         setLookFiling(f.labels)
         setLookFilingOk(f.ok)
+        // The Looks grid tiles show this filing too: re-read their copy.
+        await refetchFiling()
       } catch (e) {
         console.error('Filing the look failed (look saved):', e)
         reportBuilderError('look_filing_failed', e, { lookId: savedId })
@@ -265,7 +272,7 @@ export function ChatPanel() {
     } finally {
       setSaving(false)
     }
-  }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk])
+  }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk, refetchFiling])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; teamNote: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
