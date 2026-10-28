@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { parentMapFrom, wouldCycle, type NestingRow } from '@/lib/categoryNesting'
-import { slugifyCategory } from '@/lib/garmentCategory'
+import { parentMapFrom, wouldCycle, withStandardNesting, standardNestingOn, isRequestRow, categoryKey, type NestingRow } from '@/lib/categoryNesting'
+import { slugifyCategory, categoriesOf } from '@/lib/garmentCategory'
+import { useClosetItems } from '@/hooks/useClosetItems'
 
 /**
  * The client's closet-category tree — `client_categories`. (ADR-0113)
@@ -34,22 +35,33 @@ import { slugifyCategory } from '@/lib/garmentCategory'
 export type { NestingRow }
 
 /** A stored row: the tree's fields, plus `kind` and `is_hidden` for her saved categories. */
-export type ClientCategoryRow = NestingRow & { kind?: string | null; is_hidden?: boolean | null }
+export type ClientCategoryRow = NestingRow & { kind?: string | null; is_hidden?: boolean | null; created_at?: string | null }
+
+/** A client's request for a group, from her Collection (atelier-looks api/nesting-request.ts). */
+export interface NestingRequest { slug: string; group: string; groupLabel: string; createdAt: string | null }
 
 export function useClientCategories(clientId: string | null) {
-  const [rows, setRows] = useState<ClientCategoryRow[]>([])
+  const [allRows, setRows] = useState<ClientCategoryRow[]>([])
+  const [standardOn, setStandardOn] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The categories her pieces carry, for the standard set. The same shared read every closet screen
+  // makes (react-query), so this costs nothing extra.
+  const { items, tagNameById } = useClosetItems(clientId)
 
   const fetchAll = useCallback(async () => {
     if (!clientId) { setRows([]); setError(null); return }
     setLoading(true)
-    const { data, error: e } = await supabase
-      .from('client_categories')
-      .select('slug, label, group_label, sort_order, same_as, kind, is_hidden')
-      .eq('client_id', clientId)
-      .order('sort_order')
-      .order('slug')
+    const [{ data, error: e }, flag] = await Promise.all([
+      supabase
+        .from('client_categories')
+        .select('slug, label, group_label, sort_order, same_as, kind, is_hidden, created_at')
+        .eq('client_id', clientId)
+        .order('sort_order')
+        .order('slug'),
+      supabase.from('gp_clients').select('standard_nesting:raw->standard_nesting').eq('id', clientId).maybeSingle(),
+    ])
+    setStandardOn(standardNestingOn(flag.data as any))
     setLoading(false)
     if (e) {
       // Never collapse a failed read into "she has no tree" — that reads as a client
@@ -63,13 +75,30 @@ export function useClientCategories(clientId: string | null) {
     setRows((data ?? []).map((r: any) => ({
       slug: r.slug, label: r.label, parent_slug: r.group_label ?? null, sort_order: r.sort_order ?? 0,
       same_as: r.same_as ?? null,
-      kind: r.kind ?? null, is_hidden: r.is_hidden ?? false,
+      kind: r.kind ?? null, is_hidden: r.is_hidden ?? false, created_at: r.created_at ?? null,
     })))
   }, [clientId])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
-  const parentBySlug = useMemo(() => parentMapFrom(rows), [rows])
+  // Her requests live in the same table but are never her tree, and never one of her categories.
+  const rows = useMemo(() => allRows.filter((r) => !isRequestRow(r)), [allRows])
+  const requests = useMemo<NestingRequest[]>(() => allRows.filter((r) => isRequestRow(r)).map((r) => ({
+    slug: r.slug.replace(/^request:/, ''), group: r.parent_slug ?? '', groupLabel: r.label ?? '', createdAt: r.created_at ?? null,
+  })), [allRows])
+
+  // THE STANDARD SET (2026-10-28, lib/categoryNesting.ts): every category her pieces carry that her
+  // own rows say nothing about, unless she is kept on her hand-made nesting.
+  const slugsInUse = useMemo(() => {
+    const s = new Set<string>()
+    if (!standardOn) return s
+    for (const item of items) {
+      const tags = (item.content_tag_ids ?? []).map((id: string) => tagNameById.get(id)).filter((n): n is string => !!n)
+      for (const c of categoriesOf(item, tags)) s.add(c)
+    }
+    return s
+  }, [items, tagNameById, standardOn])
+  const parentBySlug = useMemo(() => parentMapFrom(withStandardNesting(rows, slugsInUse)), [rows, slugsInUse])
 
   /**
    * Nest `slug` under `parent`, or pass null to move it back to the top level.
@@ -203,5 +232,42 @@ export function useClientCategories(clientId: string | null) {
     return { ok: true as const }
   }, [clientId, fetchAll])
 
-  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, createSavedCategory, refetch: fetchAll }
+  /** Remove her request rows (after applying them, or when the stylist decides against it). */
+  const dismissRequest = useCallback(async (slugs: string[]) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    const { data, error: e } = await supabase
+      .from('client_categories')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('kind', 'request')
+      .in('slug', slugs.map((s) => `request:${s}`))
+      .select('slug')
+    if (e) return { ok: false as const, message: e.message }
+    // A refused delete is a 200 with nothing in it (ADR-0108).
+    if (!data?.length) return { ok: false as const, message: 'The request could not be removed. This usually means the write was refused.' }
+    await fetchAll()
+    return { ok: true as const }
+  }, [clientId, fetchAll])
+
+  /**
+   * Her request, applied: each category goes inside the group (a real row, as if the stylist had
+   * done it by hand), then the request rows are removed. A group that is not one of her categories
+   * yet is made first, so it reads the way she wrote it.
+   */
+  const applyRequest = useCallback(async (group: string, groupLabel: string, slugs: string[], labelOf: (slug: string) => string) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    if (!rows.some((r) => categoryKey(r.slug) === categoryKey(group)) && !slugsInUse.has(group)) {
+      const made = await createGroup(groupLabel || group)
+      if (!made.ok) return made
+    }
+    const failed: string[] = []
+    for (const slug of slugs) {
+      const res = await setParent(slug, group, labelOf(slug))
+      if (!res.ok) failed.push(`${labelOf(slug)}: ${res.message}`)
+    }
+    if (failed.length) return { ok: false as const, message: `Could not move ${failed.join('; ')}` }
+    return dismissRequest(slugs)
+  }, [clientId, rows, slugsInUse, createGroup, setParent, dismissRequest])
+
+  return { rows, requests, standardOn, parentBySlug, loading, error, setParent, setSameAs, createGroup, createSavedCategory, applyRequest, dismissRequest, refetch: fetchAll }
 }
