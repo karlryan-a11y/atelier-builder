@@ -64,9 +64,6 @@ interface CanvasStoreState {
   // Natural pixel dimensions per node (reported by the canvas once each image loads). Used to
   // flip a piece IN PLACE — transient, not persisted, not in undo history.
   nodeDims: Record<string, { w: number; h: number }>
-  // The visible (non see-through) box of each piece's photo, in its natural pixels, measured by
-  // the canvas as the photo loads. ✨ fits pieces by it (lib/houseLayout.ts). Transient, like nodeDims.
-  nodeContent: Record<string, [number, number, number, number]>
   past: LookCanvasState[]
   future: LookCanvasState[]
   currentLookId: string | null
@@ -214,7 +211,6 @@ interface CanvasStoreActions {
   moveLayer: (ids: string[], direction: 'up' | 'down' | 'top' | 'bottom') => void
   setNodeImageUrl: (id: string, url: string) => void
   setNodeDims: (id: string, w: number, h: number) => void
-  setNodeContent: (id: string, box: [number, number, number, number]) => void
   flipNodes: (ids: string[]) => void
   alignNodes: (ids: string[], edge: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
   distributeNodes: (ids: string[], axis: 'horizontal' | 'vertical') => void
@@ -262,7 +258,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedNodeIds: [],
   imageUrls: loadImageUrls(),
   nodeDims: {},
-  nodeContent: {},
   past: [],
   future: [],
   currentLookId: null,
@@ -356,12 +351,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const cur = nodeDims[id]
     if (cur && cur.w === w && cur.h === h) return
     set({ nodeDims: { ...nodeDims, [id]: { w, h } } })
-  },
-
-  setNodeContent: (id, box) => {
-    const { nodeContent } = get()
-    if (nodeContent[id]?.every((v, i) => v === box[i])) return
-    set({ nodeContent: { ...nodeContent, [id]: box } })
   },
 
   // Flip selected closet items horizontally IN PLACE — mirror without moving. A negative
