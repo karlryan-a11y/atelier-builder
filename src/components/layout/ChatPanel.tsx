@@ -86,7 +86,27 @@ export function ChatPanel() {
   const [pendingPlan, setPendingPlan] = useState<CompositionPlan | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const currentLook = looks.find((l) => l.id === currentLookId) ?? null
+  // A look restyled IN PLACE from the Transitions queue is still pulled while it is on the board,
+  // and `looks` leaves pulled looks out. Without this read the Save dialog opened blank and the
+  // save renamed Janet Foutty's Look 155 to "Untitled Look" (Cynthia Dada, 2026-10-26). So read
+  // that one look's name, her description, the to-try mark and the team note by its id.
+  const listedLook = looks.find((l) => l.id === currentLookId) ?? null
+  const [pulledLook, setPulledLook] = useState<LookRow | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setPulledLook(null)
+    if (!currentLookId || listedLook) return
+    ;(async () => {
+      const { data } = await supabase.from('gp_looks')
+        .select('id, client_id, name, tags, notes_client, client_edited_fields, client_edited_at, to_try_at, created_by, source, raw, created_at, updated_at')
+        .eq('id', currentLookId).maybeSingle()
+      if (!data || cancelled) return
+      const note = await fetchTargetTeamNote('look', currentLookId)
+      if (!cancelled) setPulledLook({ ...(data as any), canvas_state: null, notes_internal: note || null })
+    })()
+    return () => { cancelled = true }
+  }, [currentLookId, listedLook])
+  const currentLook = listedLook ?? pulledLook
   const currentCapsule = capsules.find((c) => c.id === currentCapsuleId) ?? null
   // The GoodPix capsule this board is a rebuild OF (not a capsule being edited) — used for the
   // header, the button label and the name the Save dialog opens with.

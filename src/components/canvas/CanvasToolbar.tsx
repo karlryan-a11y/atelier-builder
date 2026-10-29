@@ -9,18 +9,19 @@ import {
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
-import { styleFromPastLooks } from '@/lib/style'
+import { styleHouse } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
 import type { CanvasNode, ClosetItemNode, PictureNode, TextNode } from '@/types/canvas'
 import { addPictureFilesToBoard, removePictureBackground } from '@/lib/addPicture'
 import { r2KeyOf } from '@/lib/imageUrls'
 import { BOARD_PRESETS } from '@/types/canvas'
+import { BRAND_LABEL_STYLE, type LabelStyle } from '@/lib/labelStyle'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
-// Amalfi Coast (the WSG brand script) is the default for every new label — first in the list
-// and used by handleAddText below, so manual labels match the AI-composed brand labels.
-const DEFAULT_FONT = "'Amalfi Coast', cursive"
+// Amalfi Coast (the WSG brand script) is first in the list and the starting font for a stylist
+// who has never styled a label. After that a new label takes her last style (lib/labelStyle.ts).
+const DEFAULT_FONT = BRAND_LABEL_STYLE.font_family
 const FONT_FAMILIES = [
   { value: DEFAULT_FONT, label: 'Amalfi Coast' },
   { value: "'Neue Haas', 'Helvetica Neue', Arial, sans-serif", label: 'Neue Haas' },
@@ -44,7 +45,7 @@ const TEXT_COLORS = [
 export function CanvasToolbar() {
   const {
     state, selectedNodeIds, setNodeImageUrl, addNode, undo, redo, past, future,
-    isDirty, reset, setCanvasSize, lastTextStyle, requestTextEdit,
+    isDirty, reset, setCanvasSize, newLabelStyle, requestTextEdit,
   } = useCanvasStore()
   const [styling, setStyling] = useState(false)
   // ✨ steps through real looks with the same mix: the same pieces pressed again = the next look.
@@ -119,9 +120,10 @@ export function CanvasToolbar() {
 
   const hasClosetItems = state.nodes.some((n) => n.type === 'closet_item')
 
-  // ✨ (ADR-0128). Arranges the pieces like a real look the team styled with the same mix of
-  // pieces, her own looks first, and labels only brands saved on the pieces. It never deletes:
-  // text and pictures stay, notes travel with their piece, and the whole change is ONE undo step.
+  // ✨ The house layout, the way the Michele sample looks were laid out (Amaia Anderson's request;
+  // Karl, 2026-10-27). Each piece gets its set spot and size and its brand in Amalfi Coast under
+  // it. It never deletes: text and pictures stay, notes travel with their piece, and the whole
+  // change is ONE undo step. Pressing again gives the mirror image.
   const handleStyle = async () => {
     if (styling || !hasClosetItems) return
     setStyling(true)
@@ -130,23 +132,29 @@ export function CanvasToolbar() {
       const pieceKey = store.state.nodes.filter((n) => n.type === 'closet_item')
         .map((n) => (n as ClosetItemNode).closet_item_id).sort().join(',')
       const attempt = styleRun && styleRun.key === pieceKey ? styleRun.attempt + 1 : 0
-      const displayOf = (id: string) => {
-        const n = store.state.nodes.find((x) => x.id === id) as ClosetItemNode | undefined
+      const photoOf = (id: string) => {
         const d = store.nodeDims[id]
-        if (!n || !d || !d.h) return null
-        const h = n.target_height ?? d.h * Math.abs(n.scale_y ?? n.scale)
-        return { w: (d.w / d.h) * h, h }
+        return d && d.w && d.h ? { w: d.w, h: d.h, content: store.nodeContent[id] ?? null } : null
       }
-      const r = await styleFromPastLooks({
-        nodes: store.state.nodes, board: store.state.canvas, clientId: activeClientId,
-        attempt, displayOf, imageUrls: store.imageUrls,
-      })
+      // Labels are measured in the font they are drawn in, the way Konva draws a line (alphabetic
+      // baseline centred on the font's 'M' box, line height 1), so a long brand never wraps and its
+      // swashes never reach the piece above.
+      await document.fonts?.load("26px 'Amalfi Coast'").catch(() => null)
+      const ctx = document.createElement('canvas').getContext('2d')
+      const measure = ctx
+        ? (text: string, size: number) => {
+            ctx.font = `${size}px 'Amalfi Coast', cursive`
+            ctx.textBaseline = 'alphabetic'
+            const M = ctx.measureText('M'), m = ctx.measureText(text)
+            const base = ((M.fontBoundingBoxAscent ?? M.actualBoundingBoxAscent) - (M.fontBoundingBoxDescent ?? M.actualBoundingBoxDescent)) / 2 + size / 2
+            return { width: m.width, top: base - m.actualBoundingBoxAscent, bottom: base + m.actualBoundingBoxDescent, left: -m.actualBoundingBoxLeft, right: m.actualBoundingBoxRight }
+          }
+        : undefined
+      const r = await styleHouse({ nodes: store.state.nodes, board: store.state.canvas, attempt, photoOf, measure })
       store.setCanvasState({ ...store.state, nodes: r.nodes })
-      const note = r.template
-        ? `Arranged like ${r.template.look_name ?? 'a past look'}${r.sameClient ? ' (hers)' : ''}, option ${r.option + 1} of ${r.of}. Press again for another.`
-        : 'No past look has these pieces, so the standard arrangement was used.'
-      const short = r.template ? `${r.option + 1}/${r.of}` : 'standard'
-      setStyleRun({ key: pieceKey, attempt, note, short })
+      const missing = r.unlabeled ? ` ${r.unlabeled} piece${r.unlabeled === 1 ? ' has' : 's have'} no brand saved, so no label.` : ''
+      const note = `${r.option === 0 ? 'House layout' : 'House layout, mirrored'}. Press again for the ${r.option === 0 ? 'mirror image' : 'first one'}.${missing}`
+      setStyleRun({ key: pieceKey, attempt, note, short: `${r.option + 1}/2` })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       alert(`Style failed: ${message}`)
@@ -156,14 +164,17 @@ export function CanvasToolbar() {
   }
 
   const handleAddText = () => {
+    // Starts with the font, size, bold and underline she last gave a label, like GoodPix
+    // (Cynthia Dada, 2026-10-20). Amalfi Coast 32, plain, until she has styled one.
+    const { font_family, font_size, bold, underline } = newLabelStyle()
     const node: TextNode = {
       id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'text',
       content: 'Text',
-      // Font ALWAYS starts as Amalfi Coast (the brand script) — a stylist can still change a
-      // specific label from the dropdown. Size still reuses the last one the stylist chose.
-      font_family: DEFAULT_FONT,
-      font_size: lastTextStyle?.font_size ?? 32,
+      font_family,
+      font_size,
+      ...(bold ? { bold } : {}),
+      ...(underline ? { underline } : {}),
       fill: '#1A1A1A',
       x: 600,
       y: 750,
@@ -257,7 +268,7 @@ export function CanvasToolbar() {
         onClick={handleStyle}
         disabled={styling || !hasClosetItems}
         className="p-1.5 hover:bg-tile rounded-sm transition-colors disabled:opacity-30"
-        title={styleRun?.note ?? 'Style: arrange the pieces and brand labels like a past look. Nothing is deleted.'}
+        title={styleRun?.note ?? 'Style: lay the pieces out the house way, each brand under its piece. Nothing is deleted.'}
       >
         {styling ? (
           <Sparkles className="h-3.5 w-3.5 text-blush animate-pulse" />
@@ -334,11 +345,15 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
     <>
       {singleNode?.type === 'text' && (() => {
         const tn = singleNode as TextNode
+        // This label's style with one change, remembered for the next label she adds.
+        const styleWith = (change: Partial<LabelStyle>): LabelStyle => ({
+          font_family: tn.font_family, font_size: tn.font_size, bold: !!tn.bold, underline: !!tn.underline, ...change,
+        })
         return (
           <>
             <select
               value={tn.font_family}
-              onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle({ font_family: e.target.value, font_size: tn.font_size }) }}
+              onChange={(e) => { updateNode(tn.id, { font_family: e.target.value }); rememberTextStyle(styleWith({ font_family: e.target.value })) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer max-w-[100px]"
             >
               {FONT_FAMILIES.map((f) => (
@@ -347,11 +362,13 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
             </select>
             <select
               value={tn.font_size}
-              onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle({ font_family: tn.font_family, font_size: Number(e.target.value) }) }}
+              onChange={(e) => { updateNode(tn.id, { font_size: Number(e.target.value) }); rememberTextStyle(styleWith({ font_size: Number(e.target.value) })) }}
               className="text-[10px] bg-tile rounded-sm px-1.5 py-1 border-none outline-none cursor-pointer w-12"
             >
-              {FONT_SIZES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+              {/* A ✨ label is 26 (the Michele looks' size), which is not in the list: show it as
+                  it is rather than as 12. */}
+              {[...new Set([...FONT_SIZES, tn.font_size])].sort((a, b) => a - b).map((s) => (
+                <option key={s} value={s}>{Math.round(s * 10) / 10}</option>
               ))}
             </select>
             <div className="flex items-center gap-0.5 ml-1">
@@ -370,14 +387,14 @@ function SelectionControls({ nodes, removingBg, onRemoveBg, onRemovePictureBg, o
 
             <div className="w-px h-4 bg-border mx-0.5" />
             <button
-              onClick={() => updateNode(tn.id, { bold: !tn.bold })}
+              onClick={() => { updateNode(tn.id, { bold: !tn.bold }); rememberTextStyle(styleWith({ bold: !tn.bold })) }}
               className={`p-1.5 rounded-sm transition-colors ${tn.bold ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
               title="Bold"
             >
               <Bold className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => updateNode(tn.id, { underline: !tn.underline })}
+              onClick={() => { updateNode(tn.id, { underline: !tn.underline }); rememberTextStyle(styleWith({ underline: !tn.underline })) }}
               className={`p-1.5 rounded-sm transition-colors ${tn.underline ? 'bg-[#1A1A1A] text-white' : 'hover:bg-tile text-text-muted'}`}
               title="Underline"
             >

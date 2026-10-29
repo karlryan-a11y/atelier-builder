@@ -1,9 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
-import { convertGoodPixLayout, piecesInLayout, type GpLayout } from '@/lib/goodpixLayout'
+import { convertGoodPixLayout, fitPiecesToPhotos, needsFit, piecesInLayout, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
 import { selectRestylePieces, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { storedProxyUrl } from '@/lib/imageUrls'
+import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
+import { measurePhoto } from '@/lib/photoContent'
 
 /**
  * THE BOARD A GOODPIX LOOK OPENS ON — for Restyle (a pulled look) and Rebuild in canvas alike, so
@@ -21,6 +23,8 @@ import { storedProxyUrl } from '@/lib/imageUrls'
  */
 export interface GoodPixBoard {
   canvas: LookCanvasState
+  /** node id -> photo url for the canvas, resolved the way every board does (resolveClosetImageUrls). */
+  imageUrls: Record<string, string>
   /** Pieces that were in the look and are left off because she no longer has them. */
   omitted: OmittedPiece[]
   /** Pieces GoodPix listed for the look that are NOT in its picture: not placed, only named. */
@@ -71,7 +75,8 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
   if (!layout || !(layout.objects ?? []).length) {
     const pieces = await readPieces(closetItemIds, clientId)
     const { keep, omitted } = selectRestylePieces(closetItemIds, pieces)
-    return { canvas: buildCanvasFromClosetItems(keep), omitted, notInPicture: [], fromLayout: false, pictures: 0, texts: 0 }
+    const canvas = buildCanvasFromClosetItems(keep)
+    return { canvas, imageUrls: await resolveClosetImageUrls(canvas), omitted, notInPicture: [], fromLayout: false, pictures: 0, texts: 0 }
   }
 
   // Everything the layout could be showing: the look's list, GoodPix's pool, explicit ids, and
@@ -96,6 +101,32 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
     idPrefix: lookId.slice(-6),
   })
 
+  // Each piece is fitted into the box GoodPix drew, measured against the photo the board will
+  // load. Cynthia Dada, 2026-10-21: a replaced or differently cropped photo came in too big or
+  // tiny (lib/goodpixLayout.ts fitPiecesToPhotos). A piece with GoodPix's own photo is unchanged.
+  const imageUrls = await resolveClosetImageUrls(conv.canvas)
+  const byUrl = new Map<string, Promise<PhotoSize | null>>()
+  const measure = (url: string) => {
+    if (!byUrl.has(url)) byUrl.set(url, measurePhoto(url))
+    return byUrl.get(url)!
+  }
+  const photos = new Map<string, PhotoSize>()
+  await Promise.all(Object.entries(imageUrls).map(async ([nodeId, url]) => {
+    const p = await measure(url)
+    if (p) photos.set(nodeId, p)
+  }))
+  // A piece that will be refitted is fitted to the piece GoodPix drew, not its whole box: GoodPix's
+  // own photo can have see-through space around the piece (the tester, 2026-10-25, Looks 11 and 24:
+  // the new jeans came in about 30% too tall). Only those photos are fetched.
+  const drawn = new Map<string, PhotoSize>()
+  await Promise.all(conv.boxes.map(async (b) => {
+    const p = photos.get(b.nodeId)
+    if (!b.drawnSrc || !p || !needsFit(b, p)) return
+    const gp = await measure(b.drawnSrc)
+    if (gp) drawn.set(b.nodeId, gp)
+  }))
+  const canvas = fitPiecesToPhotos(conv.canvas, conv.boxes, photos, drawn)
+
   const shown = new Set(inPicture)
   const notInPicture: OmittedPiece[] = closetItemIds
     .filter((id) => !shown.has(id))
@@ -103,5 +134,5 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
     .filter((p): p is NonNullable<typeof p> => !!p)
     .map((p) => ({ id: p.id, name: p.name, brand: p.brand, reason: 'not_in_picture' as const }))
 
-  return { canvas: conv.canvas, omitted, notInPicture, fromLayout: true, pictures: conv.pictures, texts: conv.texts }
+  return { canvas, imageUrls, omitted, notInPicture, fromLayout: true, pictures: conv.pictures, texts: conv.texts }
 }

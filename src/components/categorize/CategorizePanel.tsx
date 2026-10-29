@@ -20,12 +20,12 @@ import { EventDatesDialog } from './EventDatesDialog'
 import { formatEventDates } from '@/lib/eventDates'
 import { NO_HOME } from '@/hooks/useItemHomes'
 import { NestingTab } from './NestingTab'
-import { ReviewTab } from './ReviewTab'
+import { ReviewTab, useReviewDeletedLooks } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
-import { selectRestylePieces, type RestylePiece } from '@/lib/restyleSelection'
+import { boardPieceIds, restyleSavedBoard, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { searchByName } from '@/lib/lookSearch'
@@ -152,6 +152,8 @@ export function CategorizePanel() {
   // stays live regardless of which tab is open; the result is passed down to TransitionsTab.
   const transitions = useTransitions(activeClient?.id ?? null)
   const transitionCount = transitions.items.length + transitions.looks.length
+  // Looks she deleted from her lookbook, waiting in Review (lib/deletedLooks.ts): the tab carries the count.
+  const deletedLooks = useReviewDeletedLooks(activeClient?.id ?? null)
   // This panel stays mounted behind the canvas now (App.tsx), so it no longer re-reads everything
   // by being remounted. When it comes back into view, refresh in the background the lists the
   // canvas can change (hooks/useStyleTabRefresh.ts): a rebuilt look leaves the Transitions queue.
@@ -352,38 +354,44 @@ export function CategorizePanel() {
     setOpeningLookId(look.id)
     try {
       // The pieces AS THEY STAND NOW, not as the look remembers them.
-      const { data: pieceRows, error: pErr } = await supabase
-        .from('gp_closet_items')
-        .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
-        .in('id', look.closetItemIds.slice(0, 500))
-      if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return }
-      const pieces = new Map<string, RestylePiece>(
-        (pieceRows ?? []).map((r: any) => [r.id, {
-          id: r.id,
-          name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
-          brand: r.brand && r.brand !== 'None' ? r.brand : null,
-          transitionedAt: r.transitioned_at ?? null,
-          isDeleted: r.is_deleted ?? null,
-          deletedAt: r.deleted_at ?? null,
-        }]),
-      )
-      const { omitted } = selectRestylePieces(look.closetItemIds, pieces)
-      const gone = new Set(omitted.map((o) => o.id))
+      async function readPieces(ids: string[]): Promise<Map<string, RestylePiece> | null> {
+        const out = new Map<string, RestylePiece>()
+        for (let i = 0; i < ids.length; i += 200) {   // a big .in() fails silently: chunk it
+          const { data: pieceRows, error: pErr } = await supabase
+            .from('gp_closet_items')
+            .select('id, name, name_override, brand, transitioned_at, is_deleted, deleted_at')
+            .in('id', ids.slice(i, i + 200))
+          if (pErr) { alert('Could not read this look’s pieces: ' + pErr.message); return null }
+          for (const r of (pieceRows ?? []) as any[]) {
+            out.set(r.id, {
+              id: r.id,
+              name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
+              brand: r.brand && r.brand !== 'None' ? r.brand : null,
+              transitionedAt: r.transitioned_at ?? null,
+              isDeleted: r.is_deleted ?? null,
+              deletedAt: r.deleted_at ?? null,
+            })
+          }
+        }
+        return out
+      }
+      let omitted: OmittedPiece[] = []
 
       if (look.source === 'builder') {
         // Restyle IN PLACE: same row, so saving clears its transition block and the look
-        // returns to the lookbook in its old slot.
+        // returns to the lookbook in its old slot. Only a transitioned piece comes off her own
+        // board; an archived picture she placed and her hidden pieces stay as they were
+        // (lib/restyleSelection.ts restyleSavedBoard). The pieces are read by the BOARD's own
+        // ids, so a piece the stored closet_item_ids does not list is not taken for missing.
         const { data } = await supabase.from('gp_looks').select('canvas_state').eq('id', look.id).single()
         const canvasState = (data?.canvas_state ?? null) as LookCanvasState | null
         if (!canvasState) { alert('This look has no saved canvas to restyle.'); return }
-        const stripped: LookCanvasState = {
-          ...canvasState,
-          nodes: canvasState.nodes.filter(
-            (n: any) => n.type !== 'closet_item' || !gone.has(n.closet_item_id),
-          ),
-        }
-        const imageUrls = await resolveClosetImageUrls(stripped)
-        useCanvasStore.getState().loadLook(look.id, stripped, imageUrls)
+        const pieces = await readPieces(boardPieceIds(canvasState))
+        if (!pieces) return
+        const restyled = restyleSavedBoard(canvasState, pieces)
+        omitted = restyled.omitted
+        const imageUrls = await resolveClosetImageUrls(restyled.canvas)
+        useCanvasStore.getState().loadLook(look.id, restyled.canvas, imageUrls)
       } else {
         // GoodPix look: never edited in place (ADR-0076 — a save would overwrite `raw` and lose
         // the original composed image). Rebuild from the pieces she still owns as a NEW look
@@ -403,7 +411,7 @@ export function CategorizePanel() {
             : 'We could not match any piece on this board to her collection, so there is nothing to restyle yet. Tell Karl which look this is.')
           return
         }
-        const imageUrls = await resolveClosetImageUrls(board.canvas)
+        const imageUrls = board.imageUrls
         useCanvasStore.getState().loadLookAsReplacement(look.id, card.siblings.map((s) => s.id), board.canvas, imageUrls)
         useCanvasStore.getState().setRestyleReference({
           lookId: look.id, lookName: look.name, imageUrl: look.image,
@@ -443,7 +451,7 @@ export function CategorizePanel() {
       // is one — Cynthia Dada, 2026-09-17: "I clicked rebuild in canvas for a look created on
       // good pix and this is what showed up" — and the grid only when there is not.
       const board = await buildGoodPixBoard(look.id, look.closetItemIds)
-      const imageUrls = await resolveClosetImageUrls(board.canvas)
+      const imageUrls = board.imageUrls
       // REBUILD REPLACES, IT DOES NOT DUPLICATE. ADR-0148. Cynthia Dada, 2026-09-23: "I'm trying
       // to update the pants in this look by restyling but when I go to save, it acts like I'm
       // saving a new look, not updating a look." She was right: this used loadLookAsNew, so the
@@ -903,7 +911,8 @@ export function CategorizePanel() {
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Review</p>
               <p className="text-[10px] text-[#888] leading-relaxed">
-                Clean up her collection: recover pieces hidden by mistake, fill in missing designers or
+                See the looks she deleted from her lookbook and why, and restore or clear each one. Clean
+                up her collection: recover pieces hidden by mistake, fill in missing designers or
                 categories so search works, and fix color mismatches. Use the pills on the right.
               </p>
             </>
@@ -1297,6 +1306,9 @@ export function CategorizePanel() {
                 {m === 'transitions' && transitionCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{transitionCount}</span>
                 )}
+                {m === 'review' && deletedLooks.waiting.length > 0 && (
+                  <span data-review-count className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle" title="Looks she deleted, waiting for review">{deletedLooks.waiting.length}</span>
+                )}
                 {m === 'residences' && residenceReview.openCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{residenceReview.openCount}</span>
                 )}
@@ -1412,7 +1424,7 @@ export function CategorizePanel() {
         ) : mode === 'review' ? (
           <ErrorBoundary label="Review couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
-              <ReviewTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
+              <ReviewTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} deleted={deletedLooks} />
             </div>
           </ErrorBoundary>
         ) : mode === 'transitions' ? (

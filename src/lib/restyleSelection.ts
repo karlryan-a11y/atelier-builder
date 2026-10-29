@@ -28,6 +28,8 @@
  * difference even though we cannot yet compute it.
  */
 
+import type { LookCanvasState } from '@/types/canvas'
+
 export type OmitReason = 'transitioned' | 'deleted' | 'missing'
   /** GoodPix listed it for the look but it is not in the picture (a piece tried and taken out). */
   | 'not_in_picture'
@@ -101,6 +103,43 @@ export function omitReason(piece: RestylePiece): OmitReason | null {
   if (piece.transitionedAt) return 'transitioned'
   if (piece.isDeleted || piece.deletedAt) return 'deleted'
   return null
+}
+
+/**
+ * RESTYLE AN ATELIER LOOK ON ITS OWN SAVED BOARD: only a transitioned piece comes off.
+ *
+ * Cynthia Dada, 2026-10-26, Janet Foutty Looks 316 and 319: "I need the image to stay on the
+ * board." She adds her own picture of the top and sweater together as a piece, hides the separate
+ * garments (ADR-0146) and archives the picture so it stays out of Janet's closet. The rule above
+ * treats a deleted piece as not hers, so Restyle took her picture off and left only the hidden
+ * garments behind.
+ *
+ * That rule is right for a GoodPix pool, which is not the look's composition. A saved Atelier
+ * board IS the composition: every piece on it was put there by her, and Edit opens it with an
+ * archived piece in place. So Restyle does the same and leaves her board alone except for what
+ * the transition took away (and a piece with no row, which cannot be drawn). Nodes are copied
+ * untouched, so a hidden piece stays hidden and her picture keeps its spot and size.
+ * scripts/check-restyle-keeps-image.mjs holds it.
+ */
+export function restyleSavedBoard(
+  canvasState: LookCanvasState,
+  pieces: Map<string, RestylePiece>,
+): { canvas: LookCanvasState; omitted: OmittedPiece[] } {
+  const omitted = selectRestylePieces(boardPieceIds(canvasState), pieces).omitted.filter((o) => o.reason !== 'deleted')
+  const gone = new Set(omitted.map((o) => o.id))
+  return {
+    canvas: { ...canvasState, nodes: canvasState.nodes.filter((n) => n.type !== 'closet_item' || !gone.has(n.closet_item_id)) },
+    omitted,
+  }
+}
+
+/**
+ * Every piece on a saved board, hidden ones included. Restyle reads the pieces by THIS list, not
+ * by `closet_item_ids`: a piece on the board that the column does not list (a stale column, or the
+ * read cap) would otherwise have no row in the map and be dropped as missing.
+ */
+export function boardPieceIds(canvasState: LookCanvasState): string[] {
+  return [...new Set(canvasState.nodes.flatMap((n) => (n.type === 'closet_item' ? [n.closet_item_id] : [])))]
 }
 
 /** The sentence on the canvas panel. Here so the build guard checks the shipped wording. */

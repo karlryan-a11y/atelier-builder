@@ -234,7 +234,7 @@ export interface LayoutConversion {
    * The Style button learns arrangements from these (lib/styleFromTemplates.ts); the node itself
    * cannot say its width, because that depends on which photo of the piece Atelier loads.
    */
-  boxes: { nodeId: string; pieceId: string; cx: number; cy: number; w: number; h: number; rotation: number; flipped: boolean }[]
+  boxes: { nodeId: string; pieceId: string; cx: number; cy: number; w: number; h: number; rotation: number; flipped: boolean; srcW: number; srcH: number; drawnSrc: string | null }[]
 }
 
 export interface ConvertOptions {
@@ -298,7 +298,9 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
         }
         nodes.push(node)
         const [ccx, ccy] = at(b, b.w / 2, b.h / 2)
-        boxes.push({ nodeId: node.id, pieceId: piece, cx: ccx * k, cy: ccy * k, w: b.w * k, h: b.h * k, rotation: b.angle, flipped: !!o.flipX })
+        // The photo GoodPix drew here, unless it drew only a crop of it (then the box is all we know).
+        const drawnSrc = o.cropX || o.cropY ? null : (o.mirror ? opts.mirrorUrl(o.mirror) : (o.src ? unwrapGoodPixUrl(o.src) : null))
+        boxes.push({ nodeId: node.id, pieceId: piece, cx: ccx * k, cy: ccy * k, w: b.w * k, h: b.h * k, rotation: b.angle, flipped: !!o.flipX, srcW: o.width ?? 0, srcH: o.height ?? 0, drawnSrc: drawnSrc && !drawnSrc.startsWith('data:') ? drawnSrc : null })
         if (!placed.includes(piece)) placed.push(piece)
         return
       }
@@ -353,4 +355,89 @@ export function convertGoodPixLayout(layout: GpLayout, opts: ConvertOptions): La
 
   canvas.nodes = nodes
   return { canvas, placed, leftOff, pictures, texts, skipped, boxes }
+}
+
+// ── fitting the photo Atelier has ──────────────────────────────────────────────────────────
+
+/** A photo as the board will load it: natural size, and the box its visible (opaque) part fills. */
+export interface PhotoSize {
+  width: number
+  height: number
+  content?: { x: number; y: number; width: number; height: number } | null
+}
+
+// The board's own clamp on a target_height scale (LookCanvas.tsx, render/composite.ts).
+const MIN_SCALE = 0.03, MAX_SCALE = 3.0
+// Same shape as the photo GoodPix drew, within this, means it IS that photo: leave it alone.
+const SAME_SHAPE = 0.03
+// A fit that would change the piece's size, or move its centre, by less than this share of its
+// size is not a fix: the piece is already where GoodPix drew it, so it is left exactly as converted.
+const SAME_PLACE = 0.08
+
+/**
+ * EVERY PIECE IN ITS GOODPIX BOX, WHATEVER PHOTO ATELIER HAS FOR IT.
+ *
+ * Cynthia Dada, 2026-10-21, Chris Cadieux Looks 11 and 24: after she replaced the jeans photo the
+ * jeans came in too big, and the Magnanni belt and Tom Ford loafer came in tiny though their photos
+ * were never touched. A converted piece only carries the box HEIGHT (`target_height`), and the board
+ * sizes whatever photo it loads by height alone. That is right only for GoodPix's own photo. A
+ * replaced photo, another crop, or transparent space around the piece comes out the wrong size.
+ *
+ * So, once the photos are measured (lib/goodpixBoard.ts), a piece whose photo is NOT the shape
+ * GoodPix drew has its visible part fitted inside the box (the whole of it, centred) by rewriting
+ * x, y and target_height only. The board's sizing rule is unchanged. A piece whose photo is the
+ * shape GoodPix drew, or could not be measured, is left exactly as converted.
+ *
+ * THE BOX IS NOT ALWAYS THE PIECE. The tester on the preview, 2026-10-25, Looks 11 and 24: the new
+ * jeans then ran from the shirt down over both loafers, about 30% too tall. GoodPix's own jeans
+ * photo had see-through space around the jeans, so its box is bigger than the jeans GoodPix drew.
+ * So when the photo GoodPix drew was measured too (`drawn`, keyed by node id), the target is the
+ * part of the box its visible piece filled; without it, the whole box as before.
+ *
+ * A piece the fit would barely change (SAME_PLACE) is already where GoodPix drew it, so it is
+ * left exactly as converted: the tester, 2026-10-26, Danielle York Look 24's high-top.
+ */
+export function fitPiecesToPhotos(canvas: LookCanvasState, boxes: LayoutConversion['boxes'], photos: Map<string, PhotoSize>, drawn?: Map<string, PhotoSize>): LookCanvasState {
+  const boxById = new Map(boxes.map((b) => [b.nodeId, b]))
+  const nodes = canvas.nodes.map((n) => {
+    if (n.type !== 'closet_item' || !n.target_height) return n
+    const box = boxById.get(n.id)
+    const photo = photos.get(n.id)
+    if (!box || !photo || !needsFit(box, photo)) return n
+    const c = visiblePart(photo)
+    // The box is [0, W] x [0, H] in the node's own frame (turned, and mirrored when flipped): the
+    // converter anchors every piece that way. The target is the part of it GoodPix's piece filled.
+    const W = box.w, H = n.target_height
+    const gp = drawn?.get(n.id)
+    const g = gp && gp.width > 0 && gp.height > 0 ? visiblePart(gp) : null
+    const t = g
+      ? { x: (g.x / gp!.width) * W, y: (g.y / gp!.height) * H, width: (g.width / gp!.width) * W, height: (g.height / gp!.height) * H }
+      : { x: 0, y: 0, width: W, height: H }
+    // Fit the visible part inside the target, centred.
+    const s = Math.min(Math.max(Math.min(t.width / c.width, t.height / c.height), MIN_SCALE), MAX_SCALE)
+    const du = t.x + (t.width - c.width * s) / 2 - c.x * s
+    const dv = t.y + (t.height - c.height * s) / 2 - c.y * s
+    // Already in place (the tester, 2026-10-26, Danielle York Look 24: a high-top whose photo was
+    // never replaced was nudged a few pixels and drew grainy): leave it exactly as live opens it.
+    const s0 = Math.min(Math.max(H / photo.height, MIN_SCALE), MAX_SCALE)
+    const size = Math.max(c.width, c.height) * s0
+    const moved = Math.hypot(du + (c.x + c.width / 2) * (s - s0), dv + (c.y + c.height / 2) * (s - s0))
+    if (Math.abs(s / s0 - 1) <= SAME_PLACE && moved <= SAME_PLACE * size) return n
+    const r = (n.rotation * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r)
+    const u = n.flipped ? -du : du
+    return { ...n, x: n.x + cos * u - sin * dv, y: n.y + sin * u + cos * dv, target_height: s * photo.height }
+  })
+  return { ...canvas, nodes }
+}
+
+/** Will fitPiecesToPhotos move this piece? Only when its photo is not the shape GoodPix drew. */
+export function needsFit(box: LayoutConversion['boxes'][number], photo: PhotoSize): boolean {
+  if (!(photo.width > 0) || !(photo.height > 0) || !(box.w > 0)) return false
+  return !(box.srcW > 0 && box.srcH > 0
+    && Math.abs((photo.width / photo.height) / (box.srcW / box.srcH) - 1) <= SAME_SHAPE)
+}
+
+function visiblePart(p: PhotoSize): { x: number; y: number; width: number; height: number } {
+  return p.content && p.content.width > 0 && p.content.height > 0
+    ? p.content : { x: 0, y: 0, width: p.width, height: p.height }
 }
