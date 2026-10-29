@@ -367,12 +367,13 @@ export function IntakeInbox() {
   // No camera piece matches: the pick screen is hidden, so the last piece and its Approve button are not left on screen.
   const noCamMatch = searching && camMode && cap.items.length > 0 && capShown.length === 0
   const shownItems = useMemo(() => (filter === 'pending_review' ? searchReview(items, pieceQ, intakeSearchFields) : items), [items, pieceQ, filter])
-  // The pick screen opens the piece selected in the sidebar: when that piece is not in the results (or was just approved), open the first match.
+  // The pick screen opens the piece selected in the sidebar: when that piece is not in the results or the chosen filter (or was just approved), open the first match.
+  // After an approval the review panel opens the next piece of the whole list; under "Ready: same product" that could be a piece with no retailer page (Paige, 2026-10-28).
   useEffect(() => {
-    const shown = capShown.filter(retailOk)
-    if (!searching || !camMode || !shown.length) return
+    const shown = capList.filter(retailOk)
+    if ((!searching && retailView === 'all') || !camMode || !shown.length) return
     if (!shown.some((i) => i.id === cap.selectedId)) tellFrame({ type: 'select', id: shown[0].id })
-  },[searching, camMode, capShown, cap.selectedId, retailView])
+  },[searching, camMode, capList, cap.selectedId, retailView])
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
