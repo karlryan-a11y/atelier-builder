@@ -49,8 +49,23 @@ export const STANDARD_COLLECTIONS: StdCategory[] = [
   { slug: 'resort-and-beach', label: 'Resort & Beach' },
 ]
 
-/** Which tree her Wardrobe uses: gp_clients.raw.closet_tree. Unset is the women's tree; 'men' and 'off' keep today's closet. */
-export function closetTreeOf(closetTree: string | null | undefined): { kind: TreeKind; categories: StdCategory[]; subs: StdSub[] } | null {
+/** A piece only a women's closet holds (a dress, not a dress shirt; a skirt, heels, a handbag). Same patterns as atelier-looks. */
+const WOMENS_DRESS = / (dress|dresses) (?!shirts? |trousers? |pants? |shoes? |socks? |slacks |coats? |boots? |booties? |loafers? |shorts? |jackets? |blazers? |belts? |watch)/
+const WOMENS_ONLY = / (skirts?|blouses?|gowns?|bikinis?|tankinis?|camisoles?|bras?|bralettes?|heels?|pumps?|stilettos?|slingbacks?|handbags?|purses?|clutch|clutches|minaudieres?) /
+export function wearsWomens(pieces: { name?: string | null; name_override?: string | null; category?: string | null; custom_categories?: string[] | null }[]): boolean {
+  return pieces.some((p) => {
+    const w = ` ${[p.name_override || p.name || '', p.category ?? '', ...(p.custom_categories ?? [])].join(' ').toLowerCase().replace(/[^a-z]+/g, ' ').trim()} `
+    return WOMENS_DRESS.test(w) || WOMENS_ONLY.test(w)
+  })
+}
+
+/**
+ * Which tree her Wardrobe uses: gp_clients.raw.closet_tree. 'women' switches her on; 'men' and 'off'
+ * keep today's closet. Unset is the women's tree only when her closet holds a women-only piece
+ * (`womens`), so a men's client keeps today's closet until the men's list is in.
+ */
+export function closetTreeOf(closetTree: string | null | undefined, womens = true): { kind: TreeKind; categories: StdCategory[]; subs: StdSub[] } | null {
+  if (closetTree == null && !womens) return null
   const v = String(closetTree ?? 'women').trim().toLowerCase()
   if (v !== 'women' && v !== 'men') return null
   const t = TREES[v]

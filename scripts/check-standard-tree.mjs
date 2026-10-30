@@ -35,11 +35,17 @@ if (src) {
   need(t.WOMEN_SUBS.length === 103, `103 women's sub-categories; got ${t.WOMEN_SUBS.length}`)
   need(t.STANDARD_COLLECTIONS.map((c) => c.label).join(',') === 'Eveningwear,Resort & Beach', 'Collections are Eveningwear and Resort & Beach')
   need(t.closetTreeOf(null)?.kind === 'women' && t.closetTreeOf('off') === null, 'unset is the women\'s tree, off keeps today\'s closet')
+  // A men's closet (no women-only piece) keeps today's pickers until the men's list is in.
+  need(typeof t.wearsWomens === 'function' && !t.wearsWomens([{ name: 'Navy Dress Shirt' }, { name: 'Linen Blend Dress Pant' }]) && t.wearsWomens([{ name: 'Midi Skirt' }]), 'wearsWomens tells a men\'s closet from a women\'s')
+  need(typeof t.wearsWomens === 'function' && t.closetTreeOf(null, false) === null && t.closetTreeOf('women', false)?.kind === 'women', 'a men\'s closet keeps today\'s pickers unless switched on')
+  need(/wearsWomens/.test(read('src/hooks/useClosetTree.ts')), 'useClosetTree reads whether her closet is a women\'s one')
 
   // The same list, word for word, as her Wardrobe page and the camera.
   const block = (s) => (s.match(/const WOMEN_LIST[\s\S]*?\n\]/) || [''])[0]
   const looks = path.join(ROOT, '..', 'atelier-looks', 'src/lib/standardTree.ts')
+  const womensRules = (s) => (s.match(/const WOMENS_DRESS[^\n]*\nconst WOMENS_ONLY[^\n]*/) || [''])[0]
   if (existsSync(looks)) need(block(readFileSync(looks, 'utf8')) === block(src), 'the women\'s list differs from atelier-looks src/lib/standardTree.ts')
+  if (existsSync(looks)) need(womensRules(src) !== '' && womensRules(readFileSync(looks, 'utf8')) === womensRules(src), 'the women-only piece patterns differ from atelier-looks')
   else console.log('  standard tree: atelier-looks is not beside this checkout, compared this copy only')
   const wgip = path.join(ROOT, '..', 'wsg-dashboard', 'src/lib/captureV2/wgip.ts')
   if (existsSync(wgip)) {
