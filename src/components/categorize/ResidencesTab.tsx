@@ -21,7 +21,7 @@ interface Props {
   looks: TaggableLook[]
   categories: LookCategory[]
   review: ReturnType<typeof useResidenceReview>
-  assignLook: (lookId: string, categoryId: string, on: boolean) => void | Promise<void>
+  assignLook: (lookId: string, categoryId: string, on: boolean) => void | Promise<unknown>
 }
 
 type Filter = 'all' | 'high' | 'needs-eye' | 'aspen' | 'disagree'

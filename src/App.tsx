@@ -14,6 +14,7 @@ import { IntakeInbox } from '@/components/intake/IntakeInbox'
 import { ShopView } from '@/components/shopping/ShopView'
 import { CategorizePanel } from '@/components/categorize/CategorizePanel'
 import { AskAtelierButton } from '@/components/feedback/AskAtelierButton'
+import { PhoneSend } from '@/components/phone/PhoneSend'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useViewStore } from '@/stores/viewStore'
 import { useClientStore } from '@/stores/clientStore'
@@ -54,8 +55,26 @@ function StylePane({ active, layer, children }: { active: boolean; layer: 'base'
   )
 }
 
+// A phone, not an iPad or a computer: the widest iPhone is 440px wide, the narrowest iPad 744px.
+const PHONE_QUERY = '(max-width: 640px)'
+
+function usePhoneWidth(): boolean {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_QUERY).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_QUERY)
+    const on = () => setPhone(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return phone
+}
+
 function App() {
   const { user, loading, signOut } = useAuth()
+  // Style on a phone is the Send screen (components/phone/PhoneSend.tsx); "Full Style" opens the
+  // whole tool for the rest of the visit.
+  const phone = usePhoneWidth()
+  const [fullStyleOnPhone, setFullStyleOnPhone] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const styleTab = useViewStore((s) => s.styleTab)
@@ -158,6 +177,15 @@ function App() {
   // candidate on a styling assessment): they use the same builder UI, but RLS limits every client
   // read/write to the clients assigned to them in client_assignments.
   if (!['admin', 'stylist', 'support', 'stylist_scoped'].includes(user.role)) return <LoginPage />
+
+  if (activeView === 'style' && phone && !fullStyleOnPhone) {
+    return (
+      <div className="h-[100dvh] flex flex-col overflow-hidden">
+        <PhoneSend onFullTool={() => setFullStyleOnPhone(true)} />
+        <AskAtelierButton />
+      </div>
+    )
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

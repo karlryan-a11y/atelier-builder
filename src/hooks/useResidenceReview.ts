@@ -132,7 +132,7 @@ export function useResidenceReview(clientId: string | null, categories: Residenc
   const accept = useCallback(async (
     lookId: string,
     categoryIds: string[],
-    assign: (lookId: string, categoryId: string, on: boolean) => void | Promise<void>,
+    assign: (lookId: string, categoryId: string, on: boolean) => void | Promise<unknown>,
     by = 'stylist',
   ) => {
     if (categoryIds.length === 0) return

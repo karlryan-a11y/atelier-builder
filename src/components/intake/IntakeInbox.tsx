@@ -55,15 +55,21 @@ export function IntakeInbox() {
   const [queueChecked, setQueueChecked] = useState(false)
   const [queueClients, setQueueClients] = useState<Array<{ id: string; name: string; n: number }>>([])
   // The Queue's piece list and tabs live in the sidebar; the review page inside the frame reports them and takes the selection back (same origin).
-  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; find?: string; facets?: CapFacets; retail?: string }
+  type CapItem = { id: string; title: string; sub: string; thumb: string | null; chip: string; done?: boolean; find?: string; facets?: CapFacets; retail?: string; ready?: boolean; level?: string | null }
   const [cap, setCap] = useState<{ tab: 'todo' | 'attention' | 'done'; attention: number; total?: number; items: CapItem[]; selectedId: string | null }>({ tab: 'todo', attention: 0, items: [], selectedId: null })
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   // With a client chosen the list also carries that client's digitizing and finished pieces; they sit under their own switch so the pieces to act on are not buried.
   const [capView, setCapView] = useState<'todo' | 'done'>('todo')
   // Needs Review: show only pieces whose retailer page gave a description (with or without its photo), or only those without (Karl, 2026-10-27).
-  const [retailView, setRetailView] = useState<'all' | 'with' | 'without'>('all')
+  type RView = 'all' | 'ready_same' | 'ready_similar' | 'with' | 'without'
+  const [retailView, setRetailView] = useState<RView>('all')
   const hasRetail = (i: CapItem) => i.retail === 'both' || i.retail === 'desc'
-  const retailOk = (i: CapItem) => retailView === 'all' || (retailView === 'with') === hasRetail(i)
+  // Ready (Karl, 2026-10-28): retailer description found and the details rewritten by the new system; Paige approves these first.
+  // Split by how sure the match is (Karl, 2026-10-28): same product or probably the same, versus a similar piece (color or details may differ), a page
+  // that could not be fully checked, or a resale listing's copy. Paige approves the same-product ones first.
+  const sameLevel = (i: CapItem) => i.level === 'same' || i.level === 'probably'
+  const viewOk = (k: RView, i: CapItem) => k === 'all' || (k === 'ready_same' ? !!i.ready && sameLevel(i) : k === 'ready_similar' ? !!i.ready && !sameLevel(i) : (k === 'with') === hasRetail(i))
+  const retailOk = (i: CapItem) => viewOk(retailView, i)
   // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
   const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
   // Search the pieces waiting in Needs Review by brand, color or style (Paige, 2026-10-26: Barbie had 1,338 to scroll). Both lists, every piece.
@@ -361,12 +367,13 @@ export function IntakeInbox() {
   // No camera piece matches: the pick screen is hidden, so the last piece and its Approve button are not left on screen.
   const noCamMatch = searching && camMode && cap.items.length > 0 && capShown.length === 0
   const shownItems = useMemo(() => (filter === 'pending_review' ? searchReview(items, pieceQ, intakeSearchFields) : items), [items, pieceQ, filter])
-  // The pick screen opens the piece selected in the sidebar: when that piece is not in the results (or was just approved), open the first match.
+  // The pick screen opens the piece selected in the sidebar: when that piece is not in the results or the chosen filter (or was just approved), open the first match.
+  // After an approval the review panel opens the next piece of the whole list; under "Ready: same product" that could be a piece with no retailer page (Paige, 2026-10-28).
   useEffect(() => {
-    const shown = capShown.filter(retailOk)
-    if (!searching || !camMode || !shown.length) return
+    const shown = capList.filter(retailOk)
+    if ((!searching && retailView === 'all') || !camMode || !shown.length) return
     if (!shown.some((i) => i.id === cap.selectedId)) tellFrame({ type: 'select', id: shown[0].id })
-  },[searching, camMode, capShown, cap.selectedId, retailView])
+  },[searching, camMode, capList, cap.selectedId, retailView])
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
@@ -509,11 +516,18 @@ export function IntakeInbox() {
                     </div>
                   )}
                   {tab.key === 'pending_review' && cap.items.some(i => i.retail !== undefined) && (
+                    <>
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['all', 'All', cap.items.length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => k === 'all' || (k === 'with') === hasRetail(i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
+                    <div className="mt-1 mx-3 flex gap-1.5">
+                      {([['ready_same', 'Ready: same product', cap.items.filter(i => !!i.ready && sameLevel(i)).length], ['ready_similar', 'Ready: similar', cap.items.filter(i => !!i.ready && !sameLevel(i)).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      ))}
+                    </div>
+                    </>
                   )}
                   {searching && cap.items.length > 0 && capList.length === 0 && <div className="mt-1 mx-4 text-[11px] text-[#888]">No pieces match. Try one word, like a brand or a color.</div>}
                   {capList.length > 0 && (

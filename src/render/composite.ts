@@ -12,6 +12,7 @@ import Konva from 'konva'
 import type { LookCanvasState, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 import { toKonvaConfig, pictureKonvaAttrs } from '@/components/canvas/CanvasAdapter'
 import { loadBoardImage } from '@/lib/loadBoardImage'
+import { bakeWithShrunkPhotos } from '@/lib/bakeShrink'
 
 // The ONE board loader (lib/loadBoardImage, ADR-0168): CORS always, one cache-busted retry,
 // never a tainted fallback. A tainted picture makes toDataURL return "" and the whole bake blank;
@@ -153,7 +154,9 @@ export async function renderCanvasComposite(
   layer.draw()
 
   try {
-    const pngDataUrl = stage.toDataURL({ x: 0, y: 0, width: BW, height: BH, pixelRatio, mimeType: 'image/png' })
+    // Shrunk pieces bake from properly shrunk photos (lib/bakeShrink), as a stylist Save does.
+    const pngDataUrl = bakeWithShrunkPhotos(stage.find('Image') as Konva.Image[], pixelRatio, () =>
+      stage.toDataURL({ x: 0, y: 0, width: BW, height: BH, pixelRatio, mimeType: 'image/png' }))
     const thumbnailDataUrl = await toJpegThumbnail(pngDataUrl)
     return {
       pngBase64: pngDataUrl.replace(/^data:image\/png;base64,/, ''),

@@ -7,6 +7,7 @@ import { useCanvasImages } from '@/hooks/useCanvasImages'
 import { useDroppable } from '@dnd-kit/core'
 import { toKonvaConfig, fromKonvaTransform, pictureKonvaAttrs, pictureFromKonva } from './CanvasAdapter'
 import { addPictureFilesToBoard } from '@/lib/addPicture'
+import { bakeWithShrunkPhotos } from '@/lib/bakeShrink'
 import { useClientStore } from '@/stores/clientStore'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
@@ -88,6 +89,8 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
         // neighbour-steal, whereas a missed earring is the actual complaint.
         sparse = opaque / (bw * bh) < 0.6
         bbox = { x: minX / s, y: minY / s, width: bw / s, height: bh / s }
+        // ✨ fits each piece by this visible box, not its photo's empty margin.
+        useCanvasStore.getState().setNodeContent(node.id, [bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height])
       }
     } catch { /* tainted/unreadable image → fall through to the default (full-rect) hit */ }
 
@@ -504,15 +507,16 @@ export function LookCanvas() {
       stage.size({ width: BW, height: BH })
 
       try {
-        // Export the full board — the board IS the composition.
-        return stage.toDataURL({
+        // Export the full board — the board IS the composition. Shrunk pieces bake from properly
+        // shrunk photos (lib/bakeShrink), so stripes stay straight; the board on screen is untouched.
+        return bakeWithShrunkPhotos(stage.find('Image') as Konva.Image[], pixelRatio, () => stage.toDataURL({
           x: 0,
           y: 0,
           width: BW,
           height: BH,
           pixelRatio,
           mimeType: 'image/png',
-        })
+        }))
       } finally {
         stage.scale({ x: prevScaleX, y: prevScaleY })
         stage.size({ width: prevWidth, height: prevHeight })

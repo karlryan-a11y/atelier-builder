@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas'
 import { createDefaultLookCanvas } from '@/types/canvas'
 import type { OmittedPiece } from '@/lib/restyleSelection'
+import { labelStyleFor, rememberLabelStyle, type LabelStyle } from '@/lib/labelStyle'
+import { useAuthStore } from '@/stores/authStore'
 
 /** The original look a rebuild stands in for, shown beside the board while she restyles it. */
 export interface RestyleReference {
@@ -37,6 +39,10 @@ function saveDraft(state: LookCanvasState) {
   } catch {}
 }
 
+function deviceStorage(): Storage | null {
+  try { return typeof localStorage === 'undefined' ? null : localStorage } catch { return null }
+}
+
 function loadImageUrls(): Record<string, string> {
   try {
     const saved = localStorage.getItem(IMAGE_URLS_KEY)
@@ -58,6 +64,9 @@ interface CanvasStoreState {
   // Natural pixel dimensions per node (reported by the canvas once each image loads). Used to
   // flip a piece IN PLACE — transient, not persisted, not in undo history.
   nodeDims: Record<string, { w: number; h: number }>
+  // The visible (non see-through) box of each piece's photo, in its natural pixels, measured by
+  // the canvas as the photo loads. ✨ fits pieces by it (lib/houseLayout.ts). Transient, like nodeDims.
+  nodeContent: Record<string, [number, number, number, number]>
   past: LookCanvasState[]
   future: LookCanvasState[]
   currentLookId: string | null
@@ -112,9 +121,6 @@ interface CanvasStoreState {
   // When a text node is added, we ask the canvas to open its inline editor immediately so the
   // stylist can just start typing (GoodPix-style). Transient UI hint, not persisted.
   pendingEditTextId: string | null
-  // Remembers the last font + size the stylist used on a text node, so the NEXT text they add
-  // reuses it (fast when labelling many items). Transient, session-only.
-  lastTextStyle: { font_family: string; font_size: number } | null
 }
 
 // Export function registered by LookCanvas, called by ChatPanel
@@ -208,6 +214,7 @@ interface CanvasStoreActions {
   moveLayer: (ids: string[], direction: 'up' | 'down' | 'top' | 'bottom') => void
   setNodeImageUrl: (id: string, url: string) => void
   setNodeDims: (id: string, w: number, h: number) => void
+  setNodeContent: (id: string, box: [number, number, number, number]) => void
   flipNodes: (ids: string[]) => void
   alignNodes: (ids: string[], edge: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
   distributeNodes: (ids: string[], axis: 'horizontal' | 'vertical') => void
@@ -236,7 +243,10 @@ interface CanvasStoreActions {
   setBackground: (color: string) => void
   setCanvasSize: (width: number, height: number) => void
   requestTextEdit: (id: string | null) => void
-  rememberTextStyle: (style: { font_family: string; font_size: number }) => void
+  // The style a new hand-made label starts with, and remembering it when she styles one. Saved
+  // per stylist on the device (lib/labelStyle.ts), so it carries over looks, capsules and reloads.
+  newLabelStyle: () => LabelStyle
+  rememberTextStyle: (style: LabelStyle) => void
 }
 
 type CanvasStore = CanvasStoreState & CanvasStoreActions
@@ -252,6 +262,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedNodeIds: [],
   imageUrls: loadImageUrls(),
   nodeDims: {},
+  nodeContent: {},
   past: [],
   future: [],
   currentLookId: null,
@@ -263,10 +274,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   buildingCapsule: false,
   isDirty: false,
   pendingEditTextId: null,
-  lastTextStyle: null,
 
   requestTextEdit: (id) => set({ pendingEditTextId: id }),
-  rememberTextStyle: (style) => set({ lastTextStyle: style }),
+  newLabelStyle: () => labelStyleFor(deviceStorage(), useAuthStore.getState().user?.id),
+  rememberTextStyle: (style) => rememberLabelStyle(deviceStorage(), useAuthStore.getState().user?.id, style),
 
   setCanvasState: (newState) => {
     const { state: current, past } = get()
@@ -345,6 +356,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const cur = nodeDims[id]
     if (cur && cur.w === w && cur.h === h) return
     set({ nodeDims: { ...nodeDims, [id]: { w, h } } })
+  },
+
+  setNodeContent: (id, box) => {
+    const { nodeContent } = get()
+    if (nodeContent[id]?.every((v, i) => v === box[i])) return
+    set({ nodeContent: { ...nodeContent, [id]: box } })
   },
 
   // Flip selected closet items horizontally IN PLACE — mirror without moving. A negative
