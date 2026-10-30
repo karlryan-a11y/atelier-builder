@@ -30,6 +30,18 @@ ok(r.grouped, 'Chris has categories, so the dropdown should be grouped')
 ok(mine.join(',') === 'Belts,Denim,Hats,Jackets,Pants,Shirts,Shoes,Shorts,Sweaters,Ties,Vests', `his own categories first, got ${mine.join(',')}`)
 ok(!mine.includes('Dresses') && !mine.includes('Jewelry') && !mine.includes('Skirts'), 'a category he does not use is listed as his')
 ok(r.more.map((c) => c.label).includes('Dresses'), 'nothing is removed: Dresses must still be offered under More')
+// Cynthia Dada, 2026-10-30: Anya Parkhurst's 16 bags are filed "handbags" (shown as Handbags), and
+// the empty built-in "bags" is also called Handbags, so Edit Item listed Handbags twice.
+const anyaCustom = [{ slug: 'handbags', label: 'Handbags' }, { slug: 'blazer', label: 'Blazer' }]
+const anyaUsed = new Set(['handbags', 'blazer', 'tops', 'shoes'])
+const anya = split(anyaCustom, anyaUsed)
+const anyaAll = [...anya.mine, ...anya.more]
+ok(anyaAll.filter((c) => c.label === 'Handbags').length === 1, `Anya's list shows Handbags ${anyaAll.filter((c) => c.label === 'Handbags').length} times, should be once`)
+ok(anya.mine.some((c) => c.slug === 'handbags'), "Anya's own Handbags (all her bags) must stay")
+ok(anya.more.some((c) => c.label === 'Hats'), 'the other built-in categories must stay')
+const both = split(anyaCustom, new Set([...anyaUsed, 'bags']))
+ok(both.mine.some((c) => c.slug === 'bags') && both.mine.some((c) => c.slug === 'handbags'), 'a built-in category her pieces use must never be hidden')
+ok(split([], new Set(['tops'])).more.some((c) => c.slug === 'bags'), 'a client with no handbags of her own still has Handbags')
 const empty = split([], new Set())
 ok(!empty.grouped && empty.more.length === Object.keys(labels).length - 1, 'a client with no categories gets the plain list')
 

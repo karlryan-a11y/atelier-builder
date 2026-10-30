@@ -24,7 +24,12 @@ export function splitCategoryChoices(
   used: Set<string> | null | undefined,
 ): { grouped: boolean; mine: CategoryChoice[]; more: CategoryChoice[] } {
   const customSlugs = new Set(custom.map((c) => c.slug))
-  const fixedNotCustom = FIXED.filter((f) => !customSlugs.has(f.slug))
+  // One name, one choice (Cynthia Dada, 2026-10-30): Anya Parkhurst's bags are filed "handbags",
+  // read as Handbags, and the empty built-in "bags" is also called Handbags, so the list said
+  // Handbags twice. A built-in her pieces don't use steps aside for her one of the same name.
+  const customLabels = new Set(custom.map((c) => c.label.trim().toLowerCase()))
+  const fixedNotCustom = FIXED.filter((f) => !customSlugs.has(f.slug)
+    && !(customLabels.has(f.label.toLowerCase()) && !used?.has(f.slug)))
   if (!used || used.size === 0) return { grouped: false, mine: custom, more: fixedNotCustom }
   const mine = [...fixedNotCustom.filter((f) => used.has(f.slug)), ...custom]
     .sort((a, b) => a.label.localeCompare(b.label))
