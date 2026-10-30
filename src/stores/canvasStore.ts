@@ -15,6 +15,9 @@ export interface RestyleReference {
   omitted: OmittedPiece[]
   /** GoodPix listed these for the look but they are not in its picture; not placed. */
   notInPicture?: OmittedPiece[]
+  /** On an Atelier look: `notInPicture` are pieces she let go of that sat off the side of the
+   *  board, taken off too. */
+  parked?: boolean
   /** True when the board is the stored GoodPix arrangement, false for the plain grid. */
   fromLayout?: boolean
   /** How many pulled looks this one rebuild answers (1 unless duplicates were collapsed). */

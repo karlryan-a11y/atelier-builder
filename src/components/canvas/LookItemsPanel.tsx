@@ -200,7 +200,9 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
         {(reference.notInPicture?.length ?? 0) > 0 && (
           <details className="mt-1.5">
             <summary className="cursor-pointer text-[10px] text-[#aaa] leading-relaxed">
-              {reference.notInPicture!.length} more {reference.notInPicture!.length === 1 ? 'piece was' : 'pieces were'} listed in GoodPix but not in the picture, so {reference.notInPicture!.length === 1 ? 'it is' : 'they are'} not on the board
+              {reference.parked
+                ? `${reference.notInPicture!.length} more ${reference.notInPicture!.length === 1 ? 'piece' : 'pieces'} she let go of sat off the side of the board, not in the picture, and ${reference.notInPicture!.length === 1 ? 'was' : 'were'} taken off too`
+                : `${reference.notInPicture!.length} more ${reference.notInPicture!.length === 1 ? 'piece was' : 'pieces were'} listed in GoodPix but not in the picture, so ${reference.notInPicture!.length === 1 ? 'it is' : 'they are'} not on the board`}
             </summary>
             <ul className="mt-1 space-y-1">
               {reference.notInPicture!.map((o) => (

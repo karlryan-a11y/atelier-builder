@@ -3,10 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
-import { lookCandidateIds, piecesOutOfLook, type LookPiece, type OutLook } from '@/lib/lookOutPieces'
+import { builderBoardPlan, lookCandidateIds, piecesOutOfLook, type LookPiece, type OutLook } from '@/lib/lookOutPieces'
 import type { OmitReason } from '@/lib/restyleSelection'
+import { measurePieces } from '@/lib/measurePieces'
 import type { GpLayout } from '@/lib/goodpixLayout'
-import type { CanvasNode } from '@/types/canvas'
+import type { CanvasNode, LookCanvasState } from '@/types/canvas'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -126,10 +127,10 @@ export function useTransitions(clientId: string | null) {
         supabase.from('gp_looks')
           // canvas_state is deliberately NOT selected whole: it is large, and only the one look a
           // stylist actually opens needs it (single-row fetch on demand, per ADR-0076). Its piece
-          // nodes and the GoodPix arrangement are, because the card has to name the same missing
-          // pieces the opened look does (lib/lookOutPieces.ts): about 1 MB for Alicia Hidalgo's
-          // 206 pulled looks, the largest queue on the platform.
-          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, gp_layout, board_nodes:canvas_state->nodes')
+          // nodes, the board's size and the GoodPix arrangement are, because the card has to name
+          // the same missing pieces the opened look does (lib/lookOutPieces.ts): about 1 MB for
+          // Alicia Hidalgo's 206 pulled looks, the largest queue on the platform.
+          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, gp_layout, board_nodes:canvas_state->nodes, board_size:canvas_state->canvas')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -146,6 +147,7 @@ export function useTransitions(clientId: string | null) {
         closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
         layout: (l.gp_layout ?? null) as GpLayout | null,
         boardNodes: Array.isArray(l.board_nodes) ? (l.board_nodes as CanvasNode[]) : null,
+        board: (l.board_size ?? null) as LookCanvasState['canvas'] | null,
       }]))
       // Every piece any card could name, as it stands now. A failed read leaves the cards on the
       // recorded causes rather than claiming a look is missing nothing.
@@ -153,6 +155,18 @@ export function useTransitions(clientId: string | null) {
       if (cancelled) return
       // A GoodPix board is matched against her own pieces only (lib/goodpixBoard.ts readPieces).
       const hers = pieces && new Map([...pieces].filter(([, p]) => p.clientId === clientId))
+      // An Atelier card names only the let-go pieces IN THE PICTURE, as its Restyle takes off
+      // (Paige Berndt, 2026-10-28, Danielle York Look 155). The few pieces whose corner sits just
+      // past an edge have their photo measured first, the same as CategorizePanel's Restyle.
+      if (pieces) {
+        const toMeasure = new Set<string>()
+        for (const out of outLooks.values()) builderBoardPlan(out, pieces)?.unknown.forEach((id) => toMeasure.add(id))
+        if (toMeasure.size) {
+          const sizes = await measurePieces([...toMeasure])
+          if (cancelled) return
+          for (const out of outLooks.values()) if (out.source === 'builder') out.sizes = sizes
+        }
+      }
 
       setItems((itemsRes.data ?? []).map((r: any) => ({
         id: r.id,
@@ -183,7 +197,9 @@ export function useTransitions(clientId: string | null) {
           id: l.id,
           name: l.name ?? 'Untitled Look',
           image: rawImg ? proxyImageUrl(rawImg) : null,
-          causeItemIds: missing.length ? missing.map((m) => m.id) : causes,
+          // A board read in full is the answer, even when nothing in its picture is gone: the
+          // recorded causes may be pieces parked off the side of it.
+          causeItemIds: missing.length || (read && out.source === 'builder' && out.boardNodes) ? missing.map((m) => m.id) : causes,
           missing,
           closetItemIds: out.closetItemIds,
           source: l.source ?? null,

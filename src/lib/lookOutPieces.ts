@@ -11,8 +11,9 @@
  * Hidalgo's 158 pulled GoodPix looks showed fewer pieces on the card than on the board.
  *
  * So both now ask this file. The rule is the board's rule:
- * - an Atelier look: the pieces on its saved board she no longer has (transitioned, or the row is
- *   gone); a deleted piece stays on her own board (restyleSavedBoard);
+ * - an Atelier look: the pieces IN THE PICTURE of its saved board she no longer has (transitioned,
+ *   or the row is gone); a deleted piece stays on her own board, and one parked off the side of
+ *   the board is not named (restyleSavedBoard; Paige Berndt, 2026-10-28, Danielle York Look 155);
  * - a GoodPix look with a stored arrangement: the pieces IN THE PICTURE she no longer has
  *   (transitioned, deleted or gone); pool pieces not in the picture are not counted;
  * - a GoodPix look without one: the look's piece list, same test.
@@ -22,7 +23,7 @@
 
 import type { LookCanvasState, CanvasNode } from '@/types/canvas'
 import { piecesInLayout, type GpLayout } from './goodpixLayout.ts'   // .ts: node scripts import this file
-import { selectRestylePieces, restyleSavedBoard, type OmittedPiece, type RestylePiece } from './restyleSelection.ts'
+import { selectRestylePieces, restyleSavedBoard, type BuilderRestylePlan, type NaturalSize, type OmittedPiece, type RestylePiece } from './restyleSelection.ts'
 
 /** A piece as it stands now, with every photo address GoodPix may have drawn it with. */
 export type LookPiece = RestylePiece & { urls: string[] }
@@ -34,6 +35,20 @@ export interface OutLook {
   layout?: GpLayout | null
   /** gp_looks.canvas_state.nodes, for an Atelier look. */
   boardNodes?: CanvasNode[] | null
+  /** gp_looks.canvas_state.canvas, the board's size: what counts as in the picture. */
+  board?: LookCanvasState['canvas'] | null
+  /** Photo sizes for the pieces the board alone could not place (lib/measurePieces.ts). */
+  sizes?: Map<string, NaturalSize>
+}
+
+/**
+ * An Atelier look's Restyle plan, the one CategorizePanel opens: let-go pieces IN THE PICTURE are
+ * `omitted` (what the card names), parked ones are `notInPicture`, `unknown` need measuring.
+ */
+export function builderBoardPlan(look: OutLook, pieces: Map<string, LookPiece>): BuilderRestylePlan | null {
+  if (look.source !== 'builder' || !look.boardNodes) return null
+  const canvas = { nodes: look.boardNodes, ...(look.board ? { canvas: look.board } : {}) } as LookCanvasState
+  return restyleSavedBoard(canvas, pieces, look.sizes)
 }
 
 function hasLayout(layout: GpLayout | null | undefined): layout is GpLayout {
@@ -80,9 +95,8 @@ export function goodPixInPicture(look: OutLook, pieces: Map<string, LookPiece>):
  */
 export function piecesOutOfLook(look: OutLook, pieces: Map<string, LookPiece>): OmittedPiece[] {
   if (look.source === 'builder') {
-    if (look.boardNodes) {
-      return restyleSavedBoard({ nodes: look.boardNodes } as LookCanvasState, pieces).omitted
-    }
+    const plan = builderBoardPlan(look, pieces)
+    if (plan) return plan.omitted
     // No board saved: nothing opens (Restyle says so), so the card falls back to the list.
     return selectRestylePieces(look.closetItemIds, pieces).omitted.filter((o) => o.reason !== 'deleted')
   }
