@@ -65,8 +65,10 @@ export function causeCaption(
   const pieces = causeItemIds.map(resolve).filter(Boolean) as CaptionPiece[]
   const unresolved = causeItemIds.length - pieces.length
 
+  // The card names the pieces in the PICTURE (hooks/useTransitions.ts). A look pulled only over a
+  // piece parked off the side of its board has none: say so, and what puts it back.
   if (causeItemIds.length === 0) {
-    return { headline: 'Piece transitioned', pieces: [], unresolved: 0 }
+    return { headline: 'Nothing in the picture is gone · Restyle and save to bring it back', pieces: [], unresolved: 0 }
   }
 
   const what = causeItemIds.length > 1 ? `${causeItemIds.length} pieces removed` : 'Piece removed'

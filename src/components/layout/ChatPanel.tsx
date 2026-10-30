@@ -150,7 +150,10 @@ export function ChatPanel() {
   // below; looks never got it. ADR-0132.
   // `looks` is builder-only and excludes pulled looks, so the original cannot be found there.
   // The canvas store already carries its name for the panel beside the board; that is the name.
-  const restyledLookName = replacesLookId ? restyleReference?.lookName ?? '' : ''
+  // Also the in-place restyle, in case the box opens before its row has been read.
+  const restyledLookName = restyleReference && restyleReference.lookId === (replacesLookId ?? currentLookId)
+    ? restyleReference.lookName ?? ''
+    : ''
 
   /**
    * WHERE THIS BOARD'S LOOK IS ALREADY FILED, read from `look_category_assignments` — the table

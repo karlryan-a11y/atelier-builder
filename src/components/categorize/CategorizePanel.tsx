@@ -26,6 +26,7 @@ import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
 import { boardPieceIds, restyleSavedBoard, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
+import { measurePieces } from '@/lib/measurePieces'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { searchByName } from '@/lib/lookSearch'
@@ -376,6 +377,7 @@ export function CategorizePanel() {
         return out
       }
       let omitted: OmittedPiece[] = []
+      let notInPicture: OmittedPiece[] = []
 
       if (look.source === 'builder') {
         // Restyle IN PLACE: same row, so saving clears its transition block and the look
@@ -388,8 +390,12 @@ export function CategorizePanel() {
         if (!canvasState) { alert('This look has no saved canvas to restyle.'); return }
         const pieces = await readPieces(boardPieceIds(canvasState))
         if (!pieces) return
-        const restyled = restyleSavedBoard(canvasState, pieces)
+        // Same plan the Transitions card reads (hooks/useTransitions.ts), so what comes off the
+        // picture is exactly what the card named; a let-go piece parked off the side comes off too.
+        let restyled = restyleSavedBoard(canvasState, pieces)
+        if (restyled.unknown.length) restyled = restyleSavedBoard(canvasState, pieces, await measurePieces(restyled.unknown))
         omitted = restyled.omitted
+        notInPicture = restyled.notInPicture
         const imageUrls = await resolveClosetImageUrls(restyled.canvas)
         useCanvasStore.getState().loadLook(look.id, restyled.canvas, imageUrls)
       } else {
@@ -427,6 +433,8 @@ export function CategorizePanel() {
         lookName: look.name,
         imageUrl: look.image,
         omitted,
+        notInPicture,
+        parked: true,
         // An Atelier look opens on its own saved board. Without this the panel told stylists
         // "no saved layout, so the board is a grid" on a board that was not a grid (ADR-0168).
         fromLayout: look.source === 'builder',

@@ -3,6 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { planBuilderRestyle, type OmittedPiece } from '@/lib/restyleSelection'
+import { measurePieces } from '@/lib/measurePieces'
+import { buildGoodPixBoard } from '@/lib/goodpixBoard'
+import type { LookCanvasState } from '@/types/canvas'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -45,6 +49,76 @@ function itemImage(row: any): string | null {
   return raw.processed_image ?? raw.image ?? raw.images?.[0] ?? null
 }
 
+/**
+ * WHAT EACH CARD NAMES: the pieces IN THE LOOK'S PICTURE that she has let go of. Exactly what
+ * Restyle takes off, because both ask the same function.
+ *
+ * Paige Berndt, 2026-10-28, Danielle York Look 155: the card named a Chanel Sheer Mesh dress
+ * "that piece as you can see, is not part of the look", and Restyle took off pieces the card never
+ * named. The card used to read `transitioned_item_ids`, which is stamped from `closet_item_ids`
+ * when a piece goes out, and that list also holds pieces parked off the side of the board. Now:
+ *  - an Atelier look asks planBuilderRestyle over its saved board (photos measured only for the
+ *    few pieces whose corner sits just outside the board);
+ *  - a GoodPix look asks buildGoodPixBoard, the board its Restyle opens.
+ * `transitioned_item_ids` stays what it is (why the look is down, lib/lookTransitions.ts).
+ */
+async function pulledLooksWithCauses(rows: any[], items: TransitionedItem[]): Promise<TransitionedLook[]> {
+  const letGoById = new Map(items.map((i) => [i.id, i]))
+  const letGo = (id: string): OmittedPiece | null => {
+    const p = letGoById.get(id)
+    return p ? { id: p.id, name: p.name, brand: p.brand, reason: 'transitioned' } : null
+  }
+
+  const plans = new Map<string, ReturnType<typeof planBuilderRestyle>>()
+  const toMeasure = new Set<string>()
+  for (const l of rows) {
+    if (l.source !== 'builder' || !l.canvas_state?.nodes) continue
+    const plan = planBuilderRestyle(l.canvas_state as LookCanvasState, letGo)
+    plans.set(l.id, plan)
+    plan.unknown.forEach((id) => toMeasure.add(id))
+  }
+  if (toMeasure.size) {
+    const sizes = await measurePieces([...toMeasure])
+    for (const l of rows) {
+      if (plans.get(l.id)?.unknown.length) plans.set(l.id, planBuilderRestyle(l.canvas_state as LookCanvasState, letGo, sizes))
+    }
+  }
+
+  const goodpix = new Map<string, string[]>()
+  const gpRows = rows.filter((l) => l.source !== 'builder')
+  for (let i = 0; i < gpRows.length; i += 6) {   // a few at a time: each reads the layout and its pieces
+    await Promise.all(gpRows.slice(i, i + 6).map(async (l) => {
+      try {
+        const board = await buildGoodPixBoard(l.id, Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [])
+        const inPicture = board.omitted.filter((o) => o.reason === 'transitioned').map((o) => o.id)
+        // A picture on the board we could not match to one of her pieces may BE the let-go piece
+        // (Angela McPartlin Look 120: the SLVRLAKE jeans are in the picture, unmatched). Then the
+        // recorded pieces stay on the card too: naming one too many beats hiding one.
+        const recorded: string[] = Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : []
+        goodpix.set(l.id, board.pictures > 0 ? [...new Set([...inPicture, ...recorded])] : inPicture)
+      } catch (e) {
+        console.error('transitions: could not read the board of', l.id, e)   // the card keeps the recorded pieces
+      }
+    }))
+  }
+
+  return rows.map((l: any) => {
+    const rawImg = lookImageUrl(l.raw)
+    const recorded: string[] = Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : []
+    const inPicture = plans.get(l.id)?.omitted.map((o) => o.id) ?? goodpix.get(l.id) ?? recorded
+    return {
+      id: l.id,
+      name: l.name ?? 'Untitled Look',
+      image: rawImg ? proxyImageUrl(rawImg) : null,
+      causeItemIds: inPicture,
+      closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+      source: l.source ?? null,
+      transitionedAt: l.transitioned_at ?? null,
+      boardId: l.source_board_id ?? null,
+    }
+  })
+}
+
 export function useTransitions(clientId: string | null) {
   const [items, setItems] = useState<TransitionedItem[]>([])
   const [looks, setLooks] = useState<TransitionedLook[]>([])
@@ -69,9 +143,10 @@ export function useTransitions(clientId: string | null) {
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
         supabase.from('gp_looks')
-          // canvas_state is deliberately NOT selected: it is large, and only the one look a
-          // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
-          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
+          // canvas_state IS selected now: the card names the pieces in the PICTURE, and only the
+          // board knows what is in it (lib/restyleSelection.ts planBuilderRestyle). 463 KB for
+          // Danielle York's 87 pulled looks, the most of any client on 2026-10-28.
+          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, canvas_state')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -82,7 +157,7 @@ export function useTransitions(clientId: string | null) {
         setLoading(false)
         return
       }
-      setItems((itemsRes.data ?? []).map((r: any) => ({
+      const nextItems: TransitionedItem[] = (itemsRes.data ?? []).map((r: any) => ({
         id: r.id,
         name: (r.name_override?.trim() || r.name) ?? 'Untitled item',
         brand: r.brand && r.brand !== 'None' ? r.brand : null,
@@ -90,20 +165,19 @@ export function useTransitions(clientId: string | null) {
         source: r.transition_source ?? null,
         transitionedAt: r.transitioned_at ?? null,
         image: itemImage(r),
-      })))
-      setLooks((looksRes.data ?? []).map((l: any) => {
-        const rawImg = lookImageUrl(l.raw)
-        return {
-          id: l.id,
-          name: l.name ?? 'Untitled Look',
-          image: rawImg ? proxyImageUrl(rawImg) : null,
-          causeItemIds: Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : [],
-          closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
-          source: l.source ?? null,
-          transitionedAt: l.transitioned_at ?? null,
-          boardId: l.source_board_id ?? null,
-        }
       }))
+      let nextLooks: TransitionedLook[]
+      try {
+        nextLooks = await pulledLooksWithCauses(looksRes.data ?? [], nextItems)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'load failed')
+        setLoading(false)
+        return
+      }
+      if (cancelled) return
+      setItems(nextItems)
+      setLooks(nextLooks)
       setLoading(false)
     })()
 
