@@ -29,6 +29,21 @@ export function firstLoadError(...results: Res[]): string | null {
   return null
 }
 
+const PAGE = 1000
+
+type PageRes<T> = { data: T[] | null; error: { message?: string } | null }
+
+/** Every row of a read, a page of 1000 at a time, until a short page. The first error stops it. */
+async function readAllPages<T>(page: (from: number, to: number) => PromiseLike<PageRes<T>>): Promise<PageRes<T>> {
+  const out: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const res = await page(from, from + PAGE - 1)
+    if (res.error) return { data: null, error: res.error }
+    out.push(...(res.data ?? []))
+    if (!res.data || res.data.length < PAGE) return { data: out, error: null }
+  }
+}
+
 export async function loadLookCategories(
   db: SupabaseClient,
   clientId: string,
@@ -75,12 +90,16 @@ export async function loadLookCategories(
   const boardIds = ((capsRes.data ?? []) as { id: string }[]).map((b) => b.id)
   let laRes, baRes
   try {
+    // Paged: one read stops at 1000 rows without saying so, and Keil Cadieux has 1210 filings,
+    // so 33 filed looks showed as Uncategorized (Cynthia Dada, 2026-11-03). check-filing-page-cap.
     ;[laRes, baRes] = await Promise.all([
       lookIds.length
-        ? db.from('look_category_assignments').select('look_id, category_id').in('look_id', lookIds)
+        ? readAllPages<{ look_id: string; category_id: string }>((from, to) => db.from('look_category_assignments')
+            .select('look_id, category_id').in('look_id', lookIds).order('look_id').order('category_id').range(from, to))
         : Promise.resolve({ data: [] as { look_id: string; category_id: string }[], error: null }),
       boardIds.length
-        ? db.from('board_category_assignments').select('board_id, category_id').in('board_id', boardIds)
+        ? readAllPages<{ board_id: string; category_id: string }>((from, to) => db.from('board_category_assignments')
+            .select('board_id, category_id').in('board_id', boardIds).order('board_id').order('category_id').range(from, to))
         : Promise.resolve({ data: [] as { board_id: string; category_id: string }[], error: null }),
     ])
   } catch (e) {
