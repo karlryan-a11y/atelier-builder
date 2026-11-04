@@ -121,9 +121,15 @@ export function residenceOfItem(
  *      of her home ("creekside closet", the label, the slug), or
  *   2. it is in a PUBLISHED, live look filed under that home.
  * Only for a client with two or more homes, as on her page; empty otherwise.
+ *
+ * A piece moved to a home from her lookbook's Edit Details (Thalia Baca, 2026-11-04) carries
+ * HOME_PICKED in client_edited_fields: then the home it names is its only home, and neither the
+ * legacy `category` nor the old home's looks place it. Twin of atelier-looks piecesAtHomes.
  */
+export const HOME_PICKED = 'home'
+
 export function homesByItem(
-  items: { id: string; category?: string | null; custom_categories?: string[] | null }[],
+  items: { id: string; category?: string | null; custom_categories?: string[] | null; client_edited_fields?: string[] | null }[],
   looks: { closetItemIds: string[]; categoryIds: string[]; published: boolean; archived: boolean }[],
   rows: (ResidenceCategoryRow & { id: string; is_hidden?: boolean | null })[] | null | undefined,
 ): Map<string, Set<string>> {
@@ -136,7 +142,16 @@ export function homesByItem(
     out.set(itemId, s)
   }
   const slugOf = residenceResolverFor(homes)
+  const picked = new Set<string>()
   for (const item of items) {
+    if ((item.client_edited_fields ?? []).includes(HOME_PICKED)) {
+      const at = (item.custom_categories ?? []).map((c) => slugOf(c)).filter((s): s is string => !!s)
+      if (at.length) {
+        picked.add(item.id)
+        for (const s of at) add(item.id, s)
+        continue
+      }
+    }
     for (const c of [...(item.custom_categories ?? []), item.category]) {
       const slug = c ? slugOf(c) : null
       if (slug) add(item.id, slug)
@@ -147,7 +162,7 @@ export function homesByItem(
     if (!look.published || look.archived) continue
     const slugs = look.categoryIds.map((id) => slugByCatId.get(id)).filter((s): s is string => !!s)
     if (slugs.length === 0) continue
-    for (const itemId of look.closetItemIds) for (const s of slugs) add(itemId, s)
+    for (const itemId of look.closetItemIds) if (!picked.has(itemId)) for (const s of slugs) add(itemId, s)
   }
   return out
 }

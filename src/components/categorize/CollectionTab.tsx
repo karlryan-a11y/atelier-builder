@@ -26,7 +26,7 @@ import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCateg
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 // Human labels for the client-edit provenance keys (migration 015).
-const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category', color: 'Colors', custom_categories: 'Also in', description: 'Description' }
+const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category', color: 'Colors', custom_categories: 'Also in', description: 'Description', home: 'Home' }
 
 // COLLECTION tab inside Categorize: the stylist sees the client's collection the way the client
 // does (her lookbook's Collection grid) but with per-item edit — hover an item → pencil → edit
