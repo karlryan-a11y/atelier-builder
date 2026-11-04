@@ -559,8 +559,8 @@ export function ClosetPanel() {
               */}
               {/* Expanded still has a ceiling (Madeline 11/04, Keil Cadieux's 53 categories): with none, the chips filled
                   the panel, the pieces below shrank to 24px and couldn't scroll, and this toggle was clipped, so she was
-                  stuck on every client (the choice is remembered). Half the screen, then the chips scroll. */}
-              <div ref={catsRef} className={`flex flex-wrap gap-1 overflow-y-auto ${catsExpanded ? 'max-h-[45vh]' : 'max-h-48'}`}>
+                  stuck on every client (the choice is remembered). A third of the screen, then the chips scroll. */}
+              <div ref={catsRef} className={`flex flex-wrap gap-1 overflow-y-auto ${catsExpanded ? 'max-h-[30vh]' : 'max-h-48'}`}>
                 <button
                   onClick={() => { setSearch(''); setActiveCategories(new Set()) }}
                   className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
