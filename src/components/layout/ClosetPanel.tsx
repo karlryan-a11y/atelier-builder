@@ -557,7 +557,10 @@ export function ClosetPanel() {
                 it needs. `max-h-48` is the height this block had before ADR-0136, where it had
                 never been reported as a problem. ADR-0144.
               */}
-              <div ref={catsRef} className={`flex flex-wrap gap-1 ${catsExpanded ? '' : 'max-h-48 overflow-y-auto'}`}>
+              {/* Expanded still has a ceiling (Madeline 11/04, Keil Cadieux's 53 categories): with none, the chips filled
+                  the panel, the pieces below shrank to 24px and couldn't scroll, and this toggle was clipped, so she was
+                  stuck on every client (the choice is remembered). Half the screen, then the chips scroll. */}
+              <div ref={catsRef} className={`flex flex-wrap gap-1 overflow-y-auto ${catsExpanded ? 'max-h-[45vh]' : 'max-h-48'}`}>
                 <button
                   onClick={() => { setSearch(''); setActiveCategories(new Set()) }}
                   className={`text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full border transition-colors ${
@@ -602,7 +605,7 @@ export function ClosetPanel() {
           )}
 
           {/* Item grid */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 min-h-[12rem] overflow-y-auto p-3">
             {loading ? (
               <div className="grid grid-cols-2 gap-3">
                 {Array.from({ length: 6 }).map((_, i) => (
