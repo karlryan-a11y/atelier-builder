@@ -320,6 +320,10 @@ const list = [{ name: 'A Dress' }, { name: 'B Dress' }, { name: 'C Dress' }]
 if (names(searchPieces(list, 'dress', (x) => x, 'client').ranked) !== 'A Dress / B Dress / C Dress') fail('equally good matches were re-ordered; ties must keep her wardrobe order')
 ran++
 if ((searchPieces(list, '', (x) => x, 'client').ranked ?? []).length !== 3) fail('an empty query filtered the list')
+// Karl, 2026-11-05: the first colour is the main one. "black jacket" shows the black jacket first and the cream one with black second.
+ran++
+const twoTone = [{ name: 'Adidas Jacket', colorFamilies: ['Cream', 'Black'] }, { name: 'Adidas Track Jacket', colorFamilies: ['Black'] }]
+if (names(searchPieces(twoTone, 'black jacket', (x) => x, 'client').ranked) !== 'Adidas Track Jacket / Adidas Jacket') fail('a piece whose main colour matches does not rank above one where it is the second colour, or the second one was dropped')
 
 // THE PEYTON WHEELER CASE, 2026-09-25: "plaid rosie dress" in Dresses. The page showed 2 and hid
 // the rest. Every possible match now shows, closest first, in ONE list.

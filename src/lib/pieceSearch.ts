@@ -89,7 +89,7 @@ export interface PieceSearchFields {
 /** How much a hit in each field is worth. The name and designer are what she means. */
 const WEIGHT = {
   name: 3, brand: 3,
-  colorChip: 2.5, color: 2, colorLong: 1, description: 2, material: 2, care: 1, retailer: 2,
+  colorMain: 3, colorChip: 2.25, color: 2, colorLong: 1, description: 2, material: 2, care: 1, retailer: 2,
   category: 1.5, tag: 1.5,
   note: 1, size: 1, legacy: 0.5,
 } as const
@@ -205,7 +205,9 @@ function weightedTokens(f: PieceSearchFields, audience: SearchAudience): Token[]
   // ("... overlaid with crimson red stripes, deep forest green, and black crossing lines") on half
   // of some closets (Danielle York: 465 of 936), so a colour named in passing ranks below a
   // colour the piece is (ADR-0155, measured 2026-10-02).
-  for (const c of f.colorFamilies ?? []) add(c, 'colorChip')
+  // The order is the stylist's: the first chip is the main colour, so "black jacket" shows a black jacket before a cream one
+  // with black on it, and still shows both (Karl, 2026-11-05).
+  ;(f.colorFamilies ?? []).filter(Boolean).forEach((c, i) => add(c, i === 0 ? 'colorMain' : 'colorChip'))
   add(f.color, (f.color ?? '').length > LONG_COLOR_TEXT ? 'colorLong' : 'color')
   add(f.description, 'description'); add(f.material, 'material'); add(f.care, 'care'); add(f.retailer, 'retailer')
   for (const c of f.categories ?? []) add(c, 'category')

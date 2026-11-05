@@ -21,12 +21,15 @@ export function searchReview<T>(items: T[], query: string, fieldsOf: (item: T) =
   if (!colors.length) return searchPieces(items, query, fieldsOf, 'team').full
   const rest = words.filter((w) => !colors.includes(w)).join(' ')
   const found = rest ? searchPieces(items, rest, fieldsOf, 'team').full : items
-  return found.filter((it) => {
+  const hit = found.filter((it) => {
     const f = fieldsOf(it)
     const inColors = new Set([...(f.colorFamilies ?? []), f.color].flatMap((c) => (c ? wordsOf(c) : [])))
     const inName = new Set([f.name, f.nameOverride].flatMap((c) => (c ? wordsOf(c) : [])))
     return colors.every((c) => inColors.has(c) || (SHADES.has(c) && inName.has(c)))
   })
+  // Pieces whose main (first) color is the one searched come first; the rest keep their order (Karl, 2026-11-05).
+  const main = (it: T) => { const m = (fieldsOf(it).colorFamilies ?? []).find(Boolean); return m && wordsOf(m).some((w) => colors.includes(w)) ? 0 : 1 }
+  return hit.map((it, i) => ({ it, i, m: main(it) })).sort((a, b) => a.m - b.m || a.i - b.i).map((x) => x.it)
 }
 
 /** The color families pieces are filed under (Confirmed color, the Filter Colors chips). */
