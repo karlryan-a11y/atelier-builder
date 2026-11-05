@@ -171,7 +171,8 @@ if (!/<CategoryMapPanel/.test(read('src/components/categorize/NestingTab.tsx')))
 checks++
 if (!/same_as: as, group_label: null/.test(read('src/hooks/useClientCategories.ts'))) fail('useClientCategories.ts: Same as is not saved, or does not clear Inside when it is (ADR-0163).')
 checks++
-if (!/select\('slug, label, group_label, sort_order, same_as'\)/.test(read('src/hooks/useClientCategories.ts'))) fail('useClientCategories.ts: same_as is not read, so the map is saved and then ignored (ADR-0103).')
+// kind and is_hidden joined the read with 69c6d7d (a category before it has any pieces).
+if (!/select\('slug, label, group_label, sort_order, same_as, kind, is_hidden'\)/.test(read('src/hooks/useClientCategories.ts'))) fail('useClientCategories.ts: same_as is not read, so the map is saved and then ignored (ADR-0103).')
 // The capsule's "add looks" box searched the whole phrase; it uses the Looks list's rule now.
 checks++
 if (!/searchByName\(addable, q\)/.test(read('src/components/canvas/AddLooksDialog.tsx'))) {
