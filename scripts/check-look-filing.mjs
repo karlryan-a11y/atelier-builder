@@ -94,8 +94,7 @@ if (!/baseline/.test(lib)) {
   fail(`${LIB}: applyLookFiling does not take a baseline, so it must be diffing against the database. A read that failed would then strip a look out of its categories.`)
 }
 checks++
-// The baseline is where the look IS filed (lookFilingBaseline, lib/saveBoxFiling.ts), not the shown ticks.
-if (!/lookFilingOk \? lookFilingBaseline : \[\]/.test(panel)) {
+if (!/lookFilingOk \? lookFiling : \[\]/.test(panel)) {
   fail(`${PANEL}: a failed filing read is not turned into an EMPTY baseline, so a read error can delete the client's filing (ADR-0149).`)
 }
 checks++

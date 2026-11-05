@@ -11,7 +11,6 @@ import { useCapsules } from '@/hooks/useCapsules'
 import { supabase } from '@/lib/supabase'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { readLookFiling, applyLookFiling } from '@/lib/lookFiling'
-import { saveBoxStart } from '@/lib/saveBoxFiling'
 import { fetchTargetTeamNote, saveTargetTeamNote } from '@/lib/teamNotes'
 import { useLookCategories } from '@/hooks/useLookCategories'
 import { LookGallery, type LookGalleryFiling } from '@/components/canvas/LookGallery'
@@ -54,8 +53,8 @@ export function ChatPanel() {
   // Narrow, shallow-compared subscription: a tap or drag on the board changes neither of these,
   // so it no longer re-renders this panel and its looks gallery. `nodes` changes only when a
   // piece is added, removed or moved.
-  const { currentLookId, replacesLookId, replacesSiblingLookIds, restyleReference, duplicatedFromLookId, currentCapsuleId, replacesCapsuleId, buildingCapsule, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
-    currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds, restyleReference: s.restyleReference, duplicatedFromLookId: s.duplicatedFromLookId,
+  const { currentLookId, replacesLookId, replacesSiblingLookIds, restyleReference, currentCapsuleId, replacesCapsuleId, buildingCapsule, isDirty, loadLook, loadLookAsNew, reset, markClean, noteSavedAs, noteSavedCapsuleAs, addNode } = useCanvasStore(useShallow((s) => ({
+    currentLookId: s.currentLookId, replacesLookId: s.replacesLookId, replacesSiblingLookIds: s.replacesSiblingLookIds, restyleReference: s.restyleReference,
     currentCapsuleId: s.currentCapsuleId, replacesCapsuleId: s.replacesCapsuleId, buildingCapsule: s.buildingCapsule, isDirty: s.isDirty,
     loadLook: s.loadLook, loadLookAsNew: s.loadLookAsNew, reset: s.reset, markClean: s.markClean,
     noteSavedAs: s.noteSavedAs, noteSavedCapsuleAs: s.noteSavedCapsuleAs, addNode: s.addNode,
@@ -167,42 +166,29 @@ export function ChatPanel() {
    * `lookFilingOk` is false only when the read failed; the save then adds and never removes.
    */
   const filedLookId = currentLookId ?? replacesLookId
-  // A duplicate has no row yet, so it is filed nowhere; it opens with its original's pills ticked.
-  const sourceLookId = filedLookId ?? duplicatedFromLookId
   // The look's filing as the Looks grid holds it (the shared Categorize copy). A tick on its tile
   // changes this at once, so the Save box opens with what the tile shows; reading the database
   // here instead would race the tile's write and open with the old ticks.
-  const cachedFiling = filedLooks.find((l) => l.id === sourceLookId)?.categoryIds ?? null
+  const cachedFiling = filedLooks.find((l) => l.id === filedLookId)?.categoryIds ?? null
   const filingKey = cachedFiling ? cachedFiling.join(',') : null
-  // `lookFiling` is what the pills open with; `lookFilingBaseline` is where the look IS filed,
-  // which the save compares against. One list for both left every new look after a first save
-  // "already filed" and unfiled (Cynthia Dada, 2026-11-05, lib/saveBoxFiling.ts).
   const [lookFiling, setLookFiling] = useState<string[]>([])
-  const [lookFilingBaseline, setLookFilingBaseline] = useState<string[]>([])
   const [lookFilingOk, setLookFilingOk] = useState(true)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const f = filingKey !== null
         ? { labels: lookCategories.filter((c) => filingKey.split(',').includes(c.id)).map((c) => c.label), ok: true }
-        : await readLookFiling(sourceLookId, activeClient?.id ?? null)
+        : await readLookFiling(filedLookId, activeClient?.id ?? null)
       if (cancelled) return
       // A look filed in nothing falls back to its old `tags`, so the 72 looks that were ticked
       // into a column nothing files by still open with their pills on — and the next save files
       // them for real. Without this, ADR-0149 would blank the very looks it exists to explain.
-      const legacy = looks.find((l) => l.id === sourceLookId)?.tags ?? []
-      const start = saveBoxStart({
-        filedLookId,
-        filed: f,
-        legacyTags: legacy,
-        copiedFrom: duplicatedFromLookId ? (f.labels.length ? f.labels : legacy) : [],
-      })
-      setLookFiling(start.shown)
-      setLookFilingBaseline(start.baseline)
-      setLookFilingOk(start.ok)
+      const legacy = looks.find((l) => l.id === filedLookId)?.tags ?? []
+      setLookFiling(f.labels.length ? f.labels : legacy)
+      setLookFilingOk(f.ok)
     })()
     return () => { cancelled = true }
-  }, [filedLookId, sourceLookId, duplicatedFromLookId, activeClient?.id, looks, filingKey, lookCategories])
+  }, [filedLookId, activeClient?.id, looks, filingKey, lookCategories])
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -262,16 +248,14 @@ export function ChatPanel() {
       // restyle.
       const savedId = saved.data.id
       try {
-        const change = await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFilingBaseline : [], data.tags)
+        const change = await applyLookFiling(savedId, activeClient.id, lookFilingOk ? lookFiling : [], data.tags)
         // A stylist who re-filed a look the client had filed herself takes it back (ADR-0166).
         if ((change.added.length || change.removed.length) && (currentLook?.client_edited_fields ?? []).includes('categories')) {
           const next = (currentLook?.client_edited_fields ?? []).filter((f) => f !== 'categories')
           await supabase.from('gp_looks').update({ client_edited_fields: next.length ? next : null }).eq('id', savedId)
         }
-        // Only when the board IS that look now. After a first save the board is still a new look
-        // (Save again makes another), so its filing must not become the next look's baseline.
         const f = await readLookFiling(savedId, activeClient.id)
-        if (currentLookId || replacesLookId) { setLookFiling(f.labels); setLookFilingBaseline(f.labels) }
+        setLookFiling(f.labels)
         setLookFilingOk(f.ok)
         // The Looks grid tiles show this filing too: re-read their copy.
         await refetchFiling()
@@ -288,7 +272,7 @@ export function ChatPanel() {
     } finally {
       setSaving(false)
     }
-  }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFilingBaseline, lookFilingOk, refetchFiling])
+  }, [activeClient, currentLookId, currentLook, replacesLookId, replacesSiblingLookIds, saveLook, markClean, noteSavedAs, user, lookFiling, lookFilingOk, refetchFiling])
 
   const handleCreateCapsule = useCallback(async (data: { name: string; description: string; teamNote: string; lookIds: string[]; compositeBase64: string }) => {
     if (!activeClient) return
@@ -458,7 +442,7 @@ export function ChatPanel() {
     const canvasState = look.canvas_state as LookCanvasState | null
     if (!canvasState) return
     const newImageUrls = await resolveClosetImageUrls(canvasState)
-    loadLookAsNew(canvasState, newImageUrls, look.id)
+    loadLookAsNew(canvasState, newImageUrls)
   }, [isDirty, loadLookAsNew])
 
   const handleNewLook = useCallback(() => {

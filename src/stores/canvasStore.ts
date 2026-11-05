@@ -86,12 +86,6 @@ interface CanvasStoreState {
    */
   replacesSiblingLookIds: string[]
   /**
-   * The saved look this unsaved board was DUPLICATED from. Only so the Save box can offer that
-   * look's categories ticked; the copy itself is filed nowhere until it is saved
-   * (lib/saveBoxFiling.ts). Cleared by every other way of loading the board.
-   */
-  duplicatedFromLookId: string | null
-  /**
    * The picture the board is a rebuild OF, plus what was deliberately left off it. Shown beside
    * the canvas while she restyles (ADR-0126). Since ADR-0127 the board itself is GoodPix's own
    * arrangement when we hold it, and this is the check against it; without one the board is a
@@ -228,7 +222,7 @@ interface CanvasStoreActions {
   redo: () => void
   reset: () => void
   loadLook: (id: string, state: LookCanvasState, imageUrls: Record<string, string>) => void
-  loadLookAsNew: (state: LookCanvasState, imageUrls: Record<string, string>, fromLookId?: string | null) => void
+  loadLookAsNew: (state: LookCanvasState, imageUrls: Record<string, string>) => void
   // Same as loadLookAsNew, but remembers which transitioned look this rebuild replaces.
   loadLookAsReplacement: (replacesLookId: string, siblingLookIds: string[], state: LookCanvasState, imageUrls: Record<string, string>) => void
   // The original picture + what was left off it, shown beside the board while she restyles.
@@ -274,7 +268,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   currentLookId: null,
   replacesLookId: null,
   replacesSiblingLookIds: [],
-  duplicatedFromLookId: null,
   restyleReference: null,
   currentCapsuleId: null,
   replacesCapsuleId: null,
@@ -640,7 +633,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId: null,
       replacesSiblingLookIds: [],
-      duplicatedFromLookId: null,
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
@@ -661,7 +653,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: id,
       replacesLookId: null,
       replacesSiblingLookIds: [],
-      duplicatedFromLookId: null,
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
@@ -674,7 +665,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   // Duplicate: load an existing look's canvas onto the board but as a brand-new, unsaved
   // look (no currentLookId → Save creates a fresh row; isDirty so it prompts before discard).
-  loadLookAsNew: (lookState, lookImageUrls, fromLookId = null) => {
+  loadLookAsNew: (lookState, lookImageUrls) => {
     set({
       state: lookState,
       selectedNodeIds: [],
@@ -684,7 +675,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId: null,
       replacesSiblingLookIds: [],
-      duplicatedFromLookId: fromLookId,
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
@@ -709,7 +699,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId,
       replacesSiblingLookIds: siblingLookIds,
-      duplicatedFromLookId: null,
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId: null,
@@ -736,7 +725,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       past: [],
       future: [],
       currentLookId: null,
-      duplicatedFromLookId: null,
       currentCapsuleId: id,
       replacesCapsuleId: null,
       buildingCapsule: false,
@@ -762,7 +750,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       currentLookId: null,
       replacesLookId: null,
       replacesSiblingLookIds: [],
-      duplicatedFromLookId: null,
       restyleReference: null,
       currentCapsuleId: null,
       replacesCapsuleId,
@@ -778,7 +765,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   // saved again inserted another: Janet Foutty's Denver capsule was five rows by 11:27 on
   // 2026-09-24. The look id goes too, or Update Look would write the whole capsule over the look
   // she started from.
-  noteSavedCapsuleAs: (id) => set({ currentCapsuleId: id, replacesCapsuleId: null, buildingCapsule: false, currentLookId: null, replacesLookId: null, replacesSiblingLookIds: [], duplicatedFromLookId: null }),
+  noteSavedCapsuleAs: (id) => set({ currentCapsuleId: id, replacesCapsuleId: null, buildingCapsule: false, currentLookId: null, replacesLookId: null, replacesSiblingLookIds: [] }),
 
   applyCapsuleBoard: (newState, newUrls, startsCapsule) => {
     const { state: current, past } = get()
@@ -796,7 +783,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         currentLookId: null,
         replacesLookId: null,
         replacesSiblingLookIds: [],
-        duplicatedFromLookId: null,
         restyleReference: null,
         currentCapsuleId: null,
         replacesCapsuleId: null,
