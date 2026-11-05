@@ -22,8 +22,12 @@ import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { updateClosetItem } from '@/lib/teamNotes'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
+import { PATTERNS, PATTERNS_HEADING, PATTERN_SEARCH_WORDS, isPatternMarker, patternsOf, type PatternSlug } from '@/lib/piecePatterns'
+import { usePatternsOn, savePiecePatterns } from '@/hooks/usePiecePatterns'
+import { PatternPicker } from '@/components/categorize/PatternPicker'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const NO_PATTERN = '__no_pattern__'
 
 // Human labels for the client-edit provenance keys (migration 015).
 const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category', color: 'Colors', custom_categories: 'Also in', description: 'Description', home: 'Home' }
@@ -101,7 +105,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   const [bgBusy, setBgBusy] = useState(false)
   const [bgProgress, setBgProgress] = useState({ done: 0, total: 0 })
 
-  useEffect(() => { setSelected(new Set()) }, [clientId])
+  // Patterns & Textures, for a client who has it on (Cynthia for Peyton Wheeler, 11/05): each card
+  // shows the patterns Atelier sorted it into, and a pattern row narrows the grid so she can check
+  // one pattern at a time. '' is every piece, NO_PATTERN the pieces with none yet.
+  const patternsHere = usePatternsOn(clientId)
+  const [patternFilter, setPatternFilter] = useState('')
+  useEffect(() => { setSelected(new Set()); setPatternFilter('') }, [clientId])
   const toggleSelect = (id: string) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // Bulk-set the PRIMARY category on the selected items (chunked .in()). Same store the lookbook reads.
@@ -228,8 +237,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   const fieldsOf = useCallback((i: ClosetItem): PieceSearchFields => closetSearchFields(
     i,
     categoriesByItem.get(i.id) ?? [],
-    (i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
-  ), [categoriesByItem, tagNameById])
+    [
+      ...(i.content_tag_ids ?? []).map((id: string) => tagNameById.get(id) ?? ''),
+      // Her patterns are searchable words here too, the same as on her Collection page.
+      ...(patternsHere ? patternsOf(i).map((p) => PATTERN_SEARCH_WORDS[p]) : []),
+    ],
+  ), [categoriesByItem, tagNameById, patternsHere])
 
   /*
    * A CATEGORY TAP STARTS A NEW SEARCH (ADR-0155). Maegan, 2026-09-26: "the search bar needs to
@@ -281,10 +294,50 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     [items, railCats, lookUsage],
   )
   useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
-  const visible = useMemo(
-    () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
-    [baseVisible, unconfirmedOnly],
-  )
+  const visible = useMemo(() => {
+    const shown = unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible
+    if (!patternsHere || !patternFilter) return shown
+    if (patternFilter === NO_PATTERN) return shown.filter((i) => patternsOf(i).length === 0)
+    return shown.filter((i) => (patternsOf(i) as string[]).includes(patternFilter))
+  }, [baseVisible, unconfirmedOnly, patternsHere, patternFilter])
+  // How many pieces in this view are in each pattern, so a row she can tap says what it holds.
+  const patternCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    if (!patternsHere) return m
+    for (const i of baseVisible) {
+      const ps = patternsOf(i)
+      if (ps.length === 0) m.set(NO_PATTERN, (m.get(NO_PATTERN) ?? 0) + 1)
+      for (const p of ps) m.set(p, (m.get(p) ?? 0) + 1)
+    }
+    return m
+  }, [baseVisible, patternsHere])
+  const setPatterns = useCallback(async (item: ClosetItem, next: PatternSlug[]) => {
+    const r = await savePiecePatterns(item.id, item.client_id, next)
+    if ('error' in r) { console.error('Pattern not saved:', r.error); return false }
+    patchItems([item.id], { client_edited_fields: r.fields })
+    return true
+  }, [patchItems])
+  // Add one pattern to every selected piece, or take all of theirs off. Each piece keeps its own list.
+  async function bulkPatterns(slug: PatternSlug | null) {
+    if (selected.size === 0) return
+    setBulkBusy(true)
+    const byId = new Map(items.map((i) => [i.id, i]))
+    const ids = [...selected]
+    let ok = true
+    let idx = 0
+    await Promise.all(Array.from({ length: Math.min(5, ids.length) }, async () => {
+      while (idx < ids.length) {
+        const it = byId.get(ids[idx++])
+        if (!it) continue
+        const have = patternsOf(it)
+        if (slug ? have.includes(slug) : have.length === 0) continue
+        if (!(await setPatterns(it, slug ? [...have, slug] : []))) ok = false
+      }
+    }))
+    setBulkBusy(false)
+    if (ok) setSelected(new Set())
+    else alert('Some pieces could not be updated. Try again.')
+  }
   const selectable = visible
 
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
@@ -672,6 +725,24 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 <CategoryOptions custom={customCats} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
+              {patternsHere && (
+                <select
+                  disabled={bulkBusy}
+                  defaultValue=""
+                  title="Add a pattern to the selected pieces, or take their patterns off"
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (!v) return
+                    void bulkPatterns(v === NO_PATTERN ? null : (v as PatternSlug))
+                    e.currentTarget.value = ''
+                  }}
+                  className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
+                >
+                  <option value="" disabled>＋ Pattern…</option>
+                  {PATTERNS.map((p) => <option key={p.slug} value={p.slug}>{p.label}</option>)}
+                  <option value={NO_PATTERN}>No pattern (take theirs off)</option>
+                </select>
+              )}
               {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               <button onClick={() => setSelected(new Set())} className="text-white/70 hover:text-white">Clear</button>
             </div>
@@ -679,9 +750,31 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </div>
       )}
 
+      {patternsHere && (
+        <div data-pattern-filter className="mb-4 flex items-center gap-1.5 flex-wrap text-[11px]">
+          <span className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mr-1">{PATTERNS_HEADING}</span>
+          {[{ slug: '', label: 'All' }, ...PATTERNS, { slug: NO_PATTERN, label: 'No pattern yet' }].map((p) => {
+            const n = p.slug ? (patternCounts.get(p.slug) ?? 0) : baseVisible.length
+            if (p.slug && p.slug !== NO_PATTERN && n === 0 && patternFilter !== p.slug) return null
+            const on = patternFilter === p.slug
+            return (
+              <button
+                key={p.slug || 'all'}
+                type="button"
+                data-pattern-filter-option={p.slug || 'all'}
+                onClick={() => setPatternFilter(p.slug)}
+                className={`px-2 py-1 rounded-sm border transition-colors ${on ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#666] hover:text-[#1A1A1A]'}`}
+              >{p.label} <span className={on ? 'text-white/70' : 'text-[#aaa]'}>{n}</span></button>
+            )
+          })}
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <p className="text-[#888] text-sm">
-          {q
+          {patternsHere && patternFilter && baseVisible.length > 0
+            ? 'No pieces with this pattern here.'
+            : q
             ? `Nothing in this category matches "${q}".${searched.elsewhere > 0 ? ` ${searched.elsewhere} piece${searched.elsewhere === 1 ? '' : 's'} match in other categories.` : ''}`
             : filterCategories && filterCategories.size > 0
               // A category she made and has not filled yet (Cynthia, 2026-10-20).
@@ -746,8 +839,10 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                   )}
                   {/* Level 1: badge when the CLIENT set one of these fields, so the stylist can tell
                       client edits from ours before touching them (migration 015). */}
-                  {(item.client_edited_fields?.length ?? 0) > 0 && (() => {
-                    const labels = (item.client_edited_fields ?? []).map((f) => FIELD_LABEL[f] ?? f)
+                  {patternsHere && <PatternPicker value={patternsOf(item)} onChange={(next) => setPatterns(item, next)} />}
+                  {/* A pattern is ours, not an edit of hers, so it never reads as "set by" her. */}
+                  {(item.client_edited_fields ?? []).some((f) => !isPatternMarker(f)) && (() => {
+                    const labels = (item.client_edited_fields ?? []).filter((f) => !isPatternMarker(f)).map((f) => FIELD_LABEL[f] ?? f)
                     const when = item.client_edited_at ? new Date(item.client_edited_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
                     return (
                       <p className="mt-1.5 text-[10px] tracking-[0.04em] text-[#8a7a6a] truncate" title={`Set by ${clientFirst}${when ? ` · ${when}` : ''}`}>
