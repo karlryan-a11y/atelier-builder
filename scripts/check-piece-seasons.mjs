@@ -15,7 +15,7 @@ need(/raw->collection_seasons_on/.test(hook) && /\.\.\.\(\(cur as/.test(hook), '
 need(/useCollectionSeasons\(clientId\)/.test(col), 'Collection has the "Seasons on her Collection page" switch')
 need(/SEASON_CHOICES\.map/.test(col) && /setSeasonOn\(\[\.\.\.selected\]/.test(col), 'the selected pieces get SS / FW / Both / No season in one tap')
 need(/\.eq\('client_id', clientId\)\.select\('id'\)/.test(col), 'each season write names the client and asks for its row back (ADR-0108)')
-need(/filter\(\(f\) => !isSeasonMarker\(f\)\)\.map\(\(f\) => FIELD_LABEL/.test(col), 'a season is not shown as "set by" the client')
+need(/filter\(\(f\) => !isSeasonMarker\(f\)\)(\.filter\(\(f\) => !is\w+Marker\(f\)\))*\.map\(\(f\) => FIELD_LABEL/.test(col), 'a season is not shown as "set by" the client')
 // The lookbook reads the same file. A checkout without the lookbook beside it skips the twin check.
 const twinPath = '../atelier-looks/' + LIB
 if (existsSync(twinPath)) need(readFileSync(twinPath, 'utf8') === lib, `${LIB} differs from atelier-looks: one rule, or the tabs she sees disagree with what the stylist marked`)
