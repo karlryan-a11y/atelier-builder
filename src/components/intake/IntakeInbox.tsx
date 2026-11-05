@@ -69,7 +69,12 @@ export function IntakeInbox() {
   // that could not be fully checked, or a resale listing's copy. Paige approves the same-product ones first.
   const sameLevel = (i: CapItem) => i.level === 'same' || i.level === 'probably'
   const viewOk = (k: RView, i: CapItem) => k === 'all' || (k === 'ready_same' ? !!i.ready && sameLevel(i) : k === 'ready_similar' ? !!i.ready && !sameLevel(i) : (k === 'with') === hasRetail(i))
-  const retailOk = (i: CapItem) => viewOk(retailView, i)
+  // Sets (several pieces in one photo) can be skipped or shown alone while how sets are approved is decided (Karl, 2026-11-05).
+  type SView = 'all' | 'no' | 'only'
+  const [setsView, setSetsView] = useState<SView>('all')
+  const isSet = (i: CapItem) => /\bsets?\b/i.test(`${i.facets?.subcategory ?? ''} ${i.facets?.name ?? i.title ?? ''}`)
+  const setsOk = (k: SView, i: CapItem) => k === 'all' || (k === 'only') === isSet(i)
+  const retailOk = (i: CapItem) => viewOk(retailView, i) && setsOk(setsView, i)
   // Needs Review shows the camera's pieces (the pick screen) or the older upload cards (Karl, 2026-10-19: Queue > Needs Review > Approved).
   const [reviewSrc, setReviewSrc] = useState<'camera' | 'uploads'>('camera')
   // Search the pieces waiting in Needs Review by brand, color or style (Paige, 2026-10-26: Barbie had 1,338 to scroll). Both lists, every piece.
@@ -371,9 +376,9 @@ export function IntakeInbox() {
   // After an approval the review panel opens the next piece of the whole list; under "Ready: same product" that could be a piece with no retailer page (Paige, 2026-10-28).
   useEffect(() => {
     const shown = capList.filter(retailOk)
-    if ((!searching && retailView === 'all') || !camMode || !shown.length) return
+    if ((!searching && retailView === 'all' && setsView === 'all') || !camMode || !shown.length) return
     if (!shown.some((i) => i.id === cap.selectedId)) tellFrame({ type: 'select', id: shown[0].id })
-  },[searching, camMode, capList, cap.selectedId, retailView])
+  },[searching, camMode, capList, cap.selectedId, retailView, setsView])
   const tabs = [
     ...(queueCount === null ? [] : [{ key: 'queue' as const, label: 'Queue', count: queueCount }]),
     { key: 'in_progress' as const, label: 'In Progress', count: activeBatchCount, accent: true },
@@ -519,12 +524,17 @@ export function IntakeInbox() {
                     <>
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['all', 'All', cap.items.length], ['with', 'Retailer info', cap.items.filter(hasRetail).length], ['without', 'No retailer info', cap.items.filter(i => !hasRetail(i)).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i) && setsOk(setsView, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['ready_same', 'Ready: same product', cap.items.filter(i => !!i.ready && sameLevel(i)).length], ['ready_similar', 'Ready: similar', cap.items.filter(i => !!i.ready && !sameLevel(i)).length]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { setRetailView(k); const first = capList.find(i => viewOk(k, i) && setsOk(setsView, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${retailView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                      ))}
+                    </div>
+                    <div className="mt-1 mx-3 flex gap-1.5">
+                      {([['all', 'Sets too', cap.items.length], ['no', 'No sets', cap.items.filter(i => !isSet(i)).length], ['only', 'Only sets', cap.items.filter(isSet).length]] as const).map(([k, l, n]) => (
+                        <button key={k} onClick={() => { setSetsView(k); const first = capList.find(i => viewOk(retailView, i) && setsOk(k, i)); if (first) tellFrame({ type: 'select', id: first.id }) }} className={`flex-1 px-1.5 py-1.5 text-[9px] tracking-[0.12em] uppercase border ${setsView === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                     </>
