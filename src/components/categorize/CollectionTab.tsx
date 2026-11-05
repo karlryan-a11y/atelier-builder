@@ -22,11 +22,22 @@ import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { updateClosetItem } from '@/lib/teamNotes'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
+import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
+import { choiceOfPiece, isSeasonMarker, seasonOfTagNames, withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 // Human labels for the client-edit provenance keys (migration 015).
 const FIELD_LABEL: Record<string, string> = { name: 'Name', brand: 'Designer', category: 'Category', color: 'Colors', custom_categories: 'Also in', description: 'Description', home: 'Home' }
+
+// SS / FW / Both on her pieces, for the season tabs on her Collection page (lib/pieceSeasons.ts).
+const SEASON_CHOICES: { key: SeasonChoice; label: string; title: string }[] = [
+  { key: 'ss', label: 'SS', title: 'Spring/Summer' },
+  { key: 'fw', label: 'FW', title: 'Fall/Winter' },
+  { key: 'both', label: 'Both', title: 'Both seasons, a year-round piece' },
+  { key: 'none', label: 'No season', title: 'Take the season off: she sees it under All only' },
+]
+const SEASON_LINE: Record<SeasonChoice, string> = { ss: 'SS', fw: 'FW', both: 'SS + FW', none: '' }
 
 // COLLECTION tab inside Categorize: the stylist sees the client's collection the way the client
 // does (her lookbook's Collection grid) but with per-item edit — hover an item → pencil → edit
@@ -162,6 +173,55 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     if (ok) { setSelected(new Set()); refetch() } else alert('Some items could not be updated — try again.')
   }
 
+  /*
+   * SEASONS ON HER PIECES (Cynthia Dada for Peyton Wheeler, 2026-11-05). Most pieces have none, so
+   * marking is in bulk: select pieces, tap SS, FW, Both or No season. Each piece keeps its other
+   * markers (a name she set, the home she picked), so each is written on its own, five at a time,
+   * and asks for its row back: a refused write is a 200 with nothing in it (ADR-0108).
+   */
+  const seasons = useCollectionSeasons(clientId)
+  const [seasonBusy, setSeasonBusy] = useState(false)
+  const [seasonNote, setSeasonNote] = useState<string | null>(null)
+  const [noSeasonOnly, setNoSeasonOnly] = useState(false)
+  async function setSeasonOn(ids: string[], choiceFor: (id: string) => SeasonChoice) {
+    if (!ids.length || !clientId) return
+    setSeasonBusy(true); setSeasonNote(null)
+    const byId = new Map(items.map((i) => [i.id, i]))
+    let idx = 0, failed = 0
+    const saved: { id: string; fields: string[] | null }[] = []
+    const run = async (id: string) => {
+      const fields = withSeasonChoice(byId.get(id)?.client_edited_fields, choiceFor(id))
+      const { data, error: e } = await supabase.from('gp_closet_items')
+        .update({ client_edited_fields: fields }).eq('id', id).eq('client_id', clientId).select('id')
+      if (e || !data?.length) { failed++; return }
+      saved.push({ id, fields })
+    }
+    await Promise.all(Array.from({ length: Math.min(5, ids.length) }, async () => {
+      while (idx < ids.length) { const id = ids[idx++]; await run(id) }
+    }))
+    for (const s of saved) patchItems([s.id], { client_edited_fields: s.fields } as Partial<ClosetItem>)
+    setSeasonBusy(false)
+    setSeasonNote(failed ? `${failed} could not be saved. Try again.` : `Saved the season on ${saved.length} piece${saved.length === 1 ? '' : 's'}.`)
+    if (!failed) setSelected(new Set())
+    refetch()
+  }
+  const seasonCounts = useMemo(() => {
+    const c = { ss: 0, fw: 0, both: 0, none: 0 }
+    for (const i of items) if (!i.is_deleted) c[choiceOfPiece(i)]++
+    return c
+  }, [items])
+  // Her GoodPix tags already name a season on some pieces ("summer dresses"). Offered, never applied
+  // without the click, and only for pieces that have no season yet.
+  const tagSuggestions = useMemo(() => {
+    const m = new Map<string, SeasonChoice>()
+    for (const i of items) {
+      if (i.is_deleted || choiceOfPiece(i) !== 'none') continue
+      const s = seasonOfTagNames((i.content_tag_ids ?? []).map((id) => tagNameById.get(id) ?? '').filter(Boolean))
+      if (s) m.set(i.id, s)
+    }
+    return m
+  }, [items, tagNameById])
+
   // Display only — the one-line label under a card. Filtering uses categoriesByItem below.
   const primaryCategoryByItem = useMemo(() => {
     const m = new Map<string, string>()
@@ -282,8 +342,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   )
   useEffect(() => { onCategoryCoverage?.(railCoverage) }, [railCoverage, onCategoryCoverage])
   const visible = useMemo(
-    () => (unconfirmedOnly ? baseVisible.filter((i) => !i.drive_verified_at) : baseVisible),
-    [baseVisible, unconfirmedOnly],
+    () => baseVisible.filter((i) => (!unconfirmedOnly || !i.drive_verified_at) && (!noSeasonOnly || choiceOfPiece(i) === 'none')),
+    [baseVisible, unconfirmedOnly, noSeasonOnly],
   )
   const selectable = visible
 
@@ -575,6 +635,41 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         <span className="tracking-[0.04em]"><span className="font-medium">Collection verification SOP</span> — how to confirm every piece against Google Drive</span>
         <ExternalLink className="h-3 w-3 text-[#aaa] ml-auto" />
       </a>
+      {/* SS / FW / All at the top of her Collection page (Cynthia Dada, 2026-11-05). Unlike the
+          Looks switch it can be turned on at once: a piece with no season shows under All only. */}
+      <div data-collection-seasons className="mb-4 px-4 py-3 rounded border border-[#E8E4DF] bg-[#F8F7F5] text-[12px] text-[#1A1A1A]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] tracking-[0.2em] uppercase text-[#888]">Seasons on her Collection page</span>
+            <button
+              role="switch"
+              aria-checked={!!seasons.on}
+              disabled={seasons.on === null || seasonBusy}
+              onClick={async () => { setSeasonBusy(true); await seasons.setOn(!seasons.on); setSeasonBusy(false) }}
+              title={seasons.on ? 'Turn off: her Collection page goes back to how it was.' : `Turn on: ${clientFirst} sees SS, FW and All at the top of her Collection.`}
+              className={`px-3 py-1 text-[10px] tracking-[0.15em] uppercase rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${seasons.on ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'bg-white text-[#1A1A1A] border-[#E8E4DF]'}`}
+            >{seasons.on === null ? '…' : seasons.on ? 'On' : 'Off'}</button>
+          </div>
+          <span data-season-counts>
+            SS {seasonCounts.ss} · FW {seasonCounts.fw} · Both {seasonCounts.both} · <strong>{seasonCounts.none}</strong> with no season
+            <span className="text-[#888]"> (she sees those under All only)</span>
+          </span>
+          <button
+            onClick={() => setNoSeasonOnly((v) => !v)}
+            className={`text-[10px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border transition-colors ${noSeasonOnly ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'text-[#888] border-[#E8E4DF] bg-white hover:text-[#1A1A1A]'}`}
+          >{noSeasonOnly ? 'Showing no season' : 'No season only'}</button>
+          {tagSuggestions.size > 0 && (
+            <button
+              onClick={() => { void setSeasonOn([...tagSuggestions.keys()], (id) => tagSuggestions.get(id) ?? 'none') }}
+              disabled={seasonBusy}
+              title="These pieces already say their season in a GoodPix tag, e.g. “summer dresses”."
+              className="px-2.5 py-1 text-[10px] tracking-[0.12em] uppercase rounded bg-[#1A1A1A] text-white hover:opacity-80 disabled:opacity-40"
+            >Use her tags' season for {tagSuggestions.size}</button>
+          )}
+          {seasonBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        </div>
+        {(seasonNote || seasons.error) && <p className="mt-2 text-[11px] text-[#888]">{seasons.error ?? seasonNote}</p>}
+      </div>
       <div className="mb-5 flex items-center gap-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#aaa]" />
@@ -672,6 +767,19 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 <CategoryOptions custom={customCats} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
+              {/* Season for every selected piece, for the SS / FW / All tabs on her Collection. */}
+              <span className="inline-flex items-center gap-1" data-bulk-season>
+                <span className="tracking-[0.08em] uppercase text-white/70">Season</span>
+                {SEASON_CHOICES.map((c) => (
+                  <button
+                    key={c.key}
+                    disabled={seasonBusy || bulkBusy}
+                    title={c.title}
+                    onClick={() => { void setSeasonOn([...selected], () => c.key) }}
+                    className="px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] text-[10px] tracking-[0.1em] uppercase hover:bg-[#F8F7F5] disabled:opacity-50"
+                  >{c.label}</button>
+                ))}
+              </span>
               {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               <button onClick={() => setSelected(new Set())} className="text-white/70 hover:text-white">Clear</button>
             </div>
@@ -746,8 +854,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                   )}
                   {/* Level 1: badge when the CLIENT set one of these fields, so the stylist can tell
                       client edits from ours before touching them (migration 015). */}
-                  {(item.client_edited_fields?.length ?? 0) > 0 && (() => {
-                    const labels = (item.client_edited_fields ?? []).map((f) => FIELD_LABEL[f] ?? f)
+                  {SEASON_LINE[choiceOfPiece(item)] && (
+                    <p data-piece-season className="mt-1 text-[10px] tracking-[0.16em] uppercase text-[#1A1A1A]">{SEASON_LINE[choiceOfPiece(item)]}</p>
+                  )}
+                  {(item.client_edited_fields ?? []).some((f) => !isSeasonMarker(f)) && (() => {
+                    // The season is ours, not hers: it stays out of the "set by" line.
+                    const labels = (item.client_edited_fields ?? []).filter((f) => !isSeasonMarker(f)).map((f) => FIELD_LABEL[f] ?? f)
                     const when = item.client_edited_at ? new Date(item.client_edited_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
                     return (
                       <p className="mt-1.5 text-[10px] tracking-[0.04em] text-[#8a7a6a] truncate" title={`Set by ${clientFirst}${when ? ` · ${when}` : ''}`}>
