@@ -6,6 +6,7 @@ import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { colorsOf } from '@/lib/colorFamily'
+import { enteredMaterialOf, withMaterialConfirmed } from '@/lib/materialConfirmed'
 import { ColorSetField } from '@/components/common/ColorSetField'
 
 interface EditItemDialogProps {
@@ -33,7 +34,7 @@ interface EditItemDialogProps {
    *  Passing false is a CLAIM — say why in a comment, and note that a surface which shows this field
    *  must also FETCH color_family + color_families, or it saves an empty set over real data. */
   enableMultiColor?: boolean
-  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; description: string | null; material?: string | null; care?: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
+  onSave: (data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; description: string | null; material?: string | null; client_edited_fields?: string[] | null; care?: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) => void
   onClose: () => void
   /** When provided, shows a "Remove BG" button that strips the item's image to transparent. */
   onRemoveBackground?: () => void
@@ -83,10 +84,11 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   const [description, setDescription] = useState(item.description ?? '')
   // Material and Care (migration 043). The tag read from digitizing is often a guess ("Appears to be
   // ... likely a blend"), and migration 043 copied it into the column, so a material equal to the tag
-  // read counts as NOT entered: the box starts empty and the read is offered under it. The client's
-  // sheet applies the same rule (atelier-looks shownMaterial) and never shows an unconfirmed read.
+  // read counts as NOT entered unless a person confirmed it (lib/materialConfirmed): then the box
+  // starts empty and the read is offered under it. The client's sheet applies the same rule
+  // (atelier-looks shownMaterial) and never shows an unconfirmed read.
   const tagRead = String(item.raw?.material ?? '').trim().slice(0, 300)
-  const enteredMaterial = (item.material ?? '').trim() && (item.material ?? '').trim() !== tagRead ? (item.material ?? '').trim() : ''
+  const enteredMaterial = enteredMaterialOf(item)
   const [material, setMaterial] = useState(enteredMaterial)
   const [care, setCare] = useState(item.care ?? '')
   const [category, setCategory] = useState(item.category ?? '')
@@ -141,6 +143,9 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
       // Empty box: keep the tag read in the column (search uses it; she never sees it). Clearing a
       // material a person had entered does clear it.
       material: material.trim() || (enteredMaterial ? null : (item.material ?? null)),
+      // Words in the box are a person's, even the same words as the tag read ("Use this"). Only a
+      // screen that loaded this column may write it, or the save would wipe what else is in it.
+      ...('client_edited_fields' in item ? { client_edited_fields: withMaterialConfirmed(item.client_edited_fields, !!material.trim()) } : {}),
       care: care.trim() || null,
       category: finalCategory || null, // '' = Auto (clear override, fall back to detection)
       // Only the Collection tab manages "Also in"; when disabled, omit the key so other

@@ -21,6 +21,7 @@ import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { updateClosetItem } from '@/lib/teamNotes'
+import { MATERIAL_CONFIRMED } from '@/lib/materialConfirmed'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
 import { choiceOfPiece, isSeasonMarker, seasonOfTagNames, withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
@@ -347,12 +348,13 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   )
   const selectable = visible
 
-  async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
+  async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null; client_edited_fields?: string[] | null }) {
     if (!editing) return
     setSaving(true)
     // If the stylist overrode a field the CLIENT set, that field is no longer "client-owned" — the
-    // stylist took it back, so drop it from the provenance list (migration 015).
-    const owned = editing.client_edited_fields ?? []
+    // stylist took it back, so drop it from the provenance list (migration 015). Starts from what
+    // the dialog sent, which carries the "a person entered this material" marker.
+    const owned = ('client_edited_fields' in data ? data.client_edited_fields : editing.client_edited_fields) ?? []
     const patch: Record<string, any> = { ...data }
     if (owned.length) {
       const nextOwned = owned.filter((f) => {
@@ -857,9 +859,9 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                   {SEASON_LINE[choiceOfPiece(item)] && (
                     <p data-piece-season className="mt-1 text-[10px] tracking-[0.16em] uppercase text-[#1A1A1A]">{SEASON_LINE[choiceOfPiece(item)]}</p>
                   )}
-                  {(item.client_edited_fields ?? []).some((f) => !isSeasonMarker(f)) && (() => {
+                  {(item.client_edited_fields ?? []).some((f) => !isSeasonMarker(f) && f !== MATERIAL_CONFIRMED) && (() => {
                     // The season is ours, not hers: it stays out of the "set by" line.
-                    const labels = (item.client_edited_fields ?? []).filter((f) => !isSeasonMarker(f)).map((f) => FIELD_LABEL[f] ?? f)
+                    const labels = (item.client_edited_fields ?? []).filter((f) => !isSeasonMarker(f) && f !== MATERIAL_CONFIRMED).map((f) => FIELD_LABEL[f] ?? f)
                     const when = item.client_edited_at ? new Date(item.client_edited_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
                     return (
                       <p className="mt-1.5 text-[10px] tracking-[0.04em] text-[#8a7a6a] truncate" title={`Set by ${clientFirst}${when ? ` · ${when}` : ''}`}>
