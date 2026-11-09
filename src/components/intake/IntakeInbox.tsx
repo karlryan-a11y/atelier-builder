@@ -27,6 +27,8 @@ import { slugifyCategory, labelForCategory, isFixedCategory } from '@/lib/garmen
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { r2ImageUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
+import { typedOnCard } from '@/lib/materialConfirmed'
+import { markUploadMaterial } from '@/lib/markUploadMaterial'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 import { searchReview, intakeSearchFields, capSearchFields, type CapFacets } from '@/lib/reviewSearch'
@@ -1029,6 +1031,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
         throw new Error(err.error || 'Approve failed')
       }
       void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
+      if (editing && typedOnCard(material, item.extracted_material)) await markUploadMaterial(item.id, material)
 
       setActionResult('approved')
       setTimeout(() => onAction(), 1200)

@@ -19,6 +19,12 @@ export function enteredMaterialOf(item: MaterialPiece): string {
   return m !== String(item.raw?.material ?? '').trim().slice(0, 300) ? m : ''
 }
 
+/** Did a person type or change the Material on an upload card? `cardRead` is what the card opened with, the AI's read: nothing else writes it before Approve. */
+export function typedOnCard(material: string, cardRead: unknown): boolean {
+  const typed = material.trim()
+  return !!typed && typed !== String(cardRead ?? '').trim()
+}
+
 /** client_edited_fields with the marker added or taken off, null when nothing is left. */
 export function withMaterialConfirmed(fields: string[] | null | undefined, confirmed: boolean): string[] | null {
   const rest = (fields ?? []).filter((f) => f !== MATERIAL_CONFIRMED)

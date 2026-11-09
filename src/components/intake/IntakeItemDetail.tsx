@@ -5,6 +5,8 @@ import { SignedImage } from './IntakeItemCard'
 import { supabase } from '@/lib/supabase'
 import { ColorSetField, ReadOnlyColorSet } from '@/components/common/ColorSetField'
 import { requestDerivatives } from '@/lib/requestDerivatives'
+import { typedOnCard } from '@/lib/materialConfirmed'
+import { markUploadMaterial } from '@/lib/markUploadMaterial'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -79,6 +81,7 @@ export function IntakeItemDetail({ item, onAction }: IntakeItemDetailProps) {
         throw new Error(err.error || 'Approve failed')
       }
       void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
+      if (editing && typedOnCard(material, item.extracted_material)) await markUploadMaterial(item.id, material)
 
       onAction()
     } catch (err) {
