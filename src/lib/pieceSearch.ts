@@ -102,7 +102,7 @@ const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'with', 'w', 'in', 'o
 
 /** Palette words. On a brand ("Skarlett Blue") they count for little, so a blue piece ranks first. */
 const COLOR_WORDS = new Set(['black', 'white', 'ivory', 'cream', 'grey', 'gray', 'beige', 'brown', 'navy',
-  'blue', 'green', 'olive', 'teal', 'purple', 'lavender', 'pink', 'blush', 'red', 'burgundy', 'orange',
+  'blue', 'green', 'olive', 'teal', 'purple', 'lavender', 'lilac', 'pink', 'blush', 'red', 'burgundy', 'orange',
   'yellow', 'gold', 'silver', 'tan', 'camel', 'multicolor'])
 
 /**
@@ -120,6 +120,7 @@ const SYNONYM_GROUPS: string[][] = [
   ['grey', 'gray'],
   ['ivory', 'cream', 'ecru', 'offwhite'],
   ['tan', 'camel'],
+  ['lavender', 'lilac'],
   ['leopard', 'cheetah'],
   ['polka', 'polkadot'],
 ]

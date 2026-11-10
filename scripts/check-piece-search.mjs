@@ -50,9 +50,11 @@ const searchInCategory = PS.searchInCategory ?? (() => undefined)
 
 const ROOT = new URL('..', import.meta.url).pathname
 // PIECE_SEARCH_SIBLING: the other app's checkout, when it is not the usual folder (a worktree).
+// A checkout beside this one comes first: an old copy in Downloads is not the code being built.
+const BESIDE = new URL('../../atelier-looks/', import.meta.url).pathname
 const SIBLING = process.env.PIECE_SEARCH_SIBLING
   ? process.env.PIECE_SEARCH_SIBLING.replace(/\/?$/, '/')
-  : `${process.env.HOME}/Downloads/atelier-looks/`
+  : existsSync(`${BESIDE}src/lib/pieceSearch.ts`) ? BESIDE : `${process.env.HOME}/Downloads/atelier-looks/`
 const problems = []
 const fail = (m) => { problems.push(m); if (problems.length <= 14) console.error(`   ❌ ${m}`) }
 let checks = 0
@@ -278,6 +280,9 @@ const CASES = [
   [{ name: 'Classic Crew T-Shirt' }, 'tee', 'client', 'full'],
   [{ name: 'Pima Cotton Tee' }, 't-shirt', 'client', 'full'],
   [{ name: 'Wool Trousers' }, 'pants', 'client', 'full'],
+  // lavender and lilac are one color to her (Cynthia Dada, Peyton Wheeler, 2026-11-09)
+  [{ name: 'Alpaca Crewneck', color: 'Lilac' }, 'lavender', 'client', 'full'],
+  [{ name: 'Bow Flat', colorFamilies: ['Lavender', 'Purple'] }, 'lilac', 'client', 'full'],
   // a garment word finds the compound it ends; an open suffix rule would not be safe
   [{ name: 'Midi Plaid Shirtdress' }, 'dress', 'client', 'full'],
   [{ name: 'Leather Handbag' }, 'bag', 'client', 'full'],
