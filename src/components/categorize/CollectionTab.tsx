@@ -861,7 +861,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                   )}
                   {(item.client_edited_fields ?? []).some((f) => !isSeasonMarker(f) && f !== MATERIAL_CONFIRMED) && (() => {
                     // The season is ours, not hers: it stays out of the "set by" line.
-                    const labels = (item.client_edited_fields ?? []).filter((f) => !isSeasonMarker(f) && f !== MATERIAL_CONFIRMED).map((f) => FIELD_LABEL[f] ?? f)
+                    const labels = (item.client_edited_fields ?? []).filter((f) => f !== MATERIAL_CONFIRMED).filter((f) => !isSeasonMarker(f)).map((f) => FIELD_LABEL[f] ?? f)
                     const when = item.client_edited_at ? new Date(item.client_edited_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
                     return (
                       <p className="mt-1.5 text-[10px] tracking-[0.04em] text-[#8a7a6a] truncate" title={`Set by ${clientFirst}${when ? ` · ${when}` : ''}`}>

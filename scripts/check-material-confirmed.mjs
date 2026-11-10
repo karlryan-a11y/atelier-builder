@@ -39,7 +39,7 @@ need(/enteredMaterialOf\(item\)/.test(dialog), 'Edit Item opens with enteredMate
 need(/'client_edited_fields' in item/.test(dialog), 'Edit Item writes the marker only when the screen loaded the column')
 const col = readFileSync('src/components/categorize/CollectionTab.tsx', 'utf8')
 need(/'client_edited_fields' in data \? data\.client_edited_fields/.test(col), 'Collection save starts from the marker the dialog sent')
-need(/filter\(\(f\) => f !== MATERIAL_CONFIRMED\)\.map/.test(col), 'the "set by" badge leaves the marker out')
+need(/filter\(\(f\) => f !== MATERIAL_CONFIRMED\)\.(map|filter\(\(f\) => !isSeasonMarker\(f\)\)\.map)/.test(col), 'the "set by" badge leaves the marker out')
 const pan = readFileSync('src/components/layout/ClosetPanel.tsx', 'utf8')
 need((pan.match(/'client_edited_fields' in data/g) ?? []).length === 2, 'Canvas save writes the marker and shows it at once')
 if (fails.length) { console.error('check-material-confirmed FAILED:\n  ' + fails.join('\n  ')); process.exit(1) }
