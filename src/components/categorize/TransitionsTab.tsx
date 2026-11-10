@@ -240,7 +240,7 @@ function CausePieces({ causeItemIds, missing, itemById, transitionedAt }: {
         })}
         {caption.unresolved > 0 && (
           <li className="text-[11px] text-[#b4443a]">
-            {caption.unresolved} {caption.unresolved === 1 ? 'piece' : 'pieces'} no longer in her collection - restore from the piece list above
+            {caption.unresolved} {caption.unresolved === 1 ? 'piece' : 'pieces'} no longer in her collection
           </li>
         )}
       </ul>
