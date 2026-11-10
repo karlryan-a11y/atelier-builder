@@ -3,6 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { lookCandidateIds, piecesOutOfLook, type LookPiece, type OutLook } from '@/lib/lookOutPieces'
+import type { OmitReason } from '@/lib/restyleSelection'
+import type { GpLayout } from '@/lib/goodpixLayout'
+import type { CanvasNode } from '@/types/canvas'
 
 // The Transitions tab: pieces a client (or stylist) marked "no longer owned", and the looks
 // that were pulled from the lookbook because they used one of those pieces. Restore returns a
@@ -18,11 +22,29 @@ export interface TransitionedItem {
   image: string | null
 }
 
+/** A piece the card names: one the look is missing because she no longer has it. */
+export interface MissingPiece {
+  id: string
+  name: string
+  brand: string | null
+  reason: OmitReason
+  source: string | null   // client | stylist, for a transitioned piece
+  transitionedAt: string | null
+  image: string | null
+}
+
 export interface TransitionedLook {
   id: string
   name: string
   image: string | null
-  causeItemIds: string[]   // which transitioned pieces pulled this look
+  /**
+   * Every piece the look is missing, the same list the opened look shows (lib/lookOutPieces.ts).
+   * Not only the recorded causes: `transitioned_item_ids` keeps just the LATEST transition that
+   * pulled the look, so pieces transitioned earlier were left off the card (Paige Berndt,
+   * 2026-11-10). Falls back to the recorded causes if the pieces could not be read.
+   */
+  causeItemIds: string[]
+  missing: MissingPiece[]
   closetItemIds: string[]  // everything it is built from (the restyle starts from the ones she still owns)
   source: string | null    // builder = restyle in place; goodpix = rebuild as a replacement (ADR-0076)
   transitionedAt: string | null
@@ -43,6 +65,39 @@ function itemImage(row: any): string | null {
   }
   const raw = row.raw ?? {}
   return raw.processed_image ?? raw.image ?? raw.images?.[0] ?? null
+}
+
+type CardPiece = LookPiece & { clientId: string; transitionSource: string | null; image: string | null }
+
+/** The pieces the cards may name, read the way the opened look reads them. null if a read failed. */
+async function readLookPieces(ids: string[]): Promise<Map<string, CardPiece> | null> {
+  const out = new Map<string, CardPiece>()
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200))   // a big .in() fails silently: chunk it
+  const results = await Promise.all(chunks.map((chunk) => supabase
+    .from('gp_closet_items')
+    .select('id, client_id, name, name_override, brand, transitioned_at, transition_source, is_deleted, deleted_at, source, primary_image_hash, processed_image_hash, image:raw->image, processed_image:raw->processed_image, images:raw->images')
+    .in('id', chunk)))
+  for (const { data, error } of results) {
+    if (error) return null
+    for (const r of (data ?? []) as any[]) {
+      const raw = { image: r.image, processed_image: r.processed_image, images: r.images }
+      out.set(r.id, {
+        id: r.id,
+        clientId: r.client_id,
+        name: (r.name_override?.trim() || r.name) ?? 'Untitled piece',
+        brand: r.brand && r.brand !== 'None' ? r.brand : null,
+        transitionedAt: r.transitioned_at ?? null,
+        transitionSource: r.transition_source ?? null,
+        isDeleted: r.is_deleted ?? null,
+        deletedAt: r.deleted_at ?? null,
+        // The same addresses lib/goodpixBoard.ts matches a picture against.
+        urls: [raw.image, raw.processed_image, ...(Array.isArray(raw.images) ? raw.images : [])].filter((u: unknown): u is string => typeof u === 'string'),
+        image: itemImage({ ...r, raw }),
+      })
+    }
+  }
+  return out
 }
 
 export function useTransitions(clientId: string | null) {
@@ -69,9 +124,12 @@ export function useTransitions(clientId: string | null) {
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
         supabase.from('gp_looks')
-          // canvas_state is deliberately NOT selected: it is large, and only the one look a
-          // stylist actually opens needs it (single-row fetch on demand, per ADR-0076).
-          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids')
+          // canvas_state is deliberately NOT selected whole: it is large, and only the one look a
+          // stylist actually opens needs it (single-row fetch on demand, per ADR-0076). Its piece
+          // nodes and the GoodPix arrangement are, because the card has to name the same missing
+          // pieces the opened look does (lib/lookOutPieces.ts): about 1 MB for Alicia Hidalgo's
+          // 206 pulled looks, the largest queue on the platform.
+          .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, gp_layout, board_nodes:canvas_state->nodes')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
           .order('transitioned_at', { ascending: false }),
@@ -82,6 +140,20 @@ export function useTransitions(clientId: string | null) {
         setLoading(false)
         return
       }
+      const lookRows = (looksRes.data ?? []) as any[]
+      const outLooks = new Map<string, OutLook>(lookRows.map((l) => [l.id, {
+        source: l.source ?? null,
+        closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+        layout: (l.gp_layout ?? null) as GpLayout | null,
+        boardNodes: Array.isArray(l.board_nodes) ? (l.board_nodes as CanvasNode[]) : null,
+      }]))
+      // Every piece any card could name, as it stands now. A failed read leaves the cards on the
+      // recorded causes rather than claiming a look is missing nothing.
+      const pieces = await readLookPieces([...new Set([...outLooks.values()].flatMap(lookCandidateIds))])
+      if (cancelled) return
+      // A GoodPix board is matched against her own pieces only (lib/goodpixBoard.ts readPieces).
+      const hers = pieces && new Map([...pieces].filter(([, p]) => p.clientId === clientId))
+
       setItems((itemsRes.data ?? []).map((r: any) => ({
         id: r.id,
         name: (r.name_override?.trim() || r.name) ?? 'Untitled item',
@@ -91,14 +163,29 @@ export function useTransitions(clientId: string | null) {
         transitionedAt: r.transitioned_at ?? null,
         image: itemImage(r),
       })))
-      setLooks((looksRes.data ?? []).map((l: any) => {
+      setLooks(lookRows.map((l: any) => {
         const rawImg = lookImageUrl(l.raw)
+        const causes: string[] = Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : []
+        const out = outLooks.get(l.id)!
+        const read = out.source === 'builder' ? pieces : hers
+        const missing: MissingPiece[] = read
+          ? piecesOutOfLook(out, read).map((o) => {
+            const p = read.get(o.id)
+            return {
+              id: o.id, name: o.name, brand: o.brand, reason: o.reason,
+              source: p?.transitionSource ?? null,
+              transitionedAt: p?.transitionedAt ?? null,
+              image: p?.image ?? null,
+            }
+          })
+          : []
         return {
           id: l.id,
           name: l.name ?? 'Untitled Look',
           image: rawImg ? proxyImageUrl(rawImg) : null,
-          causeItemIds: Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : [],
-          closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+          causeItemIds: missing.length ? missing.map((m) => m.id) : causes,
+          missing,
+          closetItemIds: out.closetItemIds,
           source: l.source ?? null,
           transitionedAt: l.transitioned_at ?? null,
           boardId: l.source_board_id ?? null,

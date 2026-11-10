@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type { LookCanvasState } from '@/types/canvas'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
-import { convertGoodPixLayout, fitPiecesToPhotos, needsFit, piecesInLayout, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
+import { convertGoodPixLayout, fitPiecesToPhotos, needsFit, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
+import { goodPixInPicture, lookCandidateIds, pieceUrls } from '@/lib/lookOutPieces'
 import { selectRestylePieces, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
@@ -82,16 +83,14 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
   // Everything the layout could be showing: the look's list, GoodPix's pool, explicit ids, and
   // the `productId`s — which are her own piece ids on most boards (ADR-0132). They are only
   // CANDIDATES: readPieces answers for this client alone, so a real shop product finds no row and
-  // stays a picture.
-  const candidates = [...new Set([
-    ...closetItemIds,
-    ...(layout.pool ?? []).map((p) => p.id),
-    ...(layout.objects ?? []).flatMap((o) => [o.closetItemId, o.productId]).filter((x): x is string => !!x),
-  ])]
+  // stays a picture. Which ones are in the picture is decided in lib/lookOutPieces.ts, the same
+  // place the Transitions card asks, so the card and this board name the same pieces.
+  const look = { source: 'goodpix', closetItemIds, layout }
+  const candidates = lookCandidateIds(look)
   const pieces = await readPieces(candidates, clientId)
-  const extraUrls = new Map([...pieces].map(([id, p]) => [id, p.urls]))
+  const extraUrls = pieceUrls(candidates, pieces)
 
-  const inPicture = piecesInLayout(layout, extraUrls)
+  const inPicture = goodPixInPicture(look, pieces) ?? []
   const { keep, omitted } = selectRestylePieces(inPicture, pieces)
   const keepSet = new Set(keep)
   const conv = convertGoodPixLayout(layout, {

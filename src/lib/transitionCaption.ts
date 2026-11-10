@@ -22,7 +22,14 @@ export interface CaptionPiece {
   name: string
   brand: string | null
   source: string | null   // client | stylist
+  /** When THIS piece went. Absent: the look's own date stands in (the old single-event card). */
+  transitionedAt?: string | null
+  /** Set for a piece that is gone for another reason than a transition (deleted). */
+  reason?: string | null
 }
+
+/** A piece on the card, with its own "who, when" when the pieces did not all go together. */
+export type CaptionLine = CaptionPiece & { note: string | null }
 
 /**
  * A look saved with an EMPTY name renders a card with no title at all — 62 of Alicia Hidalgo's
@@ -44,35 +51,49 @@ export function transitionedOn(iso: string | null): string {
 export interface CauseCaption {
   /** The line above the pieces, e.g. "3 pieces removed · by a stylist, 4 Sep". */
   headline: string
-  /** The pieces themselves, in the order they were recorded. */
-  pieces: CaptionPiece[]
+  /** The pieces themselves, in the look's order, each with its own note when they differ. */
+  pieces: CaptionLine[]
   /** Causes whose piece could not be resolved. Counted, never silently dropped. */
   unresolved: number
 }
 
+/** "by the client, 9 Nov", or what else happened to a piece that was not transitioned. */
+function eventOf(piece: CaptionPiece, lookAt: string | null): string {
+  if (piece.reason === 'deleted') return 'deleted from her collection'
+  const who = WHO_LABEL[piece.source ?? ''] ?? ''
+  const when = transitionedOn(piece.transitionedAt === undefined ? lookAt : piece.transitionedAt)
+  return [who, when].filter(Boolean).join(', ')
+}
+
 /**
- * Turn a pulled look's cause ids into what the stylist reads.
+ * Turn the pieces a pulled look is missing into what the stylist reads.
  *
- * `resolve` is the transitioned-pieces list the tab already holds. An id it cannot resolve is
- * REPORTED, not dropped: a cause we cannot name is exactly the case a stylist must not be told
- * is fine, and it is the shape a future data defect would take.
+ * `resolve` is the pieces the tab already holds. An id it cannot resolve is REPORTED, not
+ * dropped: a cause we cannot name is exactly the case a stylist must not be told is fine, and it
+ * is the shape a future data defect would take.
+ *
+ * WHO AND WHEN, TRUE FOR EVERY PIECE. Paige Berndt, 2026-11-10: a card read "2 pieces removed ·
+ * by the client, Nov 9" while the look was missing four, one taken out by a stylist in
+ * September. When every piece went the same way on the same day the headline says so once;
+ * otherwise each piece carries its own "by whom, when" and the headline only counts.
  */
 export function causeCaption(
   causeItemIds: string[],
   resolve: (id: string) => CaptionPiece | undefined,
   transitionedAt: string | null,
 ): CauseCaption {
-  const pieces = causeItemIds.map(resolve).filter(Boolean) as CaptionPiece[]
-  const unresolved = causeItemIds.length - pieces.length
+  const found = causeItemIds.map(resolve).filter(Boolean) as CaptionPiece[]
+  const unresolved = causeItemIds.length - found.length
 
   if (causeItemIds.length === 0) {
     return { headline: 'Piece transitioned', pieces: [], unresolved: 0 }
   }
 
   const what = causeItemIds.length > 1 ? `${causeItemIds.length} pieces removed` : 'Piece removed'
-  const who = WHO_LABEL[pieces[0]?.source ?? ''] ?? ''
-  const when = transitionedOn(transitionedAt)
-  const trailer = [who, when].filter(Boolean).join(', ')
+  const events = found.map((p) => eventOf(p, transitionedAt))
+  const together = new Set(events).size <= 1 && unresolved === 0
+  const pieces = found.map((p, i) => ({ ...p, note: together ? null : events[i] || null }))
+  const trailer = together ? events[0] ?? '' : ''
 
   return { headline: trailer ? `${what} · ${trailer}` : what, pieces, unresolved }
 }

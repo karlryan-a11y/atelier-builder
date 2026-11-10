@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { RotateCcw, Wand2, Archive, Copy } from 'lucide-react'
-import type { useTransitions, TransitionedItem } from '@/hooks/useTransitions'
+import type { useTransitions, TransitionedItem, MissingPiece } from '@/hooks/useTransitions'
 import { lookTitle, causeCaption } from '@/lib/transitionCaption'
 import { groupPulledLooks, orderQueue, queueSummary, queueHeadline, type QueueCard } from '@/lib/transitionQueue'
 import { TileImage } from '@/components/common/TileImage'
@@ -39,6 +39,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
   // above (checked on production 2026-09-10), so this join costs nothing: no extra query, no
   // extra fetch, both lists are already on this screen.
   const itemById = new Map(items.map((i) => [i.id, i]))
+  const missingByLook = new Map(looks.map((l) => [l.id, l.missing]))
   // Ref guard: blocks a second restore firing before React re-renders the disabled button
   // (state alone can lag a rapid double-tap / a stalled-then-retried click).
   const inFlight = useRef(false)
@@ -151,6 +152,7 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
                   )}
                   <CausePieces
                     causeItemIds={look.causeItemIds}
+                    missing={missingByLook.get(look.id) ?? []}
                     itemById={itemById}
                     transitionedAt={look.transitionedAt}
                   />
@@ -195,12 +197,17 @@ export function TransitionsTab({ items, looks, loading, error, restoreItem, reti
  * garment faster than she reads it. The wording itself lives in lib/transitionCaption.ts so
  * the build can check it against real rows -- see scripts/check-transition-caption.mjs.
  */
-function CausePieces({ causeItemIds, itemById, transitionedAt }: {
+function CausePieces({ causeItemIds, missing, itemById, transitionedAt }: {
   causeItemIds: string[]
+  missing: MissingPiece[]
   itemById: Map<string, TransitionedItem>
   transitionedAt: string | null
 }) {
-  const caption = causeCaption(causeItemIds, (id) => itemById.get(id), transitionedAt)
+  // Every piece the look is missing, the same list the opened look shows (hooks/useTransitions.ts
+  // and lib/lookOutPieces.ts). A piece whose row is gone is left unresolved and counted below.
+  const missingById = new Map(missing.filter((m) => m.reason !== 'missing').map((m) => [m.id, m]))
+  const caption = causeCaption(causeItemIds, (id) => missingById.get(id) ?? itemById.get(id), transitionedAt)
+  const imageOf = (id: string) => missingById.get(id)?.image ?? itemById.get(id)?.image ?? null
 
   if (caption.pieces.length === 0 && caption.unresolved === 0) {
     return <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa] mt-1">{caption.headline}</p>
@@ -211,12 +218,12 @@ function CausePieces({ causeItemIds, itemById, transitionedAt }: {
       <p className="text-[10px] tracking-[0.14em] uppercase text-[#aaa]">{caption.headline}</p>
       <ul className="mt-1.5 space-y-1.5">
         {caption.pieces.map((piece) => {
-          const full = itemById.get(piece.id)
+          const image = imageOf(piece.id)
           return (
             <li key={piece.id} className="flex items-center gap-2">
               <span className="h-7 w-7 shrink-0 bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm overflow-hidden flex items-center justify-center">
-                {full?.image
-                  ? <TileImage src={full.image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
+                {image
+                  ? <TileImage src={image} width={PIECE_TILE_WIDTH} alt="" className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />
                   : <span className="text-[8px] tracking-[0.1em] uppercase text-[#ccc]">--</span>}
               </span>
               <span className="min-w-0">
@@ -224,6 +231,9 @@ function CausePieces({ causeItemIds, itemById, transitionedAt }: {
                   <span className="block text-[9px] tracking-[0.16em] uppercase text-[#8a7a6a] truncate">{piece.brand}</span>
                 )}
                 <span className="block text-[12px] text-[#1A1A1A] leading-tight truncate">{piece.name}</span>
+                {piece.note && (
+                  <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{piece.note}</span>
+                )}
               </span>
             </li>
           )
