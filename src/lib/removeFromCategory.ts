@@ -37,13 +37,18 @@ export function removalFrom(slug: string, piece: { primary: string; also: string
 /**
  * What the confirm and the note say. A category can be a heading with others inside it (Peyton made
  * Accessories one over Hats, Tights and Headbands, 2026-11-11 17:28): picking it selects those pieces
- * too, and they are not taken out, so the words say they stay, and where.
+ * too, and a piece filed in Tights still shows under Accessories after its own Accessories filing comes
+ * off. So the words say how many still show under the heading, and why.
+ *   inside:     selected pieces in it only through a category inside it (nothing to take off)
+ *   keptInside: pieces taken off that still show under it through a category inside it
  */
-export function removalWords(label: string, counts: { changed: number; toNone: number; inside: number }, insideLabels: string[]): { confirm: string; note: string } {
+export function removalWords(label: string, counts: { changed: number; toNone: number; inside: number; keptInside: number }, insideLabels: string[]): { confirm: string; note: string } {
   const n = (k: number) => `${k} piece${k === 1 ? '' : 's'}`
   const where = insideLabels.length ? ` (${insideLabels.join(', ')})` : ''
-  const stay = counts.inside
-    ? `${n(counts.inside)} ${counts.inside === 1 ? 'is' : 'are'} in ${label} through a category inside it${where} and stay${counts.inside === 1 ? 's' : ''} as ${counts.inside === 1 ? 'it is' : 'they are'}.`
+  const still = counts.inside + counts.keptInside
+  const stay = still
+    ? `${n(still)} filed in the categories inside ${label}${where} still show under it` +
+      (counts.keptInside ? `, ${counts.keptInside} of these ${counts.changed} among them` : '') + '.'
     : ''
   const confirm = `Take ${n(counts.changed)} out of ${label}?\n\n` +
     (counts.changed - counts.toNone ? `${n(counts.changed - counts.toNone)} keep their other categories.\n` : '') +

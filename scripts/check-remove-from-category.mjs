@@ -30,14 +30,15 @@ if (!existsSync(LIB)) {
   eq('No category itself is never "removed" into itself', removalFrom('other', { primary: 'other', also: [] }), null)
 
   // Peyton's rail at 17:28 the same day: Accessories became a heading over Hats, Tights, Headbands...
-  // Picking it selects 389; 71 are filed there, 318 only through a category inside it. The words must
-  // say those stay, or "Take 71 pieces" beside "389 SELECTED" reads as losing the rest.
-  const w = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 318 }, ['Hats', 'Tights', 'Headbands'])
+  // Picking it selects 389; 71 are filed there, 318 only through a category inside it, and 61 of the 71
+  // (tights, hats, headbands) still sit inside it after their own filing comes off: 379 still show.
+  // The words must say so, or "Take 71 pieces" beside "389 SELECTED" reads as losing the rest.
+  const w = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 318, keptInside: 61 }, ['Hats', 'Tights', 'Headbands'])
   need(w && /Take 71 pieces out of Accessories\?/.test(w.confirm), 'the confirm names how many come out')
-  need(w && /318 pieces are in Accessories through a category inside it \(Hats, Tights, Headbands\) and stay as they are\./.test(w.confirm), 'the confirm says the nested pieces stay, and where')
+  need(w && /379 pieces filed in the categories inside Accessories \(Hats, Tights, Headbands\) still show under it, 61 of these 71 among them\./.test(w.confirm), 'the confirm says how many still show under the heading, and why')
   need(w && /8 pieces had Accessories as their only category and move to No category/.test(w.confirm), 'the confirm says which go to No category')
-  need(w && /^Took 71 pieces out of Accessories\. 8 moved to No category\. 318 pieces are in Accessories through a category inside it/.test(w.note), 'the note after saving says the nested pieces stayed')
-  const flat = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 0 }, [])
+  need(w && /^Took 71 pieces out of Accessories\. 8 moved to No category\. 379 pieces filed in the categories inside Accessories/.test(w.note), 'the note after saving says how many still show under the heading')
+  const flat = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 0, keptInside: 0 }, [])
   need(flat && !/inside it/.test(flat.confirm + flat.note), 'a category with nothing inside it says nothing about nesting')
 }
 

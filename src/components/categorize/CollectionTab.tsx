@@ -187,13 +187,17 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     if (!removeSlug || selected.size === 0 || !clientId) return
     const byId = new Map(items.map((i) => [i.id, i]))
     const plan: { id: string; patch: RemovalPatch }[] = []
+    let keptInside = 0
     for (const id of selected) {
       const it = byId.get(id)
       if (!it) continue
       const tagNames = (it.content_tag_ids ?? []).map((t) => tagNameById.get(t) ?? '').filter(Boolean)
       const also = (it.custom_categories ?? []).map((c) => slugifyCategory(String(c))).filter(Boolean)
       const patch = removalFrom(removeSlug, { primary: primaryCategoryOf(it, tagNames), also })
-      if (patch) plan.push({ id, patch })
+      if (!patch) continue
+      plan.push({ id, patch })
+      // Still under it after the change, through a category nested inside it (Tights in Accessories).
+      if (categoriesOf({ ...it, ...patch } as ClosetItem, tagNames, categoryTree).includes(removeSlug)) keptInside++
     }
     const toNone = plan.filter((p) => p.patch.category === NO_CATEGORY).length
     // Picked pieces that are in it only through a category nested inside it: they stay.
@@ -201,7 +205,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     const inside = visible.filter((i) => selected.has(i.id) && !planned.has(i.id)).length
     const insideLabels = [...categoryTree.entries()].filter(([, p]) => p === removeSlug).map(([c]) => labelForCategory(c))
     if (plan.length === 0) { setBulkNote(`None of these are filed under ${removeLabel} directly, so nothing changed.`); return }
-    if (!window.confirm(removalWords(removeLabel, { changed: plan.length, toNone, inside }, insideLabels).confirm)) return
+    if (!window.confirm(removalWords(removeLabel, { changed: plan.length, toNone, inside, keptInside }, insideLabels).confirm)) return
     setBulkBusy(true); setBulkNote(null)
     let idx = 0, failed = 0
     const saved: typeof plan = []
@@ -219,7 +223,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     const moved = saved.filter((s) => s.patch.category === NO_CATEGORY).length
     setBulkNote(failed
       ? `${failed} could not be saved. Try again.`
-      : removalWords(removeLabel, { changed: saved.length, toNone: moved, inside }, insideLabels).note)
+      : removalWords(removeLabel, { changed: saved.length, toNone: moved, inside, keptInside }, insideLabels).note)
     if (!failed) setSelected(new Set())
     refetch()
   }
