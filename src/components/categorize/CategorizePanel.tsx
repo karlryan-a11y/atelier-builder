@@ -5,6 +5,7 @@ import { LoadError } from '@/components/common/LoadError'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
 import { CATEGORY_LABELS, SIDEBAR_STRUCTURE } from '@/lib/categorize'
 import { isFixedCategory, labelForCategory, slugifyCategory, customCategoriesFromItems } from '@/lib/garmentCategory'
+import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { TOTAL_SLUG, type StyledCoverage } from '@/lib/styledCoverage'
 import { supabase } from '@/lib/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -224,6 +225,8 @@ export function CategorizePanel() {
   // Collection categories she made before filing anything in them (Cynthia, 2026-10-20). They sit
   // in the rail at 0 and in every picker on the Collection tab. lib/savedClosetCategories.ts.
   const closetCategories = useClientCategories(activeClient?.id ?? null)
+  // Her own names for her closet categories, given in Nesting (lib/categoryNames.ts).
+  const catNames = useCategoryNames(activeClient?.id ?? null)
   const savedClosetCats = useMemo(() => savedCustomCategories(closetCategories.rows), [closetCategories.rows])
   async function handleCreateClosetCategory() {
     const n = newClosetCat.trim()
@@ -1006,7 +1009,7 @@ export function CategorizePanel() {
                         return (
                           <CategoryRow
                             key={slug}
-                            label={CATEGORY_LABELS[slug]}
+                            label={catNames.nameOf(slug, CATEGORY_LABELS[slug])}
                             count={garmentCounts.get(slug) ?? 0}
                             coverage={garmentCoverage.get(slug)}
                             on={on}
@@ -1035,7 +1038,7 @@ export function CategorizePanel() {
                         return (
                           <CategoryRow
                             key={slug}
-                            label={savedClosetCats.find((c) => c.slug === slug)?.label ?? labelForCategory(slug)}
+                            label={catNames.nameOf(slug, savedClosetCats.find((c) => c.slug === slug)?.label ?? labelForCategory(slug))}
                             count={garmentCounts.get(slug) ?? 0}
                             coverage={garmentCoverage.get(slug)}
                             on={on}

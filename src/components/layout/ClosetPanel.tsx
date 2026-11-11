@@ -15,6 +15,7 @@ import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
 import { closetSearchFields } from '@/lib/closetSearchFields'
 import { styledCoverage, styledStateOf, STYLED_STATE_LABEL, type PieceStyledState } from '@/lib/styledCoverage'
 import { useClientCategories } from '@/hooks/useClientCategories'
+import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { useItemHomes, NO_HOME } from '@/hooks/useItemHomes'
 import { updateClosetItem } from '@/lib/teamNotes'
 
@@ -272,6 +273,8 @@ export function ClosetPanel() {
   // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
   // this one. The same tree the lookbook reads, from the same rows.
   const { parentBySlug: categoryTree } = useClientCategories(activeClient?.id ?? null)
+  // Her own names for her categories, given in Nesting (lib/categoryNames.ts).
+  const catNames = useCategoryNames(activeClient?.id ?? null)
   const addNode = useCanvasStore((s) => s.addNode)
   const [search, setSearch] = useState('')
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set())
@@ -389,11 +392,11 @@ export function ClosetPanel() {
     for (const [slug, count] of categoryCounts) {
       if (count <= 0) continue
       const home = slug === NO_HOME ? 'No home yet' : homes.get(slug)
-      out.push({ slug, label: home ?? labelForCategory(slug), count, home: !!home })
+      out.push({ slug, label: home ?? catNames.nameOf(slug, labelForCategory(slug)), count, home: !!home })
     }
     // HER HOMES FIRST (Cynthia, 2026-10-08), by the name the stylist gave them, then A to Z.
     return out.sort((a, b) => Number(!!b.home) - Number(!!a.home) || Number(a.slug === NO_HOME) - Number(b.slug === NO_HOME) || a.label.localeCompare(b.label))
-  }, [categoryCounts, homes])
+  }, [categoryCounts, homes, catNames.nameOf])
 
   // Does the collapsed block hide anything? Re-measured when her categories change or the panel
   // is opened out, so the toggle only appears on the clients that need it.
@@ -676,6 +679,7 @@ export function ClosetPanel() {
           item={editingItem}
           saving={savingItem}
           customCategories={customCats}
+          categoryNames={catNames.names}
           enableMultiCategory
           onSave={handleSaveItem}
           onClose={() => setEditingItem(null)}

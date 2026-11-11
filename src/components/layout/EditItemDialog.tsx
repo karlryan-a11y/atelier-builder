@@ -9,6 +9,7 @@ import { treeChoices } from '@/lib/categoryTreeChoices'
 import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
+import { nameForCategory } from '@/lib/categoryNames'
 import { colorsOf } from '@/lib/colorFamily'
 import { enteredMaterialOf, withMaterialConfirmed } from '@/lib/materialConfirmed'
 import { ColorSetField } from '@/components/common/ColorSetField'
@@ -18,6 +19,8 @@ interface EditItemDialogProps {
   saving: boolean
   /** Custom categories already used by this client, offered alongside the fixed ones. */
   customCategories?: { slug: string; label: string }[]
+  /** Her own names for her categories (lib/categoryNames.ts), so a renamed one reads her way here too. */
+  categoryNames?: Record<string, string>
   /**
    * The slugs of this client's HOMES. A home is not a garment type, so naming one in
    * Category is redirected to "Also in" rather than overwriting what the piece IS. Passed in
@@ -68,7 +71,7 @@ function addCare(cur: string, add: string): string {
   return t ? (/[.!?]$/.test(t) ? t + ' ' : t + '. ') + add + '.' : add + '.'
 }
 
-export function EditItemDialog({ item, saving, customCategories = [], residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
+export function EditItemDialog({ item, saving, customCategories = [], categoryNames, residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {
   const usedCategories = useUsedCategories()
   // Level-2 heads-up: warn before overwriting a field the client set themselves.
   const clientOwns = (f: string) => (clientEditedFields ?? []).includes(f)
@@ -313,7 +316,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
               >
                 <option value="">Auto — detect from name</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} />
+                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
                 <option value="__new__">＋ New category…</option>
               </select>
             )}
@@ -330,7 +333,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {alsoIn.map((slug) => (
                     <span key={slug} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-tile text-[11px] text-text">
-                      {labelForCategory(slug)}
+                      {nameForCategory(slug, categoryNames ?? {}, labelForCategory(slug))}
                       <button
                         onClick={() => setAlsoIn((p) => p.filter((s) => s !== slug))}
                         className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text"
@@ -358,7 +361,7 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                   >
                     <option value="">Add another category…</option>
                     {alsoInOptions.map((o) => (
-                      <option key={o.slug} value={o.slug}>{o.label}</option>
+                      <option key={o.slug} value={o.slug}>{nameForCategory(o.slug, categoryNames ?? {}, o.label)}</option>
                     ))}
                     <option value="__new__">＋ New category…</option>
                   </select>

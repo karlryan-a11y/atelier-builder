@@ -10,6 +10,7 @@ import { styledCoverage, coverageByCategory, type StyledCoverage } from '@/lib/s
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { resolveItemImage, proxyImageUrl, displayName, type ClosetItem } from '@/lib/images'
 import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFromItems, slugifyCategory } from '@/lib/garmentCategory'
+import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
 import { requestHeroRefresh } from '@/lib/renderer'
@@ -82,6 +83,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   // no tree at all, so a stylist's "Jackets inside Outerwear" reached the client's page and never
   // this one. The same tree the lookbook reads, from the same rows.
   const { parentBySlug: categoryTree } = useClientCategories(clientId)
+  // Her own names for her categories, given in Nesting (lib/categoryNames.ts).
+  const catNames = useCategoryNames(clientId)
   const { activeClient } = useClientStore()
   const clientFirst = (activeClient?.name ?? 'the client').split(' ')[0]
   const [adding, setAdding] = useState(false)
@@ -812,7 +815,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>Set category…</option>
-                <CategoryOptions custom={customCats} used={usedCategories} />
+                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {/* ADD an "Also in" category (keeps the primary; item shows under both) */}
@@ -830,7 +833,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>＋ Also add to…</option>
-                <CategoryOptions custom={customCats} used={usedCategories} />
+                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {/* TAKE them OUT of the category picked on the rail (Cynthia, 2026-11-11). */}
@@ -925,7 +928,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                     )
                   })()}
                   <p className="text-[13px] text-[#1A1A1A] truncate mt-0.5">{displayName(item) || 'Untitled item'}</p>
-                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{labelForCategory(primaryCategoryByItem.get(item.id) ?? 'other')}</p>
+                  <p className="text-[10px] tracking-[0.18em] uppercase text-[#aaa] mt-0.5 truncate">{(() => { const s = primaryCategoryByItem.get(item.id) ?? 'other'; return catNames.nameOf(s, labelForCategory(s)) })()}</p>
                   {/* One truncated line, so a stylist can see at a glance which pieces are
                       described and which are not. ADR-0151. */}
                   {item.description?.trim() && (
@@ -991,8 +994,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </div>
       )}
 
-      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
-      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
+      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} categoryNames={catNames.names} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
+      {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} categoryNames={catNames.names} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
 
       {confirmState && (() => {
         const name = displayName(confirmState.item) || 'this piece'

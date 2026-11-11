@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { useLookCategories } from '@/hooks/useLookCategories'
+import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { categoriesOf, labelForCategory } from '@/lib/garmentCategory'
 import { parentMapFrom } from '@/lib/categoryNesting'
 import { pairingsFrom } from '@/lib/categoryPairings'
@@ -45,18 +46,24 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
   )
   // Raw categories per piece (no map applied), so the Category map lists every spelling she has.
   const rawCatsByItem = useMemo(() => new Map(items.map((item, k) => [item.id, itemCatSets[k]])), [items, itemCatSets])
+  // The name each category had before any rename. It is what a nesting save writes to her row,
+  // so taking a rename off later gives back exactly this.
+  const baseLabels = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const cats of itemCatSets) for (const slug of cats) if (!m.has(slug)) m.set(slug, labelForCategory(slug))
+    // A group she just made has no pieces of its own, so the pieces never saw it.
+    // Union in her stored categories or a new group would vanish the moment it is created.
+    for (const r of closet.rows) if (!m.has(r.slug)) m.set(r.slug, r.label ?? labelForCategory(r.slug))
+    return m
+  }, [itemCatSets, closet.rows])
+  const names = useCategoryNames(clientId)
   const pieceEntries = useMemo<NestingEntry[]>(() => {
     const p = pairingsFrom(itemCatSets)
-    const out = [...p.entries()].map(([slug, v]) => ({ slug, label: labelForCategory(slug), count: v.of, pairs: v.with }))
-    // A group she just made has no pieces of its own, so the pairings never saw it.
-    // Union in her stored categories or a new group would vanish the moment it is created.
-    const seen = new Set(out.map((e) => e.slug))
-    for (const r of closet.rows) {
-      if (seen.has(r.slug)) continue
-      out.push({ slug: r.slug, label: r.label ?? labelForCategory(r.slug), count: 0, pairs: [] })
-    }
+    const out = [...baseLabels].map(([slug, base]) => ({
+      slug, label: names.nameOf(slug, base), count: p.get(slug)?.of ?? 0, pairs: p.get(slug)?.with ?? [],
+    }))
     return out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-  }, [itemCatSets, closet.rows])
+  }, [itemCatSets, baseLabels, names.nameOf])
 
   // ── LOOKS ─────────────────────────────────────────────────────────────────
   const { categories, looks, loading: looksLoading, error: looksError, setCategoryParent, createCategory } = useLookCategories(clientId)
@@ -134,8 +141,9 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
         <NestingEditor
           entries={pieceEntries}
           parentBySlug={closet.parentBySlug}
-          setParent={(slug, parent) => closet.setParent(slug, parent, pieceEntries.find((e) => e.slug === slug)?.label)}
+          setParent={(slug, parent) => closet.setParent(slug, parent, baseLabels.get(slug))}
           createGroup={closet.createGroup}
+          rename={(slug, name) => names.rename(slug, name, baseLabels.get(slug) ?? labelForCategory(slug))}
           unit="pieces"
           who={who}
           loading={itemsLoading || closet.loading}

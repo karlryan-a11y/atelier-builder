@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { authHeader } from '@/lib/authHeader'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
+import { nameForCategory } from '@/lib/categoryNames'
 import { ColorSetField } from '@/components/common/ColorSetField'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
@@ -50,6 +51,8 @@ interface Props {
   clientId: string
   clientName?: string
   customCategories?: { slug: string; label: string }[]
+  /** Her own names for her categories (lib/categoryNames.ts), so a renamed one reads her way here too. */
+  categoryNames?: Record<string, string>
   /**
    * The slugs of this client's HOMES. A home is not a garment type, so naming one in
    * Category is redirected to "Also in" rather than overwriting what the piece IS. Passed in
@@ -64,7 +67,7 @@ interface Props {
   onAdded: () => void
 }
 
-export function AddItemDialog({ clientId, clientName, customCategories = [], residenceSlugs, onClose, onAdded }: Props) {
+export function AddItemDialog({ clientId, clientName, customCategories = [], categoryNames, residenceSlugs, onClose, onAdded }: Props) {
   const usedCategories = useUsedCategories()
   const fileRef = useRef<HTMLInputElement>(null)
   const [processing, setProcessing] = useState(false)
@@ -247,7 +250,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} />
+                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>
               </select>
@@ -262,7 +265,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {alsoIn.map(slug => (
                   <span key={slug} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-tile text-[11px] text-text">
-                    {labelForCategory(slug)}
+                    {nameForCategory(slug, categoryNames ?? {}, labelForCategory(slug))}
                     <button onClick={() => setAlsoIn(p => p.filter(s => s !== slug))}
                       className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text" title="Remove">
                       <X className="h-3 w-3" />
@@ -283,7 +286,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], res
                 }}
                 className="w-full bg-tile rounded-sm pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">Add another category…</option>
-                {alsoInOptions.map(o => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+                {alsoInOptions.map(o => <option key={o.slug} value={o.slug}>{nameForCategory(o.slug, categoryNames ?? {}, o.label)}</option>)}
                 <option value="__new__">＋ New category…</option>
               </select>
             </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { CATEGORY_LABELS } from '@/lib/categorize'
 import { labelForCategory } from '@/lib/garmentCategory'
+import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { displayName, type ClosetItem } from '@/lib/images'
 import type { NestingRow } from '@/lib/categoryNesting'
 
@@ -45,6 +46,7 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<{ slug: string; text: string; bad?: boolean } | null>(null)
+  const names = useCategoryNames(clientId)
 
   const entries = useMemo<MapEntry[]>(() => {
     const by = new Map<string, MapEntry>()
@@ -81,7 +83,7 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
           : await setParent(e.slug, null, e.label)
     setBusy(null)
     setNote(res.ok
-      ? { slug: e.slug, text: kind ? `${e.label} now reads ${kind === 'same' ? 'as' : 'inside'} ${labelForCategory(target)} for ${who}.` : `${e.label} is its own category again.` }
+      ? { slug: e.slug, text: kind ? `${names.nameOf(e.slug, e.label)} now reads ${kind === 'same' ? 'as' : 'inside'} ${names.nameOf(target, labelForCategory(target))} for ${who}.` : `${names.nameOf(e.slug, e.label)} is its own category again.` }
       : { slug: e.slug, text: res.message ?? 'That did not save.', bad: true })
   }
 
@@ -140,7 +142,7 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
           {entries.map((e) => (
             <div key={e.slug} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
               <div className="min-w-[180px] flex-1">
-                <p className="text-[13px] text-[#1A1A1A]">{e.label} <span className="text-[#aaa]">· {e.count} piece{e.count === 1 ? '' : 's'}</span></p>
+                <p className="text-[13px] text-[#1A1A1A]">{names.nameOf(e.slug, e.label)} <span className="text-[#aaa]">· {e.count} piece{e.count === 1 ? '' : 's'}</span></p>
                 <p className="text-[11px] text-[#999] truncate max-w-[420px]">{e.samples.join(' · ')}</p>
               </div>
               <select
@@ -152,10 +154,10 @@ export function CategoryMapPanel({ clientId, who, items, catsByItem, rows, setSa
               >
                 <option value="">Keep separate</option>
                 <optgroup label="Same as">
-                  {STANDARD.map((c) => <option key={`same:${c.slug}`} value={`same:${c.slug}`}>Same as {c.label}</option>)}
+                  {STANDARD.map((c) => <option key={`same:${c.slug}`} value={`same:${c.slug}`}>Same as {names.nameOf(c.slug, c.label)}</option>)}
                 </optgroup>
                 <optgroup label="Inside">
-                  {STANDARD.map((c) => <option key={`in:${c.slug}`} value={`in:${c.slug}`}>Inside {c.label}</option>)}
+                  {STANDARD.map((c) => <option key={`in:${c.slug}`} value={`in:${c.slug}`}>Inside {names.nameOf(c.slug, c.label)}</option>)}
                 </optgroup>
               </select>
               {note?.slug === e.slug && (

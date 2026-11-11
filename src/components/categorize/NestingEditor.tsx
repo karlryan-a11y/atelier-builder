@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Loader2, Plus, X } from 'lucide-react'
+import { Check, Loader2, Plus, X } from 'lucide-react'
 import { categoryKey, wouldCycle } from '@/lib/categoryNesting'
+import { CATEGORY_NAME_MAX } from '@/lib/categoryNames'
 
 /**
  * Nesting categories: a main category with other categories inside it. (ADR-0113)
@@ -50,15 +51,77 @@ export interface NestingEditorProps {
    * Cynthia's request is precisely to make one that isn't there.
    */
   createGroup: (label: string) => Promise<{ ok: boolean; slug?: string; message?: string }>
+  /**
+   * Give a category her own name (Cynthia Dada for Peyton Wheeler, 11/11). With it, a heading's
+   * name and a chip's name can be tapped and typed over. Only the name changes: what is inside
+   * what, and which pieces it holds, stay as they are.
+   */
+  rename?: (slug: string, name: string) => Promise<{ ok: boolean; message?: string }>
 }
 
-export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loading, error, totalFor, createGroup }: NestingEditorProps) {
+export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loading, error, totalFor, createGroup, rename }: NestingEditorProps) {
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [problem, setProblem] = useState<string | null>(null)
   const [openFor, setOpenFor] = useState<string | null>(null)
   const [draft, setDraft] = useState<Set<string>>(new Set())
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [renaming, setRenaming] = useState<{ slug: string; text: string } | null>(null)
+  const [savingName, setSavingName] = useState(false)
+
+  async function saveName() {
+    if (!rename || !renaming || !renaming.text.trim()) return
+    setProblem(null)
+    setSavingName(true)
+    const res = await rename(renaming.slug, renaming.text)
+    setSavingName(false)
+    if (!res.ok) { setProblem(res.message ?? 'The new name was not saved.'); return }
+    setRenaming(null)
+  }
+
+  /**
+   * The name, tappable to rename when `rename` is given; a box with Save while she types.
+   * Called as a function, not used as a component, so the box is not remounted on every key.
+   */
+  const nameOf = (slug: string, label: string, className?: string) => {
+    if (renaming?.slug === slug) {
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <input
+            autoFocus
+            aria-label={`Rename ${label}`}
+            value={renaming.text}
+            maxLength={CATEGORY_NAME_MAX}
+            disabled={savingName}
+            onChange={(e) => setRenaming({ slug, text: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setRenaming(null) }}
+            className="border border-[#1A1A1A] px-2 py-0.5 text-[13px] bg-white min-w-[200px] normal-case tracking-normal"
+          />
+          <button
+            onClick={saveName}
+            disabled={!renaming.text.trim() || savingName}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] tracking-[0.1em] uppercase bg-[#1A1A1A] text-white disabled:opacity-40"
+          >
+            {savingName ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+            Save
+          </button>
+          <button onClick={() => setRenaming(null)} disabled={savingName} className="text-[11px] text-[#888] hover:text-[#1A1A1A] normal-case tracking-normal">
+            Cancel
+          </button>
+        </span>
+      )
+    }
+    if (!rename) return <span className={className}>{label}</span>
+    return (
+      <button
+        onClick={() => { setProblem(null); setRenaming({ slug, text: label }) }}
+        title={`Rename ${label}`}
+        className={`${className ?? ''} inline-flex items-center gap-1 text-left hover:underline underline-offset-2 decoration-[#BBB]`}
+      >
+        {label}
+      </button>
+    )
+  }
 
   /** Create it, then open its picker straight away — making it is never the goal. */
   async function makeNest() {
@@ -124,12 +187,19 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
       .sort((a, b) => b.shared / b.count - a.shared / a.count || b.shared - a.shared || a.label.localeCompare(b.label))
   }
 
-  const Picker = ({ group, label }: { group: string; label: string }) => (
+  // A function, not a component: the rename box inside it must keep focus while she types.
+  const picker = (group: string, label: string) => (
     <div className="mt-3 border border-[#1A1A1A] bg-[#FAF9F7] px-4 py-3 flex flex-col gap-3">
       <p className="text-[12px]">
         What goes inside <strong>{label}</strong>? Tap to choose. The ones already tagged on the
         same {unit} come first.
       </p>
+      {rename && (
+        <p className="text-[12px] text-[#888] flex items-center gap-2 flex-wrap">
+          <span>Its name for {who}:</span>
+          {nameOf(group, label, 'text-[12px] text-[#1A1A1A]')}
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5 max-h-[240px] overflow-y-auto">
         {candidates(group).map((c) => {
           const on = draft.has(c.slug)
@@ -198,6 +268,12 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
         </span>
       </div>
 
+      {rename && (
+        <p className="text-[12px] text-[#888] max-w-[70ch]">
+          Tap any name to rename it for {who}. The new name shows everywhere, her lookbook too. What is in it does not change.
+        </p>
+      )}
+
       {nests.length > 0 && (
         <div className="flex flex-col gap-4">
           {nests.map((g) => {
@@ -205,13 +281,13 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
             return (
               <div key={g.slug} className="border border-[#E8E4DF] bg-white px-4 py-3.5">
                 <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-[13px] tracking-[0.14em] uppercase">{g.label}</span>
+                  {nameOf(g.slug, g.label, 'text-[13px] tracking-[0.14em] uppercase')}
                   <span className="text-[12px] text-[#888] tabular-nums">{totalFor(g.slug, kids)} {unit}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                   {kids.map((k) => (
                     <span key={k} className="inline-flex items-center gap-1.5 border border-[#E8E4DF] bg-[#FAF9F7] pl-2.5 pr-1 py-1 text-[12px]">
-                      {bySlug.get(k)?.label ?? k}
+                      {nameOf(k, bySlug.get(k)?.label ?? k)}
                       <span className="text-[#BBB] tabular-nums">{bySlug.get(k)?.count}</span>
                       <button
                         onClick={() => move(k, null)}
@@ -230,7 +306,7 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
                     <Plus className="w-3 h-3" /> Add
                   </button>
                 </div>
-                {openFor === g.slug && <Picker group={g.slug} label={g.label} />}
+                {openFor === g.slug && picker(g.slug, g.label)}
               </div>
             )
           })}
@@ -261,7 +337,7 @@ export function NestingEditor({ entries, parentBySlug, setParent, unit, who, loa
           ))}
         </div>
         {openFor && !nests.some((g) => g.slug === openFor) && (
-          <Picker group={openFor} label={bySlug.get(openFor)?.label ?? openFor} />
+          picker(openFor, bySlug.get(openFor)?.label ?? openFor)
         )}
       </div>
     </div>
