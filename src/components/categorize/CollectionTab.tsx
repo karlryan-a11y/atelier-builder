@@ -1,7 +1,7 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Check, BookOpen, ExternalLink } from 'lucide-react'
+import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Minus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
 import { useItemHomes, NO_HOME } from '@/hooks/useItemHomes'
 import { searchInCategory, type PieceSearchFields } from '@/lib/pieceSearch'
@@ -25,6 +25,7 @@ import { MATERIAL_CONFIRMED } from '@/lib/materialConfirmed'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
 import { choiceOfPiece, isSeasonMarker, seasonOfTagNames, withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
+import { removalFrom, NO_CATEGORY, type RemovalPatch } from '@/lib/removeFromCategory'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -175,6 +176,57 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   }
 
   /*
+   * REMOVE FROM <CATEGORY> (Cynthia Dada for Peyton Wheeler, 2026-11-11: 71 pieces to take out of
+   * Accessories, one at a time). With one category picked on the rail, the selected pieces come out
+   * of it: an "Also in" entry comes off and the rest stay; a piece whose main category it is goes to
+   * No category for her to re-file (lib/removeFromCategory.ts). One row each, five at a time, and
+   * each asks for its row back: a refused write is a 200 with nothing in it (ADR-0108).
+   */
+  const [bulkNote, setBulkNote] = useState<string | null>(null)
+  async function bulkRemoveFromCategory() {
+    if (!removeSlug || selected.size === 0 || !clientId) return
+    const byId = new Map(items.map((i) => [i.id, i]))
+    const plan: { id: string; patch: RemovalPatch }[] = []
+    for (const id of selected) {
+      const it = byId.get(id)
+      if (!it) continue
+      const tagNames = (it.content_tag_ids ?? []).map((t) => tagNameById.get(t) ?? '').filter(Boolean)
+      const also = (it.custom_categories ?? []).map((c) => slugifyCategory(String(c))).filter(Boolean)
+      const patch = removalFrom(removeSlug, { primary: primaryCategoryOf(it, tagNames), also })
+      if (patch) plan.push({ id, patch })
+    }
+    const toNone = plan.filter((p) => p.patch.category === NO_CATEGORY).length
+    if (plan.length === 0) { setBulkNote(`None of these are filed under ${removeLabel} directly, so nothing changed.`); return }
+    const n = (k: number) => `${k} piece${k === 1 ? '' : 's'}`
+    if (!window.confirm(
+      `Take ${n(plan.length)} out of ${removeLabel}?\n\n` +
+      (plan.length - toNone ? `${n(plan.length - toNone)} keep their other categories.\n` : '') +
+      (toNone ? `${n(toNone)} had ${removeLabel} as their only category and move to No category, for you to re-file.\n` : '') +
+      `Nothing is deleted.`,
+    )) return
+    setBulkBusy(true); setBulkNote(null)
+    let idx = 0, failed = 0
+    const saved: typeof plan = []
+    const run = async ({ id, patch }: (typeof plan)[number]) => {
+      const { data, error: e } = await supabase.from('gp_closet_items')
+        .update(patch).eq('id', id).eq('client_id', clientId).select('id')
+      if (e || !data?.length) { failed++; return }
+      saved.push({ id, patch })
+    }
+    await Promise.all(Array.from({ length: Math.min(5, plan.length) }, async () => {
+      while (idx < plan.length) { const p = plan[idx++]; await run(p) }
+    }))
+    for (const s of saved) patchItems([s.id], s.patch as Partial<ClosetItem>)
+    setBulkBusy(false)
+    const moved = saved.filter((s) => s.patch.category === NO_CATEGORY).length
+    setBulkNote(failed
+      ? `${failed} could not be saved. Try again.`
+      : `Took ${n(saved.length)} out of ${removeLabel}.${moved ? ` ${moved} moved to No category.` : ''}`)
+    if (!failed) setSelected(new Set())
+    refetch()
+  }
+
+  /*
    * SEASONS ON HER PIECES (Cynthia Dada for Peyton Wheeler, 2026-11-05). Most pieces have none, so
    * marking is in bulk: select pieces, tap SS, FW, Both or No season. Each piece keeps its other
    * markers (a name she set, the home she picked), so each is written on its own, five at a time,
@@ -246,6 +298,16 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     }
     return m
   }, [items, tagNameById, categoryTree, withHomes])
+
+  // The one category "Remove from" takes the selected pieces out of: the single row picked on the
+  // rail, never a home (a home is not a garment filing) and never No category itself.
+  const removeSlug = useMemo(() => {
+    const picked = [...(filterCategories ?? [])]
+    if (picked.length !== 1) return null
+    const s = picked[0]
+    return s === NO_CATEGORY || s === NO_HOME || homes.has(s) || residenceSlugs?.has(s) ? null : s
+  }, [filterCategories, homes, residenceSlugs])
+  const removeLabel = removeSlug ? (savedCategories?.find((c) => c.slug === removeSlug)?.label ?? labelForCategory(removeSlug)) : ''
 
   // Every picker on this tab (Set category, Also add to, Add Item, Edit Item) reads this list, so
   // an empty category she made is offered in all of them.
@@ -769,6 +831,18 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 <CategoryOptions custom={customCats} used={usedCategories} />
                 <option value="__new__">＋ New category…</option>
               </select>
+              {/* TAKE them OUT of the category picked on the rail (Cynthia, 2026-11-11). */}
+              {removeSlug && (
+                <button
+                  data-remove-from-category={removeSlug}
+                  disabled={bulkBusy}
+                  onClick={() => { void bulkRemoveFromCategory() }}
+                  title={`Take the selected pieces out of ${removeLabel}. Their other categories stay. A piece with no other category moves to No category.`}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm bg-white text-[#1A1A1A] text-[11px] hover:bg-[#F8F7F5] disabled:opacity-50"
+                >
+                  <Minus className="h-3 w-3" /> Remove from {removeLabel}
+                </button>
+              )}
               {/* Season for every selected piece, for the SS / FW / All tabs on her Collection. */}
               <span className="inline-flex items-center gap-1" data-bulk-season>
                 <span className="tracking-[0.08em] uppercase text-white/70">Season</span>
@@ -788,6 +862,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
           )}
         </div>
       )}
+      {bulkNote && <p data-bulk-note className="-mt-2 mb-4 text-[11px] text-[#888]">{bulkNote}</p>}
 
       {visible.length === 0 ? (
         <p className="text-[#888] text-sm">
