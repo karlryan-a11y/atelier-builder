@@ -25,7 +25,7 @@ import { MATERIAL_CONFIRMED } from '@/lib/materialConfirmed'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
 import { choiceOfPiece, isSeasonMarker, seasonOfTagNames, withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
-import { removalFrom, NO_CATEGORY, type RemovalPatch } from '@/lib/removeFromCategory'
+import { removalFrom, removalWords, NO_CATEGORY, type RemovalPatch } from '@/lib/removeFromCategory'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -196,14 +196,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
       if (patch) plan.push({ id, patch })
     }
     const toNone = plan.filter((p) => p.patch.category === NO_CATEGORY).length
+    // Picked pieces that are in it only through a category nested inside it: they stay.
+    const planned = new Set(plan.map((p) => p.id))
+    const inside = visible.filter((i) => selected.has(i.id) && !planned.has(i.id)).length
+    const insideLabels = [...categoryTree.entries()].filter(([, p]) => p === removeSlug).map(([c]) => labelForCategory(c))
     if (plan.length === 0) { setBulkNote(`None of these are filed under ${removeLabel} directly, so nothing changed.`); return }
-    const n = (k: number) => `${k} piece${k === 1 ? '' : 's'}`
-    if (!window.confirm(
-      `Take ${n(plan.length)} out of ${removeLabel}?\n\n` +
-      (plan.length - toNone ? `${n(plan.length - toNone)} keep their other categories.\n` : '') +
-      (toNone ? `${n(toNone)} had ${removeLabel} as their only category and move to No category, for you to re-file.\n` : '') +
-      `Nothing is deleted.`,
-    )) return
+    if (!window.confirm(removalWords(removeLabel, { changed: plan.length, toNone, inside }, insideLabels).confirm)) return
     setBulkBusy(true); setBulkNote(null)
     let idx = 0, failed = 0
     const saved: typeof plan = []
@@ -221,7 +219,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     const moved = saved.filter((s) => s.patch.category === NO_CATEGORY).length
     setBulkNote(failed
       ? `${failed} could not be saved. Try again.`
-      : `Took ${n(saved.length)} out of ${removeLabel}.${moved ? ` ${moved} moved to No category.` : ''}`)
+      : removalWords(removeLabel, { changed: saved.length, toNone: moved, inside }, insideLabels).note)
     if (!failed) setSelected(new Set())
     refetch()
   }

@@ -33,3 +33,25 @@ export function removalFrom(slug: string, piece: { primary: string; also: string
   if (piece.primary === slug) patch.category = NO_CATEGORY
   return Object.keys(patch).length ? patch : null
 }
+
+/**
+ * What the confirm and the note say. A category can be a heading with others inside it (Peyton made
+ * Accessories one over Hats, Tights and Headbands, 2026-11-11 17:28): picking it selects those pieces
+ * too, and they are not taken out, so the words say they stay, and where.
+ */
+export function removalWords(label: string, counts: { changed: number; toNone: number; inside: number }, insideLabels: string[]): { confirm: string; note: string } {
+  const n = (k: number) => `${k} piece${k === 1 ? '' : 's'}`
+  const where = insideLabels.length ? ` (${insideLabels.join(', ')})` : ''
+  const stay = counts.inside
+    ? `${n(counts.inside)} ${counts.inside === 1 ? 'is' : 'are'} in ${label} through a category inside it${where} and stay${counts.inside === 1 ? 's' : ''} as ${counts.inside === 1 ? 'it is' : 'they are'}.`
+    : ''
+  const confirm = `Take ${n(counts.changed)} out of ${label}?\n\n` +
+    (counts.changed - counts.toNone ? `${n(counts.changed - counts.toNone)} keep their other categories.\n` : '') +
+    (counts.toNone ? `${n(counts.toNone)} had ${label} as their only category and move to No category, for you to re-file.\n` : '') +
+    (stay ? stay + '\n' : '') +
+    `Nothing is deleted.`
+  const note = `Took ${n(counts.changed)} out of ${label}.` +
+    (counts.toNone ? ` ${counts.toNone} moved to No category.` : '') +
+    (stay ? ' ' + stay : '')
+  return { confirm, note }
+}

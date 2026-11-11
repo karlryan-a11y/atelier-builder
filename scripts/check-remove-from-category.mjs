@@ -15,7 +15,7 @@ const eq = (name, got, want) => need(JSON.stringify(got) === JSON.stringify(want
 if (!existsSync(LIB)) {
   fails.push(`${LIB} is missing: there is no way to take pieces out of a category`)
 } else {
-  const { removalFrom, NO_CATEGORY } = await import('../' + LIB)
+  const { removalFrom, removalWords, NO_CATEGORY } = await import('../' + LIB)
   eq('the rail\'s "No category" row is the other slug', NO_CATEGORY, 'other')
   // 80 Denier Tights: main tights, also Accessories. Keeps Tights, loses Accessories only.
   eq('tights also in accessories', removalFrom('accessories', { primary: 'tights', also: ['accessories'] }), { custom_categories: null })
@@ -28,6 +28,17 @@ if (!existsSync(LIB)) {
   // Not filed there: nothing written.
   eq('a piece not in the category', removalFrom('accessories', { primary: 'shoes', also: ['travel'] }), null)
   eq('No category itself is never "removed" into itself', removalFrom('other', { primary: 'other', also: [] }), null)
+
+  // Peyton's rail at 17:28 the same day: Accessories became a heading over Hats, Tights, Headbands...
+  // Picking it selects 389; 71 are filed there, 318 only through a category inside it. The words must
+  // say those stay, or "Take 71 pieces" beside "389 SELECTED" reads as losing the rest.
+  const w = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 318 }, ['Hats', 'Tights', 'Headbands'])
+  need(w && /Take 71 pieces out of Accessories\?/.test(w.confirm), 'the confirm names how many come out')
+  need(w && /318 pieces are in Accessories through a category inside it \(Hats, Tights, Headbands\) and stay as they are\./.test(w.confirm), 'the confirm says the nested pieces stay, and where')
+  need(w && /8 pieces had Accessories as their only category and move to No category/.test(w.confirm), 'the confirm says which go to No category')
+  need(w && /^Took 71 pieces out of Accessories\. 8 moved to No category\. 318 pieces are in Accessories through a category inside it/.test(w.note), 'the note after saving says the nested pieces stayed')
+  const flat = removalWords?.('Accessories', { changed: 71, toNone: 8, inside: 0 }, [])
+  need(flat && !/inside it/.test(flat.confirm + flat.note), 'a category with nothing inside it says nothing about nesting')
 }
 
 const col = readFileSync('src/components/categorize/CollectionTab.tsx', 'utf8')
