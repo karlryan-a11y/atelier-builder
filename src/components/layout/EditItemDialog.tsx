@@ -1,10 +1,7 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { splitCategoryChoices } from '@/lib/categoryChoices'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
-import { useState, useRef, useMemo } from 'react'
-import { useClientStore } from '@/stores/clientStore'
-import { useClientCategories } from '@/hooks/useClientCategories'
-import { treeChoices } from '@/lib/categoryTreeChoices'
+import { useState, useRef } from 'react'
 import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
@@ -112,22 +109,6 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
     ...split.more,
   ].filter((o, i, arr) => arr.findIndex((x) => x.slug === o.slug) === i)
     .filter((o) => o.slug !== primarySlug && !alsoIn.includes(o.slug))
-
-  // Her tree, when she has one: Category is her main category, then a Subcategory inside it
-  // (lib/categoryTreeChoices.ts). Null for a client with no nesting, who keeps the single list.
-  const clientId = useClientStore((s) => s.activeClient?.id ?? null)
-  const { rows: treeRows } = useClientCategories(clientId)
-  const tree = useMemo(
-    () => treeChoices(treeRows, split, residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [treeRows, customCategories, usedCategories, residenceSlugs],
-  )
-  // Looked up by slug ("T Shirts" on an old piece is t-shirts); what is saved is only what she picks.
-  const catSlug = slugifyCategory(category)
-  const treeMain = tree ? (tree.mainOf.get(catSlug) ?? catSlug) : ''
-  const treeSubs = tree ? (tree.subsOf.get(treeMain) ?? []) : []
-  const treeSub = tree && tree.mainOf.has(catSlug) ? catSlug : ''
-  const treeKnown = !tree || !treeMain || tree.mains.some((c) => c.slug === treeMain) || tree.others.some((c) => c.slug === treeMain)
 
   function addAlsoIn(slug: string) {
     const s = slugifyCategory(slug)
@@ -253,44 +234,6 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
                   className="px-2 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text"
                 >Cancel</button>
               </div>
-            ) : tree ? (
-              <>
-                <select
-                  aria-label="Main category"
-                  value={treeMain}
-                  onChange={(e) => {
-                    if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') }
-                    else setCategory(e.target.value)
-                  }}
-                  className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
-                >
-                  <option value="">Auto — detect from name</option>
-                  {!treeKnown && <option value={treeMain}>{labelForCategory(treeMain)}</option>}
-                  <optgroup label="Her categories">
-                    {tree.mains.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-                  </optgroup>
-                  {tree.others.length > 0 && (
-                    <optgroup label="More categories">
-                      {tree.others.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-                    </optgroup>
-                  )}
-                  <option value="__new__">＋ New category…</option>
-                </select>
-                {treeSubs.length > 0 && (
-                  <>
-                    <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mt-3 mb-1.5">Subcategory</label>
-                    <select
-                      aria-label="Subcategory"
-                      value={treeSub}
-                      onChange={(e) => setCategory(e.target.value || treeMain)}
-                      className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
-                    >
-                      <option value="">None, just {tree.mains.find((c) => c.slug === treeMain)?.label ?? labelForCategory(treeMain)}</option>
-                      {treeSubs.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-                    </select>
-                  </>
-                )}
-              </>
             ) : (
               <select
                 value={category}

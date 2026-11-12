@@ -29,9 +29,6 @@ import { r2ImageUrl } from '@/lib/imageUrls'
 import { requestDerivatives } from '@/lib/requestDerivatives'
 import { typedOnCard } from '@/lib/materialConfirmed'
 import { markUploadMaterial } from '@/lib/markUploadMaterial'
-import { fileUploadCategory, uploadCategorySlug } from '@/lib/fileUploadCategory'
-import { treeChoices, type TreeChoices } from '@/lib/categoryTreeChoices'
-import { useClientCategories } from '@/hooks/useClientCategories'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 import { searchReview, intakeSearchFields, capSearchFields, type CapFacets } from '@/lib/reviewSearch'
@@ -246,21 +243,6 @@ export function IntakeInbox() {
   // on the client's closet items (category override or custom_categories[]). Paginated so
   // it's complete even for clients with >1000 items (PostgREST caps a page at 1000).
   const [customCats, setCustomCats] = useState<{ slug: string; label: string }[]>([])
-  // Her closet tree and her homes, for the main category then subcategory picker on each card
-  // (lib/categoryTreeChoices.ts). A home is where a piece lives, never offered as what it is.
-  const { rows: treeRows } = useClientCategories(selectedClientId)
-  const [homes, setHomes] = useState<string[]>([])
-  useEffect(() => {
-    if (!selectedClientId) { setHomes([]); return }
-    let cancelled = false
-    void supabase.from('look_categories').select('slug, label').eq('client_id', selectedClientId).eq('is_residence', true)
-      .then(({ data }) => { if (!cancelled) setHomes((data ?? []).flatMap((r: { slug: string; label: string | null }) => [r.slug, r.label ?? ''])) })
-    return () => { cancelled = true }
-  }, [selectedClientId])
-  const cardTree = useMemo(
-    () => treeChoices(treeRows, { mine: customCats, more: FIXED_CATEGORIES }, homes),
-    [treeRows, customCats, homes],
-  )
   useEffect(() => {
     if (!selectedClientId) { setCustomCats([]); return }
     let cancelled = false
@@ -801,7 +783,7 @@ export function IntakeInbox() {
               <p className="py-16 text-center text-sm text-[#888]">No pieces match. Try one word, like a brand or a color.</p>
             )}
             {shownItems.map(item => (
-              <InlineItemCard key={item.id} item={item} onAction={refreshBackground} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} customCategories={customCats} tree={cardTree} />
+              <InlineItemCard key={item.id} item={item} onAction={refreshBackground} selected={selectedIds.has(item.id)} onToggle={() => toggleSelect(item.id)} customCategories={customCats} />
             ))}
           </div>
         )}
@@ -818,7 +800,7 @@ export function IntakeInbox() {
  * AI photo large on left, original + tag small below it,
  * metadata + actions on the right. One-tap approve.
  */
-function InlineItemCard({ item, onAction, selected, onToggle, customCategories = [], tree = null }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void; customCategories?: { slug: string; label: string }[]; tree?: TreeChoices | null }) {
+function InlineItemCard({ item, onAction, selected, onToggle, customCategories = [] }: { item: IntakeItem; onAction: () => void; selected?: boolean; onToggle?: () => void; customCategories?: { slug: string; label: string }[] }) {
   const [editing, setEditing] = useState(false)
   const [brand, setBrand] = useState(item.extracted_brand || '')
   const [name, setName] = useState(item.extracted_name || '')
@@ -1050,9 +1032,6 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
       }
       void requestDerivatives({ intake_item_ids: [item.id] }) // small tile copy, now
       if (editing && typedOnCard(material, item.extracted_material)) await markUploadMaterial(item.id, material)
-      // The category on the card goes on the piece, picked or suggested (lib/fileUploadCategory.ts).
-      const hers = [...customCategories.map((c) => c.slug), ...(tree ? [...tree.mains, ...tree.others].map((c) => c.slug) : []), ...(tree?.mainOf.keys() ?? [])]
-      await fileUploadCategory(item.id, item.client_id, uploadCategorySlug(category, name, hers), editing && category !== (item.extracted_category || ''))
 
       setActionResult('approved')
       setTimeout(() => onAction(), 1200)
@@ -1281,7 +1260,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
             {editing
               ? <ColorSetField value={colorSet} onChange={setColorSet} label="Filter colors" />
               : <ReadOnlyColorSet value={colorSet} />}
-            <CategoryField value={category} editing={editing} onChange={setCategory} customCategories={customCategories} tree={tree} />
+            <CategoryField value={category} editing={editing} onChange={setCategory} customCategories={customCategories} />
             <MetadataField label="Material" value={material} editing={editing} onChange={setMaterial} />
           </div>
 
@@ -2635,47 +2614,15 @@ function MetadataField({
 // Fixed picks keep their existing label value (lowercased to a slug on read); custom
 // picks are stored as slugs to match how Collection/Categorize persist them.
 function CategoryField({
-  value, editing, onChange, customCategories, tree = null,
+  value, editing, onChange, customCategories,
 }: {
   value: string
   editing: boolean
   onChange: (v: string) => void
   customCategories: { slug: string; label: string }[]
-  /** Her closet tree: main category, then a subcategory inside it (lib/categoryTreeChoices.ts). */
-  tree?: TreeChoices | null
 }) {
   const [customMode, setCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
-
-  if (tree && editing && !customMode) {
-    const slug = slugifyCategory(value ?? '')
-    const main = tree.mainOf.get(slug) ?? slug
-    const subs = tree.subsOf.get(main) ?? []
-    const sub = tree.mainOf.has(slug) ? slug : ''
-    const known = !main || tree.mains.some(c => c.slug === main) || tree.others.some(c => c.slug === main)
-    const cls = 'w-full border border-[#E8E4DF] rounded-sm px-2 py-1.5 text-sm text-[#1A1A1A] bg-white'
-    return (
-      <div>
-        <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mb-0.5">Category</label>
-        <select aria-label="Main category" value={main} onChange={e => { if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') } else onChange(e.target.value) }} className={cls}>
-          <option value="">—</option>
-          {!known && <option value={main}>{labelForCategory(main)}</option>}
-          <optgroup label="Her categories">{tree.mains.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}</optgroup>
-          {tree.others.length > 0 && <optgroup label="More categories">{tree.others.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}</optgroup>}
-          <option value="__new__">＋ New category…</option>
-        </select>
-        {subs.length > 0 && (
-          <>
-            <label className="block text-[9px] tracking-[0.15em] uppercase text-[#888] mt-2 mb-0.5">Subcategory</label>
-            <select aria-label="Subcategory" value={sub} onChange={e => onChange(e.target.value || main)} className={cls}>
-              <option value="">None, just {tree.mains.find(c => c.slug === main)?.label ?? labelForCategory(main)}</option>
-              {subs.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-            </select>
-          </>
-        )}
-      </div>
-    )
-  }
 
   // Does the current value already match one of the listed options? If not (e.g. a custom
   // slug just typed this session, or an AI-extracted label not in the fixed list), show it
