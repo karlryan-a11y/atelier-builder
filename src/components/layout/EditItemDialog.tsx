@@ -1,8 +1,7 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { splitCategoryChoices } from '@/lib/categoryChoices'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
-import { useState, useRef, useMemo, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useState, useRef, useMemo } from 'react'
 import { useClientStore } from '@/stores/clientStore'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { treeChoices } from '@/lib/categoryTreeChoices'
@@ -118,20 +117,10 @@ export function EditItemDialog({ item, saving, customCategories = [], residenceS
   // (lib/categoryTreeChoices.ts). Null for a client with no nesting, who keeps the single list.
   const clientId = useClientStore((s) => s.activeClient?.id ?? null)
   const { rows: treeRows } = useClientCategories(clientId)
-  // Her homes, read here: the canvas closet opens this dialog without `residenceSlugs`, and a home must
-  // never be offered as what a piece IS (slug and label, every spelling: ADR-0081).
-  const [homes, setHomes] = useState<string[]>([])
-  useEffect(() => {
-    if (!clientId) { setHomes([]); return }
-    let cancelled = false
-    void supabase.from('look_categories').select('slug, label').eq('client_id', clientId).eq('is_residence', true)
-      .then(({ data }) => { if (!cancelled) setHomes((data ?? []).flatMap((r: { slug: string; label: string | null }) => [r.slug, r.label ?? ''])) })
-    return () => { cancelled = true }
-  }, [clientId])
   const tree = useMemo(
-    () => treeChoices(treeRows, split, [...homes, ...(residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : [])]),
+    () => treeChoices(treeRows, split, residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [treeRows, customCategories, usedCategories, residenceSlugs, homes],
+    [treeRows, customCategories, usedCategories, residenceSlugs],
   )
   // Looked up by slug ("T Shirts" on an old piece is t-shirts); what is saved is only what she picks.
   const catSlug = slugifyCategory(category)

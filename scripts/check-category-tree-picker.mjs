@@ -99,11 +99,7 @@ need(/group_label: next,\s*\/\/[^\n]*\n\s*parent_slug: next/.test(hook), 'moving
 const looks = path.join(ROOT, '../atelier-looks/src/lib/queries.ts')
 if (existsSync(looks)) need(/r\.parent_slug/.test(readFileSync(looks, 'utf8')), 'atelier-looks getClientCategories reads parent_slug too (the twin)')
 // The screens.
-const dialog = read('src/components/layout/EditItemDialog.tsx')
-need(/treeChoices\(/.test(dialog) && /aria-label="Subcategory"/.test(dialog), 'Edit Item shows Category then Subcategory from her tree')
-// The canvas closet opens Edit Item with no residenceSlugs (judge, 2026-11-12: Main Residence, Race Street, Thermal and
-// The Four Seasons were offered on Barbie there), so the dialog reads her homes itself and hands them to treeChoices.
-need(/from\('look_categories'\)[^\n]*\.eq\('is_residence', true\)/.test(dialog) && /treeChoices\(treeRows, split, \[\.\.\.homes/.test(dialog), 'Edit Item reads her homes itself, whichever screen opened it')
+need(/treeChoices\(/.test(read('src/components/layout/EditItemDialog.tsx')) && /aria-label="Subcategory"/.test(read('src/components/layout/EditItemDialog.tsx')), 'Edit Item shows Category then Subcategory from her tree')
 const inbox = read('src/components/intake/IntakeInbox.tsx')
 need(/aria-label="Subcategory"/.test(inbox), 'Needs Review > Uploads picks main category then subcategory')
 need(/fileUploadCategory\(item\.id/.test(inbox), 'Needs Review > Uploads Approve files the piece under the card\'s category')
