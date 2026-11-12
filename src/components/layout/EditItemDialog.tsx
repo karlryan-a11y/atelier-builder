@@ -120,7 +120,11 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
   // Her tree, when she has one: Category is her main category, then a Subcategory inside it
   // (lib/categoryTreeChoices.ts). Null for a client with no nesting, who keeps the single list.
   const clientId = useClientStore((s) => s.activeClient?.id ?? null)
-  const { rows: treeRows } = useClientCategories(clientId)
+  const { rows: treeRows, addSubcategory } = useClientCategories(clientId)
+  // "＋ New subcategory…": typed here, made in her tree on Save (lib/categoryTreeChoices.ts planNewSubcategory).
+  const [subMode, setSubMode] = useState(false)
+  const [subName, setSubName] = useState('')
+  const [addingSub, setAddingSub] = useState(false)
   // Her homes, read here: the canvas closet opens this dialog without `residenceSlugs`, and a home must
   // never be offered as what a piece IS (slug and label, every spelling: ADR-0081).
   const [homes, setHomes] = useState<string[]>([])
@@ -142,15 +146,31 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
   const treeSubs = tree ? (tree.subsOf.get(treeMain) ?? []) : []
   const treeSub = tree && tree.mainOf.has(catSlug) ? catSlug : ''
   const treeKnown = !tree || !treeMain || tree.mains.some((c) => c.slug === treeMain) || tree.others.some((c) => c.slug === treeMain)
+  // The main category a new subcategory goes inside: her pick in the first box, or the one category of a
+  // client with no tree yet. Never Auto, a brand-new main category, or a home.
+  const allHomes = [...homes, ...(residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : [])]
+  const subParent = customMode ? '' : tree ? treeMain : catSlug
+  const subParentLabel = tree?.mains.find((c) => c.slug === subParent)?.label
+    ?? tree?.others.find((c) => c.slug === subParent)?.label
+    ?? nameForCategory(subParent, categoryNames ?? {}, labelForCategory(subParent))
+  const canSub = !!subParent && !allHomes.some((h) => slugifyCategory(h) === subParent)
 
   function addAlsoIn(slug: string) {
     const s = slugifyCategory(slug)
     if (s && s !== primarySlug && !alsoIn.includes(s)) setAlsoIn((p) => [...p, s])
   }
 
-  function handleSave() {
+  async function handleSave() {
     const trimmedName = name.trim()
     let finalCategory = customMode ? slugifyCategory(customName) : category
+    // A new subcategory is made in her tree first; the piece is filed under it only once it exists.
+    if (canSub && subMode && subName.trim()) {
+      setAddingSub(true)
+      const made = await addSubcategory(subParent, subName, allHomes)
+      setAddingSub(false)
+      if (!made.ok) { alert(made.message); return }
+      finalCategory = made.slug
+    }
     let alsoInFinal = alsoIn
     // A home is not a garment type. Typing one into Category replaces what the piece IS, so the
     // coat stops being Outerwear everywhere — the mistake that cost 119 of Margaux Ellery's
@@ -192,6 +212,54 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
         ? { color_family: colorSet[0] ?? null, color_families: colorSet.slice(1) }
         : {}),
     })
+  }
+
+  // The Subcategory box: her subcategories inside the main one, plus "＋ New subcategory…", which shows
+  // even when the main category has nothing inside it yet (Paige, 2026-11-12). Called as a function,
+  // not mounted as a component, so the name box keeps its focus while she types.
+  function subBox(subs: { slug: string; label: string }[], picked: string) {
+    if (!canSub) return null
+    return (
+      <>
+        <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mt-3 mb-1.5">Subcategory</label>
+        <select
+          aria-label="Subcategory"
+          value={subMode ? '__newsub__' : picked}
+          onChange={(e) => {
+            if (e.target.value === '__newsub__') { setSubMode(true); setSubName(''); return }
+            setSubMode(false)
+            setCategory(e.target.value || subParent)
+          }}
+          className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
+        >
+          <option value="">None, just {subParentLabel}</option>
+          {subs.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
+          <option value="__newsub__">＋ New subcategory…</option>
+        </select>
+        {subMode && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <input
+              type="text"
+              aria-label="New subcategory name"
+              value={subName}
+              onChange={(e) => setSubName(e.target.value)}
+              placeholder="e.g. Bag Charms"
+              autoFocus
+              className="flex-1 bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush"
+            />
+            <button
+              onClick={() => { setSubMode(false); setSubName('') }}
+              className="px-2 py-2 text-[10px] tracking-[0.15em] uppercase text-text-muted hover:text-text"
+            >Cancel</button>
+          </div>
+        )}
+        {subMode && (
+          <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+            Made inside {subParentLabel} for this client when you save, and there to pick from then on
+          </p>
+        )}
+      </>
+    )
   }
 
   return (
@@ -273,6 +341,7 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                   aria-label="Main category"
                   value={treeMain}
                   onChange={(e) => {
+                    setSubMode(false)
                     if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') }
                     else setCategory(e.target.value)
                   }}
@@ -290,35 +359,26 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                   )}
                   <option value="__new__">＋ New category…</option>
                 </select>
-                {treeSubs.length > 0 && (
-                  <>
-                    <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mt-3 mb-1.5">Subcategory</label>
-                    <select
-                      aria-label="Subcategory"
-                      value={treeSub}
-                      onChange={(e) => setCategory(e.target.value || treeMain)}
-                      className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
-                    >
-                      <option value="">None, just {tree.mains.find((c) => c.slug === treeMain)?.label ?? labelForCategory(treeMain)}</option>
-                      {treeSubs.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-                    </select>
-                  </>
-                )}
+                {subBox(treeSubs, treeSub)}
               </>
             ) : (
-              <select
-                value={category}
-                onChange={(e) => {
-                  if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') }
-                  else setCategory(e.target.value)
-                }}
-                className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
-              >
-                <option value="">Auto — detect from name</option>
-                {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
-                <option value="__new__">＋ New category…</option>
-              </select>
+              <>
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    setSubMode(false)
+                    if (e.target.value === '__new__') { setCustomMode(true); setCustomName('') }
+                    else setCategory(e.target.value)
+                  }}
+                  className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
+                >
+                  <option value="">Auto — detect from name</option>
+                  {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
+                  <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
+                  <option value="__new__">＋ New category…</option>
+                </select>
+                {subBox([], '')}
+              </>
             )}
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
               Sets where this piece appears in the client's Collection. Pick "New category" to add a custom one (e.g. Rompers).
@@ -564,12 +624,12 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                 Cancel
               </button>
               <button
-                onClick={handleSave}
-                disabled={saving}
+                onClick={() => { void handleSave() }}
+                disabled={saving || addingSub}
                 className="flex items-center gap-1.5 px-6 py-2.5 bg-[#1A1A1A] text-white text-[11px] font-medium tracking-[0.18em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50 shadow-sm"
               >
                 <Save className="h-3.5 w-3.5" />
-                {saving ? 'Saving…' : 'Save changes'}
+                {saving || addingSub ? 'Saving…' : 'Save changes'}
               </button>
             </div>
           </div>

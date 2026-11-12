@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { parentMapFrom, wouldCycle, type NestingRow } from '@/lib/categoryNesting'
+import { parentMapFrom, wouldCycle, categoryKey, type NestingRow } from '@/lib/categoryNesting'
+import { planNewSubcategory } from '@/lib/categoryTreeChoices'
 import { slugifyCategory } from '@/lib/garmentCategory'
 
 /**
@@ -43,6 +44,9 @@ export function parentOfRow(r: { group_label?: string | null; parent_slug?: stri
   return (r.group_label ?? '').trim() || (r.parent_slug ?? '').trim() || null
 }
 
+/** Sent with the client's id when her tree changed on one screen, so every other screen reads it again. */
+const CHANGED = 'atelier:client-categories-changed'
+
 /** A stored row: the tree's fields, plus `kind` and `is_hidden` for her saved categories. */
 export type ClientCategoryRow = NestingRow & { kind?: string | null; is_hidden?: boolean | null }
 
@@ -78,6 +82,13 @@ export function useClientCategories(clientId: string | null) {
   }, [clientId])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
+  // Each screen holds its own copy of her tree, so a subcategory made in Edit Item tells the rest
+  // (the Collection rail, the canvas closet) to read it again, or they show it only after a reload.
+  useEffect(() => {
+    const onChange = (e: Event) => { if ((e as CustomEvent<string>).detail === clientId) void fetchAll() }
+    window.addEventListener(CHANGED, onChange)
+    return () => window.removeEventListener(CHANGED, onChange)
+  }, [clientId, fetchAll])
 
   const parentBySlug = useMemo(() => parentMapFrom(rows), [rows])
 
@@ -215,5 +226,33 @@ export function useClientCategories(clientId: string | null) {
     return { ok: true as const }
   }, [clientId, fetchAll])
 
-  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, createSavedCategory, refetch: fetchAll }
+  /**
+   * "＋ New subcategory…" in Edit Item (lib/categoryTreeChoices.ts planNewSubcategory): a subcategory
+   * of that name inside `main` is reused, a top-level one of hers with nothing inside is moved in, and
+   * anything else gets a new row inside `main`. Saved as kind 'custom' so it shows in her rail and the
+   * pickers even before a piece is filed there. Asks for the row back, like setParent (ADR-0108).
+   */
+  const addSubcategory = useCallback(async (main: string, name: string, homes: Iterable<string> = []) => {
+    if (!clientId) return { ok: false as const, message: 'No client selected.' }
+    const plan = planNewSubcategory(rows, main, name, homes)
+    if (plan.action === 'no') return { ok: false as const, message: plan.message }
+    if (plan.action === 'reuse') return { ok: true as const, slug: plan.slug }
+    const parent = categoryKey(main)
+    const { data, error: e } = plan.action === 'nest'
+      ? await supabase.from('client_categories').update({ group_label: parent, parent_slug: parent })
+        .eq('client_id', clientId).eq('slug', plan.slug).select('slug')
+      : await supabase.from('client_categories')
+        .insert({ client_id: clientId, slug: plan.slug, label: plan.label, group_label: parent, parent_slug: parent, kind: 'custom' })
+        .select('slug')
+    // 23505: someone made that row since this screen loaded. Read again and decide once more.
+    if (e?.code === '23505') { await fetchAll(); return { ok: false as const, message: 'That subcategory was just made on another screen. Pick it from the list.' } }
+    if (e) return { ok: false as const, message: e.message }
+    if (!data?.length) {
+      return { ok: false as const, message: 'The database accepted the request but saved nothing. This usually means the write was refused.' }
+    }
+    window.dispatchEvent(new CustomEvent(CHANGED, { detail: clientId }))
+    return { ok: true as const, slug: plan.slug }
+  }, [clientId, rows, fetchAll])
+
+  return { rows, parentBySlug, loading, error, setParent, setSameAs, createGroup, createSavedCategory, addSubcategory, refetch: fetchAll }
 }

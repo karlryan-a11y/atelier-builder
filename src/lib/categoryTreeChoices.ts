@@ -13,6 +13,9 @@
  * Picking a subcategory saves the subcategory alone. Her tree rolls it up to its main category
  * everywhere (lib/categoryNesting.ts withAncestors), which is also how Needs Review's approval
  * saves it (wsg-dashboard closetPatch: closet_sub, else closet_category).
+ *
+ * The Subcategory box also offers "＋ New subcategory…" under any main category, including one with
+ * nothing inside it yet and for a client with no tree at all (planNewSubcategory below).
  */
 import type { CategoryChoice } from '@/lib/categoryChoices'
 import { categoryKey } from '@/lib/categoryNesting'
@@ -78,4 +81,55 @@ export function treeChoices(
     others.push(c)
   }
   return { mains, others, subsOf, mainOf }
+}
+
+/**
+ * "＋ New subcategory…" in Edit Item (Paige Berndt for Barbie Beltran, 2026-11-12: Bag Charms under
+ * Handbags & Small Leather Goods). What adding `name` under her main category `main` does to her rows:
+ *  - reuse: a subcategory of that name is already inside it (typed again, any spelling), so no second one
+ *  - nest:  a top-level category of hers with that name and nothing inside it moves inside the main
+ *  - add:   a new row, inside the main
+ *  - no:    it can't go there, and `message` says why in her words
+ * The piece is then filed under `slug`, and her tree rolls it up to the main everywhere.
+ */
+export type NewSubcategoryPlan =
+  | { action: 'reuse' | 'nest' | 'add'; slug: string; label: string }
+  | { action: 'no'; message: string }
+
+export function planNewSubcategory(
+  rows: TreeChoiceRow[],
+  main: string,
+  name: string,
+  homes: Iterable<string> = [],
+): NewSubcategoryPlan {
+  const label = name.trim().replace(/\s+/g, ' ')
+  const typed = categoryKey(label)
+  const parent = categoryKey(main)
+  if (!typed) return { action: 'no', message: 'Give the subcategory a name.' }
+  if (!parent) return { action: 'no', message: 'Pick a main category first.' }
+  // Her own row of that name, by slug or by its label ("Handbags & Small Leather Goods" is handbags-and-...).
+  const same = rows.find((r) => r.slug === typed) ?? rows.find((r) => categoryKey(r.label) === typed)
+  const slug = same?.slug ?? typed
+  if (slug === parent) return { action: 'no', message: `A category can't sit inside itself.` }
+  if (new Set([...homes].map(categoryKey)).has(slug)) {
+    return { action: 'no', message: `"${label}" is one of her homes, not a kind of piece. Add it under "Also in" instead.` }
+  }
+  const nameOf = (r: TreeChoiceRow) => (r.label ?? '').trim() || labelForCategory(r.slug)
+  const parentOf = (r: TreeChoiceRow) => (r.parent_slug ?? '').trim().toLowerCase()
+  const inside = rows.find((r) => parentOf(r) === parent && (r.slug === slug || categoryKey(r.label) === typed))
+  if (inside) return { action: 'reuse', slug: inside.slug, label: nameOf(inside) }
+  const row = same
+  if (!row) return { action: 'add', slug, label }
+  const where = parentOf(row)
+  if (where && where !== row.slug) {
+    const mainRow = rows.find((r) => r.slug === where)
+    return { action: 'no', message: `"${nameOf(row)}" is already inside ${mainRow ? nameOf(mainRow) : labelForCategory(where)}. Pick it there, or move it in Categorize > Nesting.` }
+  }
+  if (rows.some((r) => parentOf(r) === slug && r.slug !== slug)) {
+    return { action: 'no', message: `"${nameOf(row)}" is already a main category with its own subcategories.` }
+  }
+  if ((row.same_as ?? '').trim() || row.is_hidden) {
+    return { action: 'no', message: `"${nameOf(row)}" is set up in Categorize as hidden or the same as another category. Change it there first.` }
+  }
+  return { action: 'nest', slug, label: nameOf(row) }
 }
