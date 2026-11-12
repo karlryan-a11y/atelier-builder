@@ -341,9 +341,11 @@ const BLACK_DRESSES = [
   { name: 'Shift Dress', colorFamilies: ['Black'] },
   { name: 'Knit Dress', color: 'Navy, Black' },
   { name: 'Slip Dress', color: 'Black' },
+  // Filed Red by the stylist; only its colour text says black first (Peyton's Jolene dress).
+  { name: 'Western Midi Dress', color: 'Black Tan Red', colorFamilies: ['Red'] },
 ]
 const byColor = names(searchPieces(BLACK_DRESSES, 'black dress', (x) => x, 'client').ranked)
-if (byColor !== 'Shift Dress / Slip Dress / Wrap Dress / Silk Dress / Black Floral Midi Dress / Knit Dress') fail(`"black dress" is not in the stylist's colour order: ${byColor}`)
+if (byColor !== 'Shift Dress / Slip Dress / Wrap Dress / Silk Dress / Black Floral Midi Dress / Knit Dress / Western Midi Dress') fail(`"black dress" is not in the stylist's colour order: ${byColor}`)
 ran++
 const creams = names(searchPieces([{ name: 'Tee', colorFamilies: ['Navy', 'Ivory'] }, { name: 'Cardigan', colorFamilies: ['Ivory', 'Navy'] }], 'cream', (x) => x, 'client').ranked)
 if (creams !== 'Cardigan / Tee') fail(`"cream" does not put the piece whose main colour is ivory first: ${creams}`)

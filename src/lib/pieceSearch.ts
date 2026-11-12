@@ -228,8 +228,9 @@ function colorOrder(f: PieceSearchFields, words: string[]): { place: number; cou
     const hit = (list: string[]) => list.findIndex((c) => c.split(' ').some((t) => wordStrength(w, t, false) > 0))
     const inChips = hit(chips)
     const inText = inChips < 0 ? hit(text) : -1
+    // A colour only the text names comes after every chip: the chips are what the stylist set.
     if (inChips >= 0) { place += inChips; count = Math.max(count, chips.length) }
-    else if (inText >= 0) { place += inText; count = Math.max(count, text.length) }
+    else if (inText >= 0) { place += Math.max(inText, chips.length); count = Math.max(count, text.length, chips.length) }
     else { place += 100; count = 100 }
   }
   return { place, count }
