@@ -330,6 +330,23 @@ if ((searchPieces(list, '', (x) => x, 'client').ranked ?? []).length !== 3) fail
 ran++
 const twoTone = [{ name: 'Adidas Jacket', colorFamilies: ['Cream', 'Black'] }, { name: 'Adidas Track Jacket', colorFamilies: ['Black'] }]
 if (names(searchPieces(twoTone, 'black jacket', (x) => x, 'client').ranked) !== 'Adidas Track Jacket / Adidas Jacket') fail('a piece whose main colour matches does not rank above one where it is the second colour, or the second one was dropped')
+// Karl, 2026-11-12: the colours keep the order a stylist sets in digitization, the one covering most of the
+// piece first. "black dress": only black, then black and white, then black, white, purple and pink, and only
+// then a dress where black is not the first colour, even when its name says black.
+ran++
+const BLACK_DRESSES = [
+  { name: 'Black Floral Midi Dress', colorFamilies: ['White', 'Black'] },
+  { name: 'Silk Dress', colorFamilies: ['Black', 'White', 'Purple', 'Pink'] },
+  { name: 'Wrap Dress', colorFamilies: ['Black', 'White'] },
+  { name: 'Shift Dress', colorFamilies: ['Black'] },
+  { name: 'Knit Dress', color: 'Navy, Black' },
+  { name: 'Slip Dress', color: 'Black' },
+]
+const byColor = names(searchPieces(BLACK_DRESSES, 'black dress', (x) => x, 'client').ranked)
+if (byColor !== 'Shift Dress / Slip Dress / Wrap Dress / Silk Dress / Black Floral Midi Dress / Knit Dress') fail(`"black dress" is not in the stylist's colour order: ${byColor}`)
+ran++
+const creams = names(searchPieces([{ name: 'Tee', colorFamilies: ['Navy', 'Ivory'] }, { name: 'Cardigan', colorFamilies: ['Ivory', 'Navy'] }], 'cream', (x) => x, 'client').ranked)
+if (creams !== 'Cardigan / Tee') fail(`"cream" does not put the piece whose main colour is ivory first: ${creams}`)
 
 // THE PEYTON WHEELER CASE, 2026-09-25: "plaid rosie dress" in Dresses. The page showed 2 and hid
 // the rest. Every possible match now shows, closest first, in ONE list.

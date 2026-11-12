@@ -205,6 +205,36 @@ const SHADE_OF: Record<string, string[]> = {
   blush: ['pink'],
 }
 
+/** Every word she may type as a colour: the palette, the shades, and the ivory spellings. */
+const COLOR_QUERY = new Set([...COLOR_WORDS, ...Object.keys(SHADE_OF), ...SYNONYM_GROUPS.filter((g) => g.some((w) => COLOR_WORDS.has(w))).flat()])
+
+/**
+ * THE STYLIST'S COLOUR ORDER (Karl, 2026-11-12). In digitization a stylist lists a piece's colours
+ * from the one that covers most of it down: the chips (color_family, then color_families), or the
+ * colour text when a piece has no chips. Searching "black dress" shows the dresses that are only
+ * black first, then black and white, then black, white, purple and pink, and then the ones where
+ * black is not the first colour. A piece that names the colour only in its name or description
+ * comes last. Returns where the colour she typed sits (0 = first) and how many colours it lists.
+ */
+function colorOrder(f: PieceSearchFields, words: string[]): { place: number; count: number } {
+  const chips = [...new Set((f.colorFamilies ?? []).filter(Boolean).map((c) => tokenize(c).join(' ')))]
+  // "Seafoam Green" is one colour: the colour word after its shade is not a second one.
+  const said = tokenize(f.color)
+  const text = (f.color ?? '').length > LONG_COLOR_TEXT ? [] : [...new Set(said.filter((t, i) => COLOR_QUERY.has(t) && !(i > 0 && SHADE_OF[said[i - 1]]?.includes(t))))]
+  let place = 0
+  let count = 0
+  for (const w of words) {
+    if (!COLOR_QUERY.has(w)) continue
+    const hit = (list: string[]) => list.findIndex((c) => c.split(' ').some((t) => wordStrength(w, t, false) > 0))
+    const inChips = hit(chips)
+    const inText = inChips < 0 ? hit(text) : -1
+    if (inChips >= 0) { place += inChips; count = Math.max(count, chips.length) }
+    else if (inText >= 0) { place += inText; count = Math.max(count, text.length) }
+    else { place += 100; count = 100 }
+  }
+  return { place, count }
+}
+
 /** The typed words that count: filler dropped, unless filler is all there is. */
 export function queryWords(query: string): string[] {
   const words = tokenize(query)
@@ -393,7 +423,7 @@ export function searchPieces<T>(
   const common = words.map((_, k) => items.length >= 10 && scoped[k] > items.length / 2)
   const hasDistinct = common.some((c) => !c)
   const isNumber = words.map((w) => /^\d+$/.test(w))
-  const graded: { item: T; m: PieceMatch; i: number }[] = []
+  const graded: { item: T; m: PieceMatch; i: number; c: { place: number; count: number } }[] = []
   items.forEach((item, i) => {
     const m = matchPiece(fields[i], query, audience, typoWords)
     if (!m.included) return
@@ -401,9 +431,10 @@ export function searchPieces<T>(
       if (isNumber.some((n, k) => n && !m.hits![k])) return
       if (hasDistinct && !m.hits.some((h, k) => h && !common[k])) return
     }
-    graded.push({ item, m, i })
+    graded.push({ item, m, i, c: colorOrder(fields[i], words) })
   })
-  graded.sort((a, b) => b.m.score - a.m.score || a.i - b.i)
+  // All the words before fewer words; then, among those, the stylist's colour order; then closest.
+  graded.sort((a, b) => b.m.matched - a.m.matched || a.c.place - b.c.place || a.c.count - b.c.count || b.m.score - a.m.score || a.i - b.i)
   const ranked = graded.map((g) => g.item)
   return {
     ranked,
