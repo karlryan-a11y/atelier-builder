@@ -33,6 +33,16 @@ import { slugifyCategory } from '@/lib/garmentCategory'
 
 export type { NestingRow }
 
+/**
+ * A row's parent. `group_label` is where the builder saves it; a tree loaded straight into the
+ * database can carry it in `parent_slug` instead (Barbie Beltran's 111 subcategories), and until
+ * 2026-11-11 nothing read that, so her Tops & Blouses > T-Shirts nested nowhere.
+ * KEEP IN STEP WITH THE TWIN: atelier-looks getClientCategories (src/lib/queries.ts).
+ */
+export function parentOfRow(r: { group_label?: string | null; parent_slug?: string | null }): string | null {
+  return (r.group_label ?? '').trim() || (r.parent_slug ?? '').trim() || null
+}
+
 /** A stored row: the tree's fields, plus `kind` and `is_hidden` for her saved categories. */
 export type ClientCategoryRow = NestingRow & { kind?: string | null; is_hidden?: boolean | null }
 
@@ -46,7 +56,7 @@ export function useClientCategories(clientId: string | null) {
     setLoading(true)
     const { data, error: e } = await supabase
       .from('client_categories')
-      .select('slug, label, group_label, sort_order, same_as, kind, is_hidden')
+      .select('slug, label, group_label, sort_order, same_as, kind, is_hidden, parent_slug')
       .eq('client_id', clientId)
       .order('sort_order')
       .order('slug')
@@ -61,7 +71,7 @@ export function useClientCategories(clientId: string | null) {
     }
     setError(null)
     setRows((data ?? []).map((r: any) => ({
-      slug: r.slug, label: r.label, parent_slug: r.group_label ?? null, sort_order: r.sort_order ?? 0,
+      slug: r.slug, label: r.label, parent_slug: parentOfRow(r), sort_order: r.sort_order ?? 0,
       same_as: r.same_as ?? null,
       kind: r.kind ?? null, is_hidden: r.is_hidden ?? false,
     })))
@@ -97,6 +107,8 @@ export function useClientCategories(clientId: string | null) {
           slug: child,
           label: label ?? child,
           group_label: next,
+          // The other spelling of the parent goes too, or parentOfRow would put it straight back.
+          parent_slug: next,
           // INSIDE and SAME AS are exclusive: putting a category inside another clears its same-as
           // (ADR-0163).
           same_as: null,
@@ -133,7 +145,7 @@ export function useClientCategories(clientId: string | null) {
     if (!slug) return { ok: false as const, message: 'Give the group a name.' }
     const { data, error: e } = await supabase
       .from('client_categories')
-      .upsert({ client_id: clientId, slug, label: name, group_label: null, kind: 'garment' }, { onConflict: 'client_id,slug' })
+      .upsert({ client_id: clientId, slug, label: name, group_label: null, parent_slug: null, kind: 'garment' }, { onConflict: 'client_id,slug' })
       .select('slug')
     if (e) return { ok: false as const, message: e.message }
     if (!data?.length) {
@@ -191,7 +203,7 @@ export function useClientCategories(clientId: string | null) {
     const { data, error: e } = await supabase
       .from('client_categories')
       .upsert(
-        { client_id: clientId, slug: child, label: label ?? child, same_as: as, group_label: null, kind: 'garment' },
+        { client_id: clientId, slug: child, label: label ?? child, same_as: as, group_label: null, parent_slug: null, kind: 'garment' },
         { onConflict: 'client_id,slug' },
       )
       .select('slug, same_as')
