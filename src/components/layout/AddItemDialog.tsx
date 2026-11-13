@@ -10,6 +10,7 @@ import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { nameForCategory } from '@/lib/categoryNames'
 import { ColorSetField } from '@/components/common/ColorSetField'
 import { useClosetItems } from '@/hooks/useClosetItems'
+import { useClosetTree } from '@/hooks/useClosetTree'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -95,7 +96,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
   // a Top AND live in a custom grouping (49ers, a residence) from the moment it goes live.
   const [alsoIn, setAlsoIn] = useState<string[]>([])
 
+  // Maegan's standard categories and Collections, for a client on them (every new client).
+  const closetTree = useClosetTree(clientId)
   const currentInList = FIXED.some(([s]) => s === category) || customCategories.some(c => c.slug === category)
+    || !!closetTree?.subs.some((s) => s.slug === category) || !!closetTree?.categories.some((c) => c.slug === category)
   const ready = !!draftId && !!processedUrl && !processing
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
@@ -250,7 +254,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
+                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} tree={closetTree} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>
               </select>

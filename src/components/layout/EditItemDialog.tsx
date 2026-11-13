@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { useClientStore } from '@/stores/clientStore'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { treeChoices } from '@/lib/categoryTreeChoices'
+import { useClosetTree } from '@/hooks/useClosetTree'
+import { standardTreeRows, collectionsFor } from '@/lib/standardTree'
 import { X, Save, Eraser, Upload, Archive, RotateCw, Plus } from 'lucide-react'
 import type { ClosetItem } from '@/lib/images'
 import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
@@ -135,11 +137,18 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
       .then(({ data }) => { if (!cancelled) setHomes((data ?? []).flatMap((r: { slug: string; label: string | null }) => [r.slug, r.label ?? ''])) })
     return () => { cancelled = true }
   }, [clientId])
+  // A client on Maegan's standard categories (every new client) picks from those instead: one of the
+  // 19, then one of its sub-categories (lib/standardTree.ts).
+  const closetTree = useClosetTree(clientId)
   const tree = useMemo(
-    () => treeChoices(treeRows, split, [...homes, ...(residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : [])]),
+    () => treeChoices(closetTree ? standardTreeRows(closetTree) : treeRows, split, [...homes, ...(residenceSlugs ? [...residenceSlugs.keys(), ...residenceSlugs.values()] : [])]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [treeRows, customCategories, usedCategories, residenceSlugs, homes],
+    [closetTree, treeRows, customCategories, usedCategories, residenceSlugs, homes],
   )
+  // Her Wardrobe's Collections (Eveningwear, Resort & Beach; Golf, Travel for a men's client), offered
+  // first under "Also in" when she is on the standard categories.
+  const stdCollections = closetTree ? collectionsFor(closetTree.kind) : []
+  const collectionLabel = (slug: string) => stdCollections.find((c) => c.slug === slug)?.label
   // Looked up by slug ("T Shirts" on an old piece is t-shirts); what is saved is only what she picks.
   const catSlug = slugifyCategory(category)
   const treeMain = tree ? (tree.mainOf.get(catSlug) ?? catSlug) : ''
@@ -153,7 +162,8 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
   const subParentLabel = tree?.mains.find((c) => c.slug === subParent)?.label
     ?? tree?.others.find((c) => c.slug === subParent)?.label
     ?? nameForCategory(subParent, categoryNames ?? {}, labelForCategory(subParent))
-  const canSub = !!subParent && !allHomes.some((h) => slugifyCategory(h) === subParent)
+  // Maegan's list is fixed, so no new subcategory is made inside it.
+  const canSub = !closetTree && !!subParent && !allHomes.some((h) => slugifyCategory(h) === subParent)
 
   function addAlsoIn(slug: string) {
     const s = slugifyCategory(slug)
@@ -349,7 +359,7 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                 >
                   <option value="">Auto — detect from name</option>
                   {!treeKnown && <option value={treeMain}>{labelForCategory(treeMain)}</option>}
-                  <optgroup label="Her categories">
+                  <optgroup label={closetTree ? (closetTree.kind === 'men' ? "Men's categories" : "Women's categories") : 'Her categories'}>
                     {tree.mains.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
                   </optgroup>
                   {tree.others.length > 0 && (
@@ -374,7 +384,7 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                 >
                   <option value="">Auto — detect from name</option>
                   {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                  <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
+                  <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} tree={closetTree} />
                   <option value="__new__">＋ New category…</option>
                 </select>
                 {subBox([], '')}
@@ -393,7 +403,7 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {alsoIn.map((slug) => (
                     <span key={slug} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-tile text-[11px] text-text">
-                      {nameForCategory(slug, categoryNames ?? {}, labelForCategory(slug))}
+                      {collectionLabel(slug) ?? nameForCategory(slug, categoryNames ?? {}, labelForCategory(slug))}
                       <button
                         onClick={() => setAlsoIn((p) => p.filter((s) => s !== slug))}
                         className="p-0.5 rounded-full hover:bg-black/10 text-text-muted hover:text-text"
@@ -420,7 +430,14 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
                     className="w-full bg-tile rounded-sm pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush"
                   >
                     <option value="">Add another category…</option>
-                    {alsoInOptions.map((o) => (
+                    {stdCollections.length > 0 && (
+                      <optgroup label="Collections">
+                        {stdCollections.filter((c) => c.slug !== primarySlug && !alsoIn.includes(c.slug)).map((c) => (
+                          <option key={c.slug} value={c.slug}>{c.label}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {alsoInOptions.filter((o) => !collectionLabel(o.slug)).map((o) => (
                       <option key={o.slug} value={o.slug}>{nameForCategory(o.slug, categoryNames ?? {}, o.label)}</option>
                     ))}
                     <option value="__new__">＋ New category…</option>
