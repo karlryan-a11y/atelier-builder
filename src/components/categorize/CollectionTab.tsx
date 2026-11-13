@@ -1,5 +1,6 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
+import { useClosetTree } from '@/hooks/useClosetTree'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Search, CheckSquare, Square, Tags, Loader2, Eraser, Layers, X, Plus, Minus, Check, BookOpen, ExternalLink } from 'lucide-react'
 import { useItemLookUsage, type LookLite } from '@/hooks/useItemLookUsage'
@@ -95,6 +96,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   const { parentBySlug: categoryTree } = useClientCategories(clientId)
   // Her own names for her categories, given in Nesting (lib/categoryNames.ts).
   const catNames = useCategoryNames(clientId)
+  // Maegan's standard categories and Collections, offered first in every picker on this tab.
+  const closetTree = useClosetTree(clientId)
   const { activeClient } = useClientStore()
   const clientFirst = (activeClient?.name ?? 'the client').split(' ')[0]
   const [adding, setAdding] = useState(false)
@@ -902,7 +905,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>Set category…</option>
-                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} />
+                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} tree={closetTree} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {/* ADD an "Also in" category (keeps the primary; item shows under both) */}
@@ -920,7 +923,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
                 className="bg-white text-[#1A1A1A] rounded-sm px-2 py-1 text-[11px] focus:outline-none"
               >
                 <option value="" disabled>＋ Also add to…</option>
-                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} />
+                <CategoryOptions custom={customCats} used={usedCategories} names={catNames.names} tree={closetTree} />
                 <option value="__new__">＋ New category…</option>
               </select>
               {/* TAKE them OUT of the category picked on the rail (Cynthia, 2026-11-11). */}

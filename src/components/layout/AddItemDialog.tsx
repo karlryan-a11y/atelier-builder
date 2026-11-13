@@ -11,6 +11,7 @@ import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { nameForCategory } from '@/lib/categoryNames'
 import { ColorSetField } from '@/components/common/ColorSetField'
 import { useClosetItems } from '@/hooks/useClosetItems'
+import { useClosetTree } from '@/hooks/useClosetTree'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
 import { withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
@@ -121,7 +122,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
   const { on: seasonsOn } = useCollectionSeasons(clientId)
   const [season, setSeason] = useState<SeasonChoice>('none')
 
+  // Maegan's standard categories and Collections, for a client on them (every new client).
+  const closetTree = useClosetTree(clientId)
   const currentInList = FIXED.some(([s]) => s === category) || customCategories.some(c => c.slug === category)
+    || !!closetTree?.subs.some((s) => s.slug === category) || !!closetTree?.categories.some((c) => c.slug === category)
   const ready = !!draftId && !!processedUrl && !processing
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
@@ -283,7 +287,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames}
+                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} tree={closetTree}
                   omit={atHome ? (s => s !== category && !atHome(s)) : undefined} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>

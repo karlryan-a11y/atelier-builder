@@ -9,6 +9,7 @@ import { pairingsFrom } from '@/lib/categoryPairings'
 import { NestingEditor, type NestingEntry } from './NestingEditor'
 import { CategoryMapPanel } from './CategoryMapPanel'
 import { CustomHeadingPanel } from './CustomHeadingPanel'
+import { StandardTreePanel } from './StandardTreePanel'
 
 /**
  * The "Nesting categories" tab. One screen, two taxonomies. (ADR-0113)
@@ -122,6 +123,8 @@ export function NestingTab({ clientId, clientName }: { clientId: string | null; 
             : `Office Casual on top, the seasonal ones inside it. On ${who}'s Looks page the group returns every look in it, and she can still tap one season on its own. Nothing is merged, so no look is re-tagged.`}
         </p>
       </div>
+
+      {which === 'collection' && <StandardTreePanel clientId={clientId} who={who} />}
 
       {which === 'collection' && <CustomHeadingPanel clientId={clientId} who={who} />}
 
