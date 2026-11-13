@@ -29,7 +29,8 @@ const errors = []
 let inspected = 0
 
 const HOOK = 'src/hooks/useLookCategories.ts'
-const PANEL = 'src/components/categorize/CategorizePanel.tsx'
+// The Home controls moved off the category rail onto Residences (Paige Berndt, 2026-11-13).
+const PANEL = 'src/components/categorize/HomesManager.tsx'
 const LIB = 'src/lib/residences.ts'
 const DELETION = 'src/lib/categoryDeletion.ts'
 
@@ -72,31 +73,31 @@ if (/RESIDENCE_SLUGS|PSEUDO_CATEGORY/.test(lib)) {
 
 // ── 3. the toggle exists, is reachable without hover, and says what it does ──
 inspected++
-// Wired through handleToggleHome, which asks before it writes. check-residence-toggle.mjs
-// owns the confirm itself; this only proves the control is still there and still reaches it.
-if (!/onClick=\{\(\) => handleToggleHome\(cat\)\}/.test(panel)) {
+// Add is wired to addHome and Remove to handleRemove, which asks before it writes.
+// check-residence-toggle.mjs owns the confirm itself; this only proves the controls are still
+// there and still reach it.
+if (!/addHome\(/.test(panel) || !/onClick=\{\(\) => \{ void handleRemove\(h\) \}\}/.test(panel)) {
   errors.push(
-    `${PANEL} has no Home toggle wired to handleToggleHome.\n` +
-    `    Without it a stylist cannot make a category a home, which is the point of the column.`,
+    `${PANEL} has no Add a home or Remove wired to addHome / handleRemove.\n` +
+    `    Without them a stylist cannot make a category a home, which is the point of the column.`,
   )
 }
 inspected++
 {
-  // The toggle's own className must never start hidden. Grab the button that calls
-  // setCategoryResidence and check the classes it renders with.
-  const m = panel.match(/onClick=\{\(\) => handleToggleHome\(cat\)\}\s*\n\s*className=\{`([^`]*)`/)
+  // The Remove control's own className must never start hidden.
+  const m = panel.match(/onClick=\{\(\) => \{ void handleRemove\(h\) \}\}\s*\n\s*className=\{`([^`]*)`/)
   if (!m) {
-    errors.push(`${PANEL}: could not find the Home toggle's className to inspect. The guard cannot see what it is guarding.`)
+    errors.push(`${PANEL}: could not find the Remove control's className to inspect. The guard cannot see what it is guarding.`)
   } else if (/opacity-0[^.\d]/.test(m[1]) || /opacity-0$/.test(m[1])) {
     errors.push(
-      `${PANEL}: the Home toggle is hover-only (opacity-0).\n` +
+      `${PANEL}: the home Remove control is hover-only (opacity-0).\n` +
       `    The stylists work on iPads. Hover does not exist there, so the control does not either (ADR-0108).`,
     )
   }
 }
 inspected++
-if (!/aria-pressed=\{cat\.is_residence\}/.test(panel)) {
-  errors.push(`${PANEL}: the Home toggle does not report its state with aria-pressed.`)
+if (!/aria-label=\{`Stop \$\{h\.label\} being one of her homes`\}/.test(panel)) {
+  errors.push(`${PANEL}: the home Remove control does not say what it does in its label.`)
 }
 
 // ── 4. the deletion refusal keys on the flag and names the way out ──
@@ -109,10 +110,10 @@ if (!/if \(isResidence\)/.test(deletion)) {
   errors.push(`${DELETION} no longer refuses on a home. Deleting one breaks the client's home page silently.`)
 }
 inspected++
-if (!/untick Home/i.test(deletion)) {
+if (!/remove it from her homes on the Residences tab/i.test(deletion)) {
   errors.push(
     `${DELETION}: the refusal does not tell the stylist how to remove a home.\n` +
-    `    It is a checkbox now, so the message must say to untick Home first. "Ask Karl" is a dead end.`,
+    `    It is a Remove on Residences now, so the message must say so. "Ask Karl" is a dead end.`,
   )
 }
 

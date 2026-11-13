@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Check, Home, Sparkles, Tag, X } from 'lucide-react'
-import type { LookCategory, TaggableLook } from '@/hooks/useLookCategories'
+import type { LookCategory, TaggableLook, useLookCategories } from '@/hooks/useLookCategories'
 import { useResidenceReview, type Provenance } from '@/hooks/useResidenceReview'
 import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH } from '@/lib/derivedImage'
+import { hasResidences } from '@/lib/residences'
+import { HomesManager } from './HomesManager'
 
 /**
  * Residence review — file the back-catalogue of looks by which home they belong to.
@@ -24,6 +26,44 @@ interface Props {
   assignLook: (lookId: string, categoryId: string, on: boolean) => void | Promise<unknown>
 }
 
+type Hook = ReturnType<typeof useLookCategories>
+
+/**
+ * The Residences tab: her homes first (add, rename, remove, and each home's pieces and looks,
+ * Paige Berndt 2026-11-13), then the review queue for looks that have no home yet. Open for
+ * every client, so a client with no homes can be given her first one here.
+ */
+export function ResidencesTab(props: Props & {
+  clientId: string
+  clientName?: string
+  addHome: Hook['addHome']
+  renameCategory: Hook['renameCategory']
+  setCategoryResidence: Hook['setCategoryResidence']
+}) {
+  const { clientId, clientName, categories, looks, review, assignLook, addHome, renameCategory, setCategoryResidence } = props
+  return (
+    <>
+      {/* Keyed by client, so a home opened for the last client never stays open on this one. */}
+      <HomesManager
+        key={clientId}
+        clientId={clientId}
+        clientName={clientName}
+        categories={categories}
+        looks={looks}
+        addHome={addHome}
+        renameCategory={renameCategory}
+        setCategoryResidence={setCategoryResidence}
+      />
+      {hasResidences(categories) && (
+        <section data-residence-queue className="pt-6 border-t border-[#E8E4DF]">
+          <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-3">Looks waiting for a home</p>
+          <ReviewQueue looks={looks} categories={categories} review={review} assignLook={assignLook} />
+        </section>
+      )}
+    </>
+  )
+}
+
 type Filter = 'all' | 'high' | 'needs-eye' | 'aspen' | 'disagree'
 
 /** The residence the placed pieces point at, when they point anywhere clearly. */
@@ -35,7 +75,7 @@ function provenanceLean(p: Provenance): string | null {
   return entries[0][0]
 }
 
-export function ResidencesTab({ looks, categories, review, assignLook }: Props) {
+function ReviewQueue({ looks, categories, review, assignLook }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const { proposals, provenanceFor, placedCount, accept, dismiss, busy, loading, byConfidence } = review
 
@@ -82,14 +122,14 @@ export function ResidencesTab({ looks, categories, review, assignLook }: Props) 
   ]
 
   if (residenceCats.length === 0) {
-    return <p className="text-[#888] text-sm">This client has no residences set up. Create them as categories on the Looks tab first.</p>
+    return null
   }
 
   if (loading) return <p className="text-[#888] text-sm">Loading…</p>
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-2">
+      <div className="flex flex-col items-center justify-center py-10 gap-2">
         <Home className="w-6 h-6 text-[#E8E4DF]" />
         <p className="text-[#1A1A1A] text-sm">Every look has a home.</p>
         <p className="text-[#888] text-xs">Nothing left in the residence queue for this client.</p>

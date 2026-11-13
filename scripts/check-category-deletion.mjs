@@ -53,7 +53,7 @@ expect('same, with looks filed under it', { slug: 'aspen', label: 'Aspen', isRes
 {
   checked++
   const msg = planCategoryDeletion({ slug: 'chicago', label: 'Chicago', isResidence: true, lookCount: 2, capsuleCount: 0 }).message
-  if (!/untick Home/i.test(msg)) failures.push('the refusal does not tell the stylist to untick Home first')
+  if (!/remove it from her homes on the Residences tab/i.test(msg)) failures.push('the refusal does not tell the stylist to remove it from her homes on Residences first')
   if (/ask Karl/i.test(msg)) failures.push('the refusal still tells the stylist to ask Karl to retire a home')
 }
 

@@ -75,7 +75,7 @@ export function planResidenceToggle({
           `Make ${label} one of ${whose(clientName)} homes?\n\n` +
           `That gives her two homes, so her front page changes: she will see a tile for each ` +
           `one instead of her usual home page.\n\n` +
-          `A home only gets a tile once looks are filed into it. Untick to undo.`,
+          `A home only gets a tile once looks are filed into it. Remove it to undo.`,
       }
     }
     // 0 -> 1. Nothing visible happens yet, and saying so stops her hunting for a change.
@@ -112,7 +112,7 @@ export function planResidenceToggle({
         `to normal.\n\n` +
         `${label} stays as an ordinary category` +
         (lookCount ? ` with ${plural(lookCount, 'look', 'looks')} in it` : '') +
-        `. Tick Home again to put it back.`,
+        `. Add it as a home again to put it back.`,
     }
   }
 
@@ -125,6 +125,6 @@ export function planResidenceToggle({
       `Its tile comes off her front page now.\n\n` +
       `${label} stays as an ordinary category` +
       (lookCount ? ` with ${plural(lookCount, 'look', 'looks')} in it` : '') +
-      `. Tick Home again to put it back.`,
+      `. Add it as a home again to put it back.`,
   }
 }

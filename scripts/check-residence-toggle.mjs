@@ -47,7 +47,8 @@ const expect = (name, input, wantAction, wantThreshold, wantInMessage = []) => {
 
 // ── 1. the write is gated on the ask ────────────────────────────────────────────────────
 const HOOK = 'src/hooks/useLookCategories.ts'
-const PANEL = 'src/components/categorize/CategorizePanel.tsx'
+// The Home controls moved off the category rail onto Residences (Paige Berndt, 2026-11-13).
+const PANEL = 'src/components/categorize/HomesManager.tsx'
 const hook = readFileSync(HOOK, 'utf8')
 const panel = readFileSync(PANEL, 'utf8')
 
@@ -67,16 +68,24 @@ if (!/from '@\/lib\/residenceToggle'/.test(hook)) {
   failures.push(`${HOOK}: the confirm text is not coming from planResidenceToggle, so the warning and the write can drift apart.`)
 }
 checked++
-if (!/onClick=\{\(\) => handleToggleHome\(cat\)\}/.test(panel)) {
-  failures.push(`${PANEL}: the Home button no longer routes through handleToggleHome, so it may be writing without asking.`)
+if (!/onClick=\{\(\) => \{ void handleRemove\(h\) \}\}/.test(panel)) {
+  failures.push(`${PANEL}: the Remove button no longer routes through handleRemove, so it may be writing without asking.`)
 }
 checked++
-if (/setCategoryResidence\(cat\.id, !cat\.is_residence\)\s*\}/.test(panel)) {
-  failures.push(`${PANEL}: the Home button calls setCategoryResidence with no confirm callback.`)
+if (/setCategoryResidence\([^\n]*false\)/.test(panel)) {
+  failures.push(`${PANEL}: Remove calls setCategoryResidence with no confirm callback.`)
 }
 checked++
-if (!/window\.confirm\(message\)/.test(panel.slice(panel.indexOf('handleToggleHome')))) {
-  failures.push(`${PANEL}: handleToggleHome does not actually put the question in front of anyone.`)
+if (!/setCategoryResidence\([^\n]*window\.confirm\(message\)/.test(panel.slice(panel.indexOf('function handleRemove')))) {
+  failures.push(`${PANEL}: handleRemove does not actually put the question in front of anyone.`)
+}
+checked++
+if (!/addHome\(name, \(message\) => window\.confirm\(message\)/.test(panel)) {
+  failures.push(`${PANEL}: Add a home does not put the question in front of anyone.`)
+}
+checked++
+if (!/const addHome = useCallback[\s\S]{0,1600}if \(!confirmWith\(plan\.message\)\) return null/.test(hook)) {
+  failures.push(`${HOOK}: addHome does not bail out when the stylist declines.`)
 }
 
 // ── 2. the sentence names the real consequence ──────────────────────────────────────────
@@ -84,7 +93,7 @@ if (!/window\.confirm\(message\)/.test(panel.slice(panel.indexOf('handleToggleHo
 // 1 -> 2: her front page stops being the ordinary one. The big one.
 expect('turning on the second home', {
   label: 'Chicago', turningOn: true, currentHomeCount: 1, lookCount: 4, clientName: 'Maegan Watson',
-}, 'enable', true, ["Maegan's homes", 'front page changes', 'Untick to undo'])
+}, 'enable', true, ["Maegan's homes", 'front page changes', 'Remove it to undo'])
 
 // 0 -> 1: nothing visible happens. Say so, or she goes hunting for a change.
 expect('turning on the first home', {
@@ -99,12 +108,12 @@ expect('turning on a third home', {
 // 2 -> 1: her home tiles go away entirely. The likeliest damaging mis-tap.
 expect('turning off the second-to-last home', {
   label: 'Chicago', turningOn: false, currentHomeCount: 2, lookCount: 4, clientName: 'Maegan Watson',
-}, 'disable', true, ['down to one home', 'back to normal', '4 looks', 'Tick Home again'])
+}, 'disable', true, ['down to one home', 'back to normal', '4 looks', 'as a home again'])
 
 // 3 -> 2: one tile goes.
 expect('turning off one of three homes', {
   label: 'The Hamptons', turningOn: false, currentHomeCount: 3, lookCount: 15, clientName: 'Margaux Ellery',
-}, 'disable', false, ['comes off her front page', '15 looks', 'Tick Home again'])
+}, 'disable', false, ['comes off her front page', '15 looks', 'as a home again'])
 
 // An empty home reads naturally rather than saying "0 looks".
 checked++
@@ -127,7 +136,7 @@ const ALL = [
 for (const probe of ALL) {
   checked++
   const { action, message } = planResidenceToggle(probe)
-  if (!probe.turningOn && !/Tick Home again/.test(message)) {
+  if (!probe.turningOn && !/as a home again/.test(message)) {
     failures.push(`the "${action}" message does not say the toggle is reversible`)
   }
   if (/delete|deleted|remove the category|lost|permanently/i.test(message)) {

@@ -125,7 +125,7 @@ function CategoryRow({ label, count, coverage, on, onClick, depth = 0 }: {
 export function CategorizePanel() {
   const { activeClient } = useClientStore()
   const {
-    loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
+    loading, error: loadError, refetch, categories, looks, capsules, createCategory, renameCategory, setCategoryDescription, setCategoryResidence, addHome, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule, duplicateCapsule, setEventDates,
@@ -839,12 +839,6 @@ export function CategorizePanel() {
     if (noteFor !== null) setCategoryDescription(noteFor, noteVal)
     setNoteFor(null); setNoteVal('')
   }
-  // Ticking Home changes what the client sees when she opens her lookbook, from a control that
-  // sits between two other one-click controls on a tablet. Ask before writing.
-  function handleToggleHome(cat: LookCategory) {
-    void setCategoryResidence(cat.id, !cat.is_residence, (message) => window.confirm(message), activeClient?.name)
-  }
-
   // Drag a category in the rail (ADR-0162). The new order is her Looks page's chip order. A save
   // that did not land is said out loud: the rail snaps back on the refetch, and a silent snap
   // back reads as "dragging does not work" rather than "it was refused".
@@ -909,8 +903,12 @@ export function CategorizePanel() {
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Residences</p>
               <p className="text-[10px] text-[#888] leading-relaxed">
-                Looks that don't yet belong to one of her homes. Each one comes with a suggested
-                residence and the reason for it — accept it, pick a different home, or skip.
+                Add, rename or remove her homes here. Tap a home to see the pieces in it and the
+                looks made from them.
+              </p>
+              <p className="text-[10px] text-[#888] leading-relaxed mt-3">
+                Below the homes are the looks that don't belong to a home yet. Each comes with a
+                suggested home and the reason for it. Accept it, pick a different home, or skip.
               </p>
               <p className="text-[10px] text-[#888] leading-relaxed mt-3">
                 Filing a look also files its pieces: the client's Collection reads residences from
@@ -1174,17 +1172,19 @@ export function CategorizePanel() {
                   >
                     {cat.season === 'ss' ? 'SS' : cat.season === 'fw' ? 'FW' : '··'}
                   </button>
-                  <button
-                    onClick={() => handleToggleHome(cat)}
-                    className={`flex-none p-1 rounded transition-opacity ${cat.is_residence ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'} ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
-                    aria-label={cat.is_residence ? `${cat.label} is one of her homes. Stop it being a home.` : `Make ${cat.label} one of her homes`}
-                    aria-pressed={cat.is_residence}
-                    title={cat.is_residence
-                      ? 'This is one of her homes. Click to stop it being one.'
-                      : 'Make this one of her homes. Two or more homes gives her a home page with a tile for each.'}
-                  >
-                    <Home className={`w-3 h-3 ${cat.is_residence ? 'fill-current' : ''}`} />
-                  </button>
+                  {/* Homes are added, renamed and removed on Residences now (Paige, 2026-11-13). A
+                      home row keeps its house so it still reads as a home, and the house takes her
+                      there; its rename and delete live there too. */}
+                  {cat.is_residence && (
+                    <button
+                      onClick={() => { setMode('residences'); setSelected(new Set()); setTagging(false); setSearch('') }}
+                      className={`flex-none p-1 rounded ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                      aria-label={`${cat.label} is one of her homes. Manage her homes on Residences.`}
+                      title="One of her homes. Add, rename or remove homes on Residences."
+                    >
+                      <Home className="w-3 h-3 fill-current" />
+                    </button>
+                  )}
                   <button
                     onClick={() => startNote(cat.id, cat.description)}
                     className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
@@ -1193,22 +1193,26 @@ export function CategorizePanel() {
                   >
                     <StickyNote className="w-3 h-3" />
                   </button>
-                  <button
-                    onClick={() => startRename(cat.id, cat.label)}
-                    className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
-                    aria-label={`Rename ${cat.label}`}
-                    title="Rename (updates every look in this category)"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(cat)}
-                    className={`flex-none mr-1.5 p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
-                    aria-label={`Delete ${cat.label}`}
-                    title="Delete (removes it from the client's site)"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  {cat.is_residence ? <span className="flex-none w-1.5" /> : (
+                    <>
+                      <button
+                        onClick={() => startRename(cat.id, cat.label)}
+                        className={`flex-none p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                        aria-label={`Rename ${cat.label}`}
+                        title="Rename (updates every look in this category)"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat)}
+                        className={`flex-none mr-1.5 p-1 rounded opacity-60 group-hover:opacity-100 transition-opacity ${isActive ? 'hover:bg-white/20' : 'hover:bg-[#E8E4DF]'}`}
+                        aria-label={`Delete ${cat.label}`}
+                        title="Delete (removes it from the client's site)"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </>
+                  )}
                   </div>
                   {/* The styling note. Shown as plain text whenever one exists, so the rule is
                       readable without tapping anything (ADR-0110). Editing is a textarea because
@@ -1316,8 +1320,9 @@ export function CategorizePanel() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
           <div className="flex items-center gap-1">
+            {/* Residences for every client: it is where her homes are added, so a client with none
+                yet must be able to reach it (Paige, 2026-11-13). */}
             {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
-              .filter((m) => m !== 'residences' || showResidences)
               .map((m) => (
               <button
                 key={m}
@@ -1459,10 +1464,15 @@ export function CategorizePanel() {
           <ErrorBoundary label="Residences couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
               <ResidencesTab
+                clientId={activeClient.id}
+                clientName={activeClient.name}
                 looks={looks}
                 categories={categories}
                 review={residenceReview}
                 assignLook={assignLook}
+                addHome={addHome}
+                renameCategory={renameCategory}
+                setCategoryResidence={setCategoryResidence}
               />
             </div>
           </ErrorBoundary>

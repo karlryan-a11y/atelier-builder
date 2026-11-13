@@ -266,9 +266,9 @@ export function useLookCategories(clientId: string | null) {
     const l = label.trim()
     if (!l) return
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: l } : c)))
-    const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id)
+    const { error } = await supabase.from('look_categories').update({ label: l }).eq('id', id).eq('client_id', clientId!)
     if (error) { console.error('renameCategory:', error.message); await fetchAll() }
-  }, [fetchAll, setCategories])
+  }, [clientId, fetchAll, setCategories])
 
   /**
    * Mark a category as one of the client's homes, or stop it being one (ADR-0111).
@@ -301,10 +301,48 @@ export function useLookCategories(clientId: string | null) {
     if (!confirmWith(plan.message)) return null
 
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, is_residence: isResidence } : c)))
-    const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id)
+    const { error } = await supabase.from('look_categories').update({ is_residence: isResidence }).eq('id', id).eq('client_id', clientId!)
     if (error) { console.error('setCategoryResidence:', error.message); await fetchAll() }
     return plan
-  }, [categories, looks, fetchAll, setCategories])
+  }, [clientId, categories, looks, fetchAll, setCategories])
+
+  /**
+   * Add a home from Residences (Paige Berndt, 2026-11-13). A name she already uses as a category
+   * becomes the home (its looks come with it, nothing is copied); a new name is a new category
+   * that is a home from the start. Asks first with the same sentence as setCategoryResidence, and
+   * asks for the row back, because a write that is refused comes back with no error.
+   */
+  const addHome = useCallback(async (
+    label: string,
+    confirmWith: (message: string) => boolean,
+    clientName?: string,
+  ): Promise<{ ok: true; category: LookCategory } | { ok: false; message: string } | null> => {
+    const l = label.trim()
+    if (!l || !clientId) return null
+    const slug = slugify(l) || `home-${Date.now()}`
+    const existing = categories.find((c) => c.label.toLowerCase() === l.toLowerCase() || c.slug === slug)
+    if (existing?.is_residence && !existing.is_hidden) return { ok: false, message: `${existing.label} is already one of her homes.` }
+    const plan = planResidenceToggle({
+      label: existing?.label ?? l,
+      turningOn: true,
+      currentHomeCount: categories.filter((c) => c.is_residence === true && !c.is_hidden).length,
+      lookCount: existing ? looks.filter((lk) => lk.categoryIds.includes(existing.id)).length : 0,
+      clientName,
+    })
+    if (!confirmWith(plan.message)) return null
+
+    const cols = 'id, slug, label, sort_order, is_hidden, is_residence, season, description, parent_slug'
+    const { data, error } = existing
+      ? await supabase.from('look_categories').update({ is_residence: true, is_hidden: false }).eq('id', existing.id).eq('client_id', clientId).select(cols)
+      : await supabase.from('look_categories').insert({ client_id: clientId, slug, label: l, sort_order: categories.length, is_residence: true }).select(cols)
+    const row = data?.[0] as LookCategory | undefined
+    if (error || !row) {
+      await fetchAll()
+      return { ok: false, message: error?.message ?? 'Nothing was saved. Refresh the page and try again.' }
+    }
+    setCategories((prev) => (prev.some((c) => c.id === row.id) ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row]))
+    return { ok: true, category: row }
+  }, [clientId, categories, looks, fetchAll, setCategories])
 
   /**
    * Tag a category as a season, or clear it. ADR-0147.
@@ -566,7 +604,7 @@ export function useLookCategories(clientId: string | null) {
 
   return {
     loading, error, categories, looks, capsules, draftCount,
-    createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, setCategorySeason, deleteCategory, restoreCategory,
+    createCategory, renameCategory, setCategoryParent, setCategoryDescription, setCategoryResidence, addHome, setCategorySeason, deleteCategory, restoreCategory,
     assignLook, assignCapsule, setLooksToTry,
     setLookPublished, setCapsulePublished,
     archiveLook, archiveCapsule, duplicateCapsule, setEventDates,

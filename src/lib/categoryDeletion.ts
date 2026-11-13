@@ -8,7 +8,7 @@
  *    her home-page tiles and decide which pieces appear in her Collection when she picks a
  *    house. Deleting one breaks that silently, so the button says no rather than asking.
  *    Since ADR-0111 the refusal is no longer a dead end — a home is a checkbox on the
- *    category, so the message tells her to untick Home and then delete, which she can do
+ *    category, so the message tells her to remove it from her homes on Residences and then delete, which she can do
  *    herself. It used to say "ask Karl".
  *
  *  delete — nothing is filed under it, so the row goes for good. Nothing is lost because
@@ -60,7 +60,7 @@ export function planCategoryDeletion({ label, isResidence, lookCount, capsuleCou
       message:
         `${label} is one of ${whose(clientName)} homes.\n\n` +
         `Her lookbook is built around them, so this one cannot be deleted.\n\n` +
-        `Rename it if the name is wrong. To remove the home, untick Home first, then delete.`,
+        `Rename it if the name is wrong. To delete it, first remove it from her homes on the Residences tab.`,
     }
   }
 
