@@ -43,6 +43,8 @@ if (src) {
   const rows = t.standardTreeRows(t.closetTreeOf('men'))
   need(rows.filter((r) => !r.parent_slug).length === 19 && rows.filter((r) => r.parent_slug).length === 85, "the men's tree as Edit Item's two-step rows")
   need(/standardTreeRows\(closetTree\)/.test(read('src/components/layout/EditItemDialog.tsx')), 'Edit Item picks a main category then a sub-category from her standard list')
+  // The preview showed Dresses with no Subcategory box at all (11/12): the box must show her standard sub-categories.
+  need(/if \(!canSub && !\(closetTree && subs\.length\)\) return null/.test(read('src/components/layout/EditItemDialog.tsx')), "Edit Item's Subcategory box shows the standard sub-categories")
   need(/StandardTreePanel/.test(read('src/components/categorize/NestingTab.tsx')), "Nesting shows the Women's / Men's switch")
 
   // The same lists, word for word, as her Wardrobe page and the camera.

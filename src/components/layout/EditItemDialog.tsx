@@ -228,7 +228,8 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
   // even when the main category has nothing inside it yet (Paige, 2026-11-12). Called as a function,
   // not mounted as a component, so the name box keeps its focus while she types.
   function subBox(subs: { slug: string; label: string }[], picked: string) {
-    if (!canSub) return null
+    // On Maegan's standard list the box offers her sub-categories only (none can be added to it).
+    if (!canSub && !(closetTree && subs.length)) return null
     return (
       <>
         <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mt-3 mb-1.5">Subcategory</label>
@@ -244,7 +245,7 @@ export function EditItemDialog({ item, saving, customCategories = [], categoryNa
         >
           <option value="">None, just {subParentLabel}</option>
           {subs.map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)}
-          <option value="__newsub__">＋ New subcategory…</option>
+          {canSub && <option value="__newsub__">＋ New subcategory…</option>}
         </select>
         {subMode && (
           <div className="flex items-center gap-1.5 mt-1.5">
