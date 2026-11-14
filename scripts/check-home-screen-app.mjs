@@ -92,6 +92,7 @@ const oneMq = css.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n\}/)?.[1] ??
 ok(/\[data-style-panes\] > \[data-pane\] \{ display: none !important; \}/.test(oneMq), 'below 1024px only the chosen panel may show')
 for (const p of ['pieces', 'board', 'looks']) ok(new RegExp(`\\[data-show-panel="${p}"\\] > \\[data-style-panes\\] > \\[data-pane="${p}"\\]`).test(oneMq), `index.css must show the ${p} panel when it is picked`)
 const panes = { pieces: 'src/components/layout/ClosetPanel.tsx', board: 'src/components/canvas/LookCanvas.tsx', look: 'src/components/canvas/LookItemsPanel.tsx', looks: 'src/components/layout/ChatPanel.tsx' }
+ok(/grid grid-cols-2 max-lg:grid-cols-\[repeat\(auto-fill,minmax\(160px,1fr\)\)\] gap-3/.test(read(panes.pieces)), 'the Pieces panel fills its width with tiles below 1024px (2 columns on a full-width iPad were poster-sized)')
 for (const [p, f] of Object.entries(panes)) ok(new RegExp(`data-pane="${p}"`).test(read(f)), `${f} must mark its panel data-pane="${p}"`)
 
 // ── 5. Digitize and the menu on a phone ──────────────────────────────────────────────────────────

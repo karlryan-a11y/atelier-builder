@@ -117,7 +117,7 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
           onClick={() => setMenuOpen(!menuOpen)}
           className="flex items-center gap-2.5 hover:opacity-80 transition-opacity duration-300 px-2 py-1 max-sm:min-h-11 max-sm:px-1"
         >
-          <span className="text-[10px] tracking-[0.15em] uppercase text-white/40 font-light max-sm:hidden">{user.displayName}</span>
+          <span className="text-[10px] tracking-[0.15em] uppercase text-white/40 font-light max-lg:hidden">{user.displayName}</span>
           <div className="w-6 h-6 rounded-full bg-[#F8E5E7]/12 flex items-center justify-center text-[9px] font-medium text-[#F8E5E7]/80">
             {initials}
           </div>

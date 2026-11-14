@@ -612,7 +612,7 @@ export function ClosetPanel() {
           {/* Item grid */}
           <div className="flex-1 min-h-[12rem] overflow-y-auto p-3">
             {loading ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 max-lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i}>
                     <div className="aspect-[3/4] shimmer rounded-sm" />
@@ -639,7 +639,7 @@ export function ClosetPanel() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 max-lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
                 {filtered.map((item, idx) => (
                   <Fragment key={item.id}>
                     <DraggableItem
