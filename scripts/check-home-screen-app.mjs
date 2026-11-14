@@ -124,6 +124,12 @@ ok(/a\[href\], \[role=button\], summary \{ align-content: center; \}/.test(coars
 // No hover on a touch screen to read a name cut with "...": Style's panels and Categorize wrap it onto two lines.
 ok(/@media \(pointer: coarse\) \{\s*\[data-style-panes\] \.truncate, \[data-touch-wrap\] \.truncate \{\s*white-space: normal;[\s\S]{0,120}-webkit-line-clamp: 2;/.test(css), 'on a touch screen a piece or look name in Style and Categorize must wrap onto two lines, not end in "..."')
 ok(/<div data-touch-wrap className="flex-1 flex overflow-hidden bg-\[#F8F7F5\]">/.test(cat), 'Categorize must carry data-touch-wrap')
+// Digitize: the review and Queue lists' names wrap too, and on a phone the whole sidebar scrolls as one page so
+// the list gets the screen (between the filters and Confirm/Upload it was a strip two cards tall).
+ok(/<div data-touch-wrap className="flex-1 bg-\[#F8F7F5\] flex flex-row overflow-hidden">/.test(inbox), 'Digitize must carry data-touch-wrap so its list names wrap on a touch screen')
+ok(/<aside className=\{`[^`]*min-h-0 max-md:overflow-y-auto /.test(inbox) && /<nav className="flex-1 min-h-0 overflow-y-auto max-md:flex-none max-md:overflow-visible py-3">/.test(inbox) && /max-h-\[42vh\] overflow-y-auto max-md:max-h-none max-md:overflow-visible/.test(inbox), "on a phone Digitize's sidebar scrolls as one page and its piece list is not a box of its own")
+// Style's board on a phone: each tool row is one row that scrolls sideways, so the board gets the screen.
+ok(/@media \(max-width: 639px\) \{\s*\[data-canvas-toolbar\] \[data-toolbar-base\],\s*\[data-canvas-toolbar\] \[data-toolbar-context\] > div \{\s*flex-wrap: nowrap;/.test(css), "on a phone the board's tools must sit in one sideways-scrolling row each, not wrap over the board")
 
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {

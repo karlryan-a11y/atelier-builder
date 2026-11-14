@@ -211,6 +211,23 @@
   }
 }
 
+/* A phone: the board's tools are one row each that scrolls sideways. Wrapped at 44px they took four rows,
+   and the strip that keeps the board still reserved the tallest wrap, so on a short iPhone the board was
+   about 70px square. One row keeps the strip's height fixed (the board still never jumps) and gives the
+   board the screen. */
+@media (max-width: 639px) {
+  [data-canvas-toolbar] [data-toolbar-base],
+  [data-canvas-toolbar] [data-toolbar-context] > div {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    min-width: 0;
+  }
+  [data-canvas-toolbar] [data-toolbar-context] { grid-template-columns: minmax(0, 1fr); }
+  [data-canvas-toolbar] [data-toolbar-base] > *,
+  [data-canvas-toolbar] [data-toolbar-context] > div > * { flex-shrink: 0; }
+}
+
 /* An iPad sideways keeps Categorize's category list beside the looks; with 44px row buttons it needs the room. */
 @media (pointer: coarse) and (min-width: 1024px) {
   [data-categorize-rail] { width: 380px; }
