@@ -4,7 +4,8 @@ import { proxyImageUrl } from '@/lib/images'
 import { lookImageUrl } from '@/lib/lookImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
 import { builderBoardPlan, lookCandidateIds, piecesOutOfLook, type LookPiece, type OutLook } from '@/lib/lookOutPieces'
-import type { OmitReason } from '@/lib/restyleSelection'
+import { piecesGoneFromLooks } from '@/lib/goodpixBoard'
+import type { OmitReason, OmittedPiece } from '@/lib/restyleSelection'
 import { measurePieces } from '@/lib/measurePieces'
 import type { GpLayout } from '@/lib/goodpixLayout'
 import type { CanvasNode, LookCanvasState } from '@/types/canvas'
@@ -55,6 +56,13 @@ export interface TransitionedLook {
    * on 2026-09-17 — so the queue collapses them into one card. See lib/transitionQueue.ts.
    */
   boardId: string | null
+  /**
+   * Every piece in the look she no longer has: the recorded causes AND anything else the board
+   * shows that is not in her closet today, the same answer Restyle's board gives
+   * (lib/restyleBoard.ts). Paige Berndt, 2026-09-24: the tall black boots were on the board and
+   * not on the card.
+   */
+  gonePieces: OmittedPiece[]
 }
 
 function itemImage(row: any): string | null {
@@ -128,8 +136,9 @@ export function useTransitions(clientId: string | null) {
           // canvas_state is deliberately NOT selected whole: it is large, and only the one look a
           // stylist actually opens needs it (single-row fetch on demand, per ADR-0076). Its piece
           // nodes, the board's size and the GoodPix arrangement are, because the card has to name
-          // the same missing pieces the opened look does (lib/lookOutPieces.ts): about 1 MB for
-          // Alicia Hidalgo's 206 pulled looks, the largest queue on the platform.
+          // the same missing pieces the opened look does (lib/lookOutPieces.ts), including the
+          // pictures whose piece is not hers (lib/restyleBoard.ts): about 1 MB for Alicia
+          // Hidalgo's 206 pulled looks, the largest queue on the platform.
           .select('id, name, raw, source, source_board_id, closet_item_ids, transitioned_at, transitioned_item_ids, gp_layout, board_nodes:canvas_state->nodes, board_size:canvas_state->canvas')
           .eq('client_id', clientId)
           .not('transitioned_at', 'is', null)
@@ -177,6 +186,21 @@ export function useTransitions(clientId: string | null) {
         transitionedAt: r.transitioned_at ?? null,
         image: itemImage(r),
       })))
+      // What each board shows that is not hers at all (the card's "Also not in her collection"):
+      // the same answer Restyle's board gives, with the picture the board showed. GoodPix looks
+      // only: an Atelier look's own board decides what it is missing (lib/lookOutPieces.ts).
+      let gone = new Map<string, OmittedPiece[]>()
+      try {
+        gone = await piecesGoneFromLooks(clientId, lookRows.filter((l: any) => l.source !== 'builder').map((l: any) => ({
+          id: l.id,
+          closetItemIds: Array.isArray(l.closet_item_ids) ? l.closet_item_ids : [],
+          layout: (l.gp_layout ?? null) as GpLayout | null,
+          boardId: l.source_board_id ?? null,
+        })))
+      } catch (e) {
+        console.error('[transitions] could not check which pieces she still has', e)
+      }
+      if (cancelled) return
       setLooks(lookRows.map((l: any) => {
         const rawImg = lookImageUrl(l.raw)
         const causes: string[] = Array.isArray(l.transitioned_item_ids) ? l.transitioned_item_ids : []
@@ -205,6 +229,7 @@ export function useTransitions(clientId: string | null) {
           source: l.source ?? null,
           transitionedAt: l.transitioned_at ?? null,
           boardId: l.source_board_id ?? null,
+          gonePieces: gone.get(l.id) ?? [],
         }
       }))
       setLoading(false)

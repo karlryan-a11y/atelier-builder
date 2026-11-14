@@ -83,10 +83,14 @@ export function pieceUrls(candidates: string[], pieces: Map<string, LookPiece>):
   return out
 }
 
-/** The pieces a GoodPix arrangement actually shows, matched the way the board matches them. */
-export function goodPixInPicture(look: OutLook, pieces: Map<string, LookPiece>): string[] | null {
+/**
+ * The pieces a GoodPix arrangement actually shows, matched the way the board matches them.
+ * `gone`: ids that are not hers today (goodpixLayout.ts piecesNotHers), counted as pieces so the
+ * board leaves them off and names them.
+ */
+export function goodPixInPicture(look: OutLook, pieces: Map<string, LookPiece>, gone?: Set<string>): string[] | null {
   if (!hasLayout(look.layout)) return null
-  return piecesInLayout(look.layout, pieceUrls(lookCandidateIds(look), pieces))
+  return piecesInLayout(look.layout, pieceUrls(lookCandidateIds(look), pieces), gone)
 }
 
 /**

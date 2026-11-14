@@ -48,6 +48,8 @@ export interface OmittedPiece {
   name: string
   brand: string | null
   reason: OmitReason
+  /** Its picture, so a piece with no name left in Atelier is still recognisable. */
+  image?: string | null
 }
 
 export interface RestyleSelection {
@@ -55,6 +57,14 @@ export interface RestyleSelection {
   keep: string[]
   /** Pieces deliberately left off, with the reason she is shown. */
   omitted: OmittedPiece[]
+}
+
+/** What a piece with no name left in Atelier is called; its picture beside it says which. */
+export const MISSING_NAME = 'No longer in her collection'
+
+/** The reason line under a piece, or null when its name already says it. */
+export function omitLine(o: OmittedPiece): string | null {
+  return o.name === MISSING_NAME ? null : OMIT_LABEL[o.reason]
 }
 
 export const OMIT_LABEL: Record<OmitReason, string> = {
@@ -84,8 +94,9 @@ export function selectRestylePieces(
 
     const piece = pieces.get(id)
     if (!piece) {
-      // The row is gone entirely. Counted and named, never silently dropped.
-      omitted.push({ id, name: id, brand: null, reason: 'missing' })
+      // No row of hers: gone from GoodPix, or someone else's piece. Counted and named, never
+      // silently dropped; callers that can find its name elsewhere put it in.
+      omitted.push({ id, name: MISSING_NAME, brand: null, reason: 'missing' })
       continue
     }
     const reason = omitReason(piece)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, ChevronLeft, Layers, Image as ImageIcon, Copy, Eye } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { supabase } from '@/lib/supabase'
-import { OMIT_LABEL, omittedHeadline } from '@/lib/restyleSelection'
+import { omitLine, omittedHeadline } from '@/lib/restyleSelection'
 import { TileImage } from '@/components/common/TileImage'
 import { PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { r2ImageUrl } from '@/lib/imageUrls'
@@ -217,10 +217,17 @@ function RestyleReferenceBlock({ reference }: { reference: NonNullable<ReturnTyp
         {omitted.length > 0 && (
           <ul className="mt-1.5 space-y-1">
             {omitted.map((o) => (
-              <li key={o.id} className="leading-tight">
-                {o.brand && <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{o.brand}</span>}
-                <span className="block text-[11px] text-[#1A1A1A] truncate" title={o.name}>{o.name}</span>
-                <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{OMIT_LABEL[o.reason]}</span>
+              <li key={o.id} className="leading-tight flex items-center gap-2">
+                {o.image && (
+                  // A 28px reference so a piece with no name left is still recognisable.
+                  // full-size: a piece she no longer has has no small copy to ask for
+                  <img src={o.image} alt="" className="h-7 w-7 shrink-0 object-contain bg-[#F8F7F5] border border-[#EFEBE6] rounded-sm" loading="lazy" />
+                )}
+                <span className="min-w-0">
+                  {o.brand && <span className="block text-[9px] tracking-[0.14em] uppercase text-[#aaa] truncate">{o.brand}</span>}
+                  <span className="block text-[11px] text-[#1A1A1A] truncate" title={o.name}>{o.name}</span>
+                  {omitLine(o) && <span className="block text-[9px] tracking-[0.12em] uppercase text-[#bbb]">{omitLine(o)}</span>}
+                </span>
               </li>
             ))}
           </ul>
