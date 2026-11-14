@@ -101,7 +101,7 @@ for (const [p, f] of Object.entries(panes)) ok(new RegExp(`data-pane="${p}"`).te
 // ── 5. Digitize and the menu on a phone ──────────────────────────────────────────────────────────
 const inbox = read('src/components/intake/IntakeInbox.tsx')
 ok(/useState<'menu' \| 'work'>\('menu'\)/.test(inbox), 'Digitize must keep which half shows on a phone')
-ok(/<aside className=\{`[^`]*max-md:w-full[^`]*\$\{phonePane === 'work' \? 'max-md:hidden' : ''\}/.test(inbox), "Digitize's menu fills a phone and hides while the work shows")
+ok(/<aside (data-digitize-side )?className=\{`[^`]*max-md:w-full[^`]*\$\{phonePane === 'work' \? 'max-md:hidden' : ''\}/.test(inbox), "Digitize's menu fills a phone and hides while the work shows")
 ok(/\$\{phonePane === 'menu' \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setPhonePane\('menu'\)\} className="md:hidden/.test(inbox), "Digitize's work hides behind the menu on a phone, with a way back")
 ok(/tellFrame\(\{ type: 'select', id: it\.id \}\); setPhonePane\('work'\)/.test(inbox), 'tapping a piece on a phone opens it')
 ok(/max-sm:overflow-x-auto/.test(header) && /max-sm:\[&>\*\]:min-h-11/.test(header), 'the top tabs must scroll inside the bar on a phone, each 44px tall')
@@ -126,8 +126,9 @@ ok(/@media \(pointer: coarse\) \{\s*\[data-style-panes\] \.truncate, \[data-touc
 ok(/<div data-touch-wrap className="flex-1 flex overflow-hidden bg-\[#F8F7F5\]">/.test(cat), 'Categorize must carry data-touch-wrap')
 // Digitize: the review and Queue lists' names wrap too, and on a phone the whole sidebar scrolls as one page so
 // the list gets the screen (between the filters and Confirm/Upload it was a strip two cards tall).
-ok(/<div data-touch-wrap className="flex-1 bg-\[#F8F7F5\] flex flex-row overflow-hidden">/.test(inbox), 'Digitize must carry data-touch-wrap so its list names wrap on a touch screen')
-ok(/<aside className=\{`[^`]*min-h-0 max-md:overflow-y-auto /.test(inbox) && /<nav className="flex-1 min-h-0 overflow-y-auto max-md:flex-none max-md:overflow-visible py-3">/.test(inbox) && /max-h-\[42vh\] overflow-y-auto max-md:max-h-none max-md:overflow-visible/.test(inbox), "on a phone Digitize's sidebar scrolls as one page and its piece list is not a box of its own")
+ok(/<div data-touch-wrap="all" className="flex-1 bg-\[#F8F7F5\] flex flex-row overflow-hidden">/.test(inbox) && /\[data-touch-wrap="all"\] \.truncate \{ display: block; -webkit-line-clamp: unset; \}/.test(css), 'Digitize must carry data-touch-wrap="all" so its list shows each whole name on a touch screen')
+ok(/<aside data-digitize-side className=/.test(inbox) && /<nav data-digitize-nav className=/.test(inbox) && /<div data-digitize-list className="mt-1 mx-3 max-h-\[42vh\]/.test(inbox), "Digitize's sidebar, menu and piece list must carry data-digitize-side, -nav and -list")
+ok(/@media \(max-width: 767px\), \(pointer: coarse\) \{\s*\[data-digitize-side\] \{ overflow-y: auto; \}\s*\[data-digitize-nav\] \{ flex: none; overflow: visible; \}\s*\[data-digitize-list\] \{ max-height: 75dvh; \}/.test(css), "on a phone or touch screen Digitize's sidebar scrolls as one page and the piece list is three quarters of the screen tall")
 // Style's board on a phone: each tool row is one row that scrolls sideways, so the board gets the screen.
 ok(/@media \(max-width: 639px\) \{\s*\[data-canvas-toolbar\] \[data-toolbar-base\],\s*\[data-canvas-toolbar\] \[data-toolbar-context\] > div \{\s*flex-wrap: nowrap;/.test(css), "on a phone the board's tools must sit in one sideways-scrolling row each, not wrap over the board")
 

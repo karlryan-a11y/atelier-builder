@@ -465,10 +465,10 @@ export function IntakeInbox() {
 
   return (
     <LightboxProvider>
-    <div data-touch-wrap className="flex-1 bg-[#F8F7F5] flex flex-row overflow-hidden">
+    <div data-touch-wrap="all" className="flex-1 bg-[#F8F7F5] flex flex-row overflow-hidden">
       {/* Sidebar, laid out like the Shop's: small spaced-capital section labels, a thin line on the active item, counts as pills.
           The Queue opens to its tabs and the pieces waiting; Upload and Confirm items sit at the bottom. */}
-      <aside className={`relative z-20 w-[256px] max-md:w-full shrink-0 border-r max-md:border-r-0 border-[#E8E4DF] bg-white flex flex-col min-h-0 max-md:overflow-y-auto ${phonePane === 'work' ? 'max-md:hidden' : ''}`}>
+      <aside data-digitize-side className={`relative z-20 w-[256px] max-md:w-full shrink-0 border-r max-md:border-r-0 border-[#E8E4DF] bg-white flex flex-col min-h-0 ${phonePane === 'work' ? 'max-md:hidden' : ''}`}>
         <div className="px-4 pt-4 pb-3 border-b border-[#E8E4DF]">
           <ClientFilter
           options={(() => {
@@ -485,9 +485,10 @@ export function IntakeInbox() {
           onChange={setSelectedClientId}
         />
         </div>
-        {/* A phone scrolls the whole sidebar as one page, so the piece list gets the screen and SOP, Confirm items
-            and Upload follow it at the end (squeezed between them, the list was a strip two cards tall). */}
-        <nav className="flex-1 min-h-0 overflow-y-auto max-md:flex-none max-md:overflow-visible py-3">
+        {/* A phone or a touch screen scrolls the whole sidebar as one page and the piece list is a tall box of
+            its own, with SOP, Confirm items and Upload right after it (index.css, [data-digitize-side]): squeezed
+            between the filters and those buttons, the list was a strip two cards tall. */}
+        <nav data-digitize-nav className="flex-1 min-h-0 overflow-y-auto py-3">
           <div className="px-5 pb-2 text-[9px] tracking-[0.35em] uppercase text-[#888]">Digitize</div>
           {tabs.map(tab => (
             <div key={tab.key}>
@@ -566,7 +567,7 @@ export function IntakeInbox() {
                   )}
                   {searching && cap.items.length > 0 && capList.length === 0 && <div className="mt-1 mx-4 text-[11px] text-[#888]">No pieces match. Try one word, like a brand or a color.</div>}
                   {capList.length > 0 && (
-                    <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto max-md:max-h-none max-md:overflow-visible space-y-1.5 pr-1">
+                    <div data-digitize-list className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
                       {capList.filter(i => (!capList.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || retailOk(i))).map(it => (
                         <button key={it.id} onClick={() => { tellFrame({ type: 'select', id: it.id }); setPhonePane('work') }} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}

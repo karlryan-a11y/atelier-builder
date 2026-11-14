@@ -209,6 +209,17 @@
     -webkit-line-clamp: 2;
     overflow-wrap: anywhere;
   }
+  /* Digitize's lists show a piece's whole name, however long: it is how she tells two shoes apart. */
+  [data-touch-wrap="all"] .truncate { display: block; -webkit-line-clamp: unset; }
+}
+
+/* Digitize on a phone or a touch screen: between the filters and SOP, Confirm items and Upload, the piece list
+   was a strip two cards tall. The whole sidebar scrolls as one page instead, the list is a box three quarters
+   of the screen tall, and the buttons come right after it. A computer (a mouse) keeps today's sidebar. */
+@media (max-width: 767px), (pointer: coarse) {
+  [data-digitize-side] { overflow-y: auto; }
+  [data-digitize-nav] { flex: none; overflow: visible; }
+  [data-digitize-list] { max-height: 75dvh; }
 }
 
 /* A phone: the board's tools are one row each that scrolls sideways. Wrapped at 44px they took four rows,
