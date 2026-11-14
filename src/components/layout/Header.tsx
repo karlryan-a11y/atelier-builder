@@ -56,7 +56,8 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
           </span>
         </a>
         <div className="w-px h-8 bg-white/[0.08] max-sm:hidden" />
-        <div className="flex items-center gap-1 max-sm:gap-0 max-sm:min-w-0 max-sm:overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap max-sm:[&>*]:px-2.5 max-sm:[&>*]:min-h-11 max-sm:[&>*]:inline-flex max-sm:[&>*]:items-center max-sm:[&>*]:text-[11px] max-sm:[&>*]:tracking-[0.16em]">
+        {/* The last tab fades out at the right edge on a phone, so it reads as "swipe for more", not cut off. */}
+        <div className="flex items-center gap-1 max-sm:gap-0 max-sm:min-w-0 max-sm:overflow-x-auto max-sm:pr-6 max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [&>*]:shrink-0 [&>*]:whitespace-nowrap max-sm:[&>*]:px-2.5 max-sm:[&>*]:min-h-11 max-sm:[&>*]:inline-flex max-sm:[&>*]:items-center max-sm:[&>*]:text-[11px] max-sm:[&>*]:tracking-[0.16em]">
           {/* In-app tabs */}
           {/* Shop is the dashboard's Shop (/shop), not the old shop inside this tool (Karl, 2026-10-17: "sometimes I click
               shop and it goes to the old shop"). Digitize and Style stay in-app tabs. */}
