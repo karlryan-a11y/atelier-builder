@@ -1289,7 +1289,7 @@ export function CategorizePanel() {
         {/* Collection: a category she can fill later, saved for this client (Cynthia, 2026-10-20).
             Same box as Looks, but a piece category, so it saves to client_categories. */}
         {mode === 'collection' && (
-        <div data-new-closet-category className="px-5 py-3 border-t border-[#E8E4DF]">
+        <div data-new-closet-category className="px-5 py-3 max-md:pb-24 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
               value={newClosetCat}
@@ -1306,7 +1306,7 @@ export function CategorizePanel() {
         </div>
         )}
         {mode !== 'collection' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
-        <div className="px-5 py-3 border-t border-[#E8E4DF]">
+        <div className="px-5 py-3 max-md:pb-24 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
               value={newCat}

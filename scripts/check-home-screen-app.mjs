@@ -110,6 +110,7 @@ const cat = read('src/components/categorize/CategorizePanel.tsx')
 ok(/<aside className=\{`w-\[260px\] max-md:w-full[^`]*\$\{railOpen \? '' : 'max-md:hidden'\}/.test(cat), "Categorize's category list hides on a phone until Categories is tapped")
 ok(/\$\{railOpen \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setRailOpen\(true\)\}/.test(cat), "Categorize's looks show on a phone, with a Categories button")
 ok(/useEffect\(\(\) => \{ setRailOpen\(false\) \}, \[brush, uncatOnly, activeGarmentCats\]\)/.test(cat), 'picking a category on a phone shows the looks again')
+ok((cat.match(/px-5 py-3 max-md:pb-24 border-t/g) ?? []).length === 2, 'on a phone the New category boxes sit above the Ask Atelier button')
 
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {
