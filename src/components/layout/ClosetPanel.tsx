@@ -488,7 +488,7 @@ export function ClosetPanel() {
   const addPiece = useCallback((item: ClosetItem) => addItemToCanvas(item.id, resolveItemImage(item)), [addItemToCanvas])
 
   return (
-    <div className="w-72 border-r border-border bg-white flex flex-col overflow-hidden">
+    <div data-pane="pieces" className="w-72 border-r border-border bg-white flex flex-col overflow-hidden">
       {activeClient && (
         <>
           {/* Search */}

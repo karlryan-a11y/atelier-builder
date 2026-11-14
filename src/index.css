@@ -177,3 +177,38 @@
 @media (hover: none) {
   html, html * { cursor: auto !important; }
 }
+
+/* ── iPhone and iPad (Karl, 2026-11-14: every team page laid out for the home-screen app) ──
+   Guarded by scripts/check-home-screen-app.mjs. A computer (a mouse, 1024px and wider) reads none of it. */
+
+/* A box typed into on a touch screen is 16px or Safari zooms the page in when it is tapped. */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]),
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* No hover on a touch screen: a button that only shows on hover (a tile's Edit and View larger)
+   is shown all the time there, or it could never be reached. */
+@media (hover: none) {
+  .group .group-hover\:opacity-100 { opacity: 1; }
+}
+
+/* Style below 1024px (an iPad upright, an iPhone): the closet, the board and the looks stood side by
+   side and squeezed the board to a sliver, so one shows at a time, picked with the bar App.tsx
+   draws (Pieces, Board, Looks). Tapping a piece still puts it on the board. */
+@media (max-width: 1023px) {
+  [data-style-panes] > [data-pane] { display: none !important; }
+  [data-show-panel="pieces"] > [data-style-panes] > [data-pane="pieces"],
+  [data-show-panel="board"] > [data-style-panes] > [data-pane="board"],
+  [data-show-panel="looks"] > [data-style-panes] > [data-pane="looks"] {
+    display: flex !important;
+    flex: 1 1 0% !important;
+    width: auto !important;
+    min-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+  }
+}

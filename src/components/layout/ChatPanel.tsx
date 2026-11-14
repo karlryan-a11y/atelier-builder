@@ -609,7 +609,7 @@ export function ChatPanel() {
 
   return (
     <>
-      <aside className="w-72 border-l border-border bg-white flex flex-col h-full">
+      <aside data-pane="looks" className="w-72 border-l border-border bg-white flex flex-col h-full">
         {/* Tabs */}
         <div className="flex border-b border-border">
           <button

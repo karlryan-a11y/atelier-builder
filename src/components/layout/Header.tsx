@@ -38,24 +38,25 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
   const hasBatch = typeof localStorage !== 'undefined' && localStorage.getItem('atelier_active_batch')
 
   return (
-    <header className={`${activeView === 'digitize' ? 'h-[56px]' : 'h-[120px]'} bg-[#050505] flex items-center justify-between px-6 border-b border-white/[0.06]`}>
-      <div className="flex items-center gap-8">
+    <header className={`${activeView === 'digitize' ? 'h-[56px]' : 'h-[120px] max-sm:h-[56px]'} box-content pt-[env(safe-area-inset-top)] bg-[#050505] flex items-center justify-between gap-2 px-6 max-sm:px-3 border-b border-white/[0.06]`}>
+      {/* A phone: the short bar, and the tabs scroll sideways inside it instead of running off the screen. */}
+      <div className="min-w-0 flex items-center gap-8 max-sm:gap-2">
         <a href="/" className={`flex flex-col transition-opacity duration-300 hover:opacity-80 ${activeView === 'digitize' ? 'py-0' : 'py-2'}`}>
           <span
-            className={`text-white ${activeView === 'digitize' ? 'text-[26px]' : 'text-[42px]'} leading-none tracking-[0.015em]`}
+            className={`text-white ${activeView === 'digitize' ? 'text-[26px]' : 'text-[42px] max-sm:text-[22px]'} leading-none tracking-[0.015em]`}
             style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}
           >
             ATELIER
           </span>
           <span
-            className={`text-white/50 text-[9px] tracking-[0.35em] uppercase mt-1.5 ${activeView === 'digitize' ? 'hidden' : ''}`}
+            className={`text-white/50 text-[9px] tracking-[0.35em] uppercase mt-1.5 max-sm:hidden ${activeView === 'digitize' ? 'hidden' : ''}`}
             style={{ fontFamily: "'Neue Haas', 'Helvetica Neue', sans-serif", fontWeight: 300 }}
           >
             By Watson
           </span>
         </a>
-        <div className="w-px h-8 bg-white/[0.08]" />
-        <div className="flex items-center gap-1">
+        <div className="w-px h-8 bg-white/[0.08] max-sm:hidden" />
+        <div className="flex items-center gap-1 max-sm:gap-0 max-sm:min-w-0 max-sm:overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap max-sm:[&>*]:px-2.5 max-sm:[&>*]:min-h-11 max-sm:[&>*]:inline-flex max-sm:[&>*]:items-center max-sm:[&>*]:text-[11px] max-sm:[&>*]:tracking-[0.16em]">
           {/* In-app tabs */}
           {/* Shop is the dashboard's Shop (/shop), not the old shop inside this tool (Karl, 2026-10-17: "sometimes I click
               shop and it goes to the old shop"). Digitize and Style stay in-app tabs. */}
@@ -114,9 +115,9 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity duration-300 px-2 py-1"
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity duration-300 px-2 py-1 max-sm:min-h-11 max-sm:px-1"
         >
-          <span className="text-[10px] tracking-[0.15em] uppercase text-white/40 font-light">{user.displayName}</span>
+          <span className="text-[10px] tracking-[0.15em] uppercase text-white/40 font-light max-sm:hidden">{user.displayName}</span>
           <div className="w-6 h-6 rounded-full bg-[#F8E5E7]/12 flex items-center justify-center text-[9px] font-medium text-[#F8E5E7]/80">
             {initials}
           </div>

@@ -76,6 +76,7 @@ export function LookItemsPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
+        data-pane="look"
         className="w-9 flex-none border-l border-border bg-white flex flex-col items-center pt-3 gap-2 text-[#888] hover:text-[#1A1A1A]"
         title="Show what's in this look"
       >
@@ -87,7 +88,7 @@ export function LookItemsPanel() {
   }
 
   return (
-    <div className="w-52 flex-none border-l border-border bg-white flex flex-col overflow-hidden">
+    <div data-pane="look" className="w-52 flex-none border-l border-border bg-white flex flex-col overflow-hidden">
       <div className="px-3 py-2.5 border-b border-border flex items-start justify-between">
         <div>
           <p className="text-[10px] tracking-[0.2em] uppercase text-[#888]">In this look</p>

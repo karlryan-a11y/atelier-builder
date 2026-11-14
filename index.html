@@ -5,7 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Home-screen app on an iPhone or iPad (Karl, 2026-11-14: "every page the team uses"). Paths sit
+         under /brand/ because the dashboard passes /brand/* through to this app, so they answer the
+         same on atelierbywatson.com/style and on the builder's own address. iOS reads only the
+         apple-prefixed capable tag. viewport-fit=cover lets the black header run under the notch;
+         the padding in index.css keeps every button out of it and off the home bar.
+         scripts/check-home-screen-app.mjs guards all of it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="manifest" href="/brand/atelier-style.webmanifest" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Atelier" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#050505" />
     <title>Atelier by Watson</title>
     <!-- Preload the brand script (Amalfi Coast = the default canvas label font) so it's cached
          before the stylist ever opens the text tool — kills the fallback→Amalfi Coast flash. -->

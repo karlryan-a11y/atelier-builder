@@ -42,7 +42,7 @@ const TOUCH_SENSOR = { activationConstraint: { delay: 200, tolerance: 5 } }
  */
 function StylePane({ active, layer, children }: { active: boolean; layer: 'base' | 'over'; children: React.ReactNode }) {
   if (layer === 'base') {
-    return <div className="absolute inset-0 flex overflow-hidden">{children}</div>
+    return <div data-style-panes className="absolute inset-0 flex overflow-hidden">{children}</div>
   }
   return (
     <div
@@ -57,6 +57,23 @@ function StylePane({ active, layer, children }: { active: boolean; layer: 'base'
 
 // A phone, not an iPad or a computer: the widest iPhone is 440px wide, the narrowest iPad 744px.
 const PHONE_QUERY = '(max-width: 640px)'
+
+// Below this the Style panels show one at a time (index.css, [data-style-panes]): an iPad upright is
+// 744 to 1024 wide, and side by side the closet and looks panels left the board a sliver of it.
+const ONE_PANEL_QUERY = '(max-width: 1023px)'
+type StylePanel = 'pieces' | 'board' | 'looks'
+const STYLE_PANELS: Array<[StylePanel, string]> = [['pieces', 'Pieces'], ['board', 'Board'], ['looks', 'Looks']]
+
+function useWidthQuery(query: string): boolean {
+  const [on, setOn] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const change = () => setOn(mq.matches)
+    mq.addEventListener('change', change)
+    return () => mq.removeEventListener('change', change)
+  }, [query])
+  return on
+}
 
 function usePhoneWidth(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_QUERY).matches)
@@ -75,6 +92,12 @@ function App() {
   // whole tool for the rest of the visit.
   const phone = usePhoneWidth()
   const [fullStyleOnPhone, setFullStyleOnPhone] = useState(false)
+  const onePanel = useWidthQuery(ONE_PANEL_QUERY)
+  const [stylePanel, setStylePanel] = useState<StylePanel>('board')
+  const boardCount = useCanvasStore((s) => s.state.nodes.filter((n) => n.type === 'closet_item').length)
+  // A look opened from the Looks panel shows on the board, or nothing would seem to happen.
+  const openLookId = useCanvasStore((s) => s.currentLookId)
+  useEffect(() => { if (openLookId) setStylePanel('board') }, [openLookId])
   const [showAdmin, setShowAdmin] = useState(false)
   const [showSearch, setShowSearch] = useState(() => window.location.hash === '#search')
   const styleTab = useViewStore((s) => s.styleTab)
@@ -180,7 +203,7 @@ function App() {
 
   if (activeView === 'style' && phone && !fullStyleOnPhone) {
     return (
-      <div className="h-[100dvh] flex flex-col overflow-hidden">
+      <div className="h-[100dvh] flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]">
         <PhoneSend onFullTool={() => setFullStyleOnPhone(true)} />
         <AskAtelierButton />
       </div>
@@ -189,7 +212,9 @@ function App() {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="h-screen flex flex-col overflow-hidden">
+      {/* The insets are 0 on a computer and in Safari; in the home-screen app they keep everything off
+          the home bar and, on an iPhone turned sideways, out of the notch. */}
+      <div className="h-[100dvh] flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
         <Header
           user={user}
           onSignOut={signOut}
@@ -200,9 +225,9 @@ function App() {
         ) : activeView === 'style' ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Top bar: the ONE client selector (always visible) + the Style sub-tabs. */}
-            <div className="flex items-center gap-3 px-6 h-11 bg-white border-b border-[#E8E4DF] flex-none">
+            <div className="flex flex-wrap lg:flex-nowrap items-center gap-x-3 px-3 sm:px-6 min-h-11 lg:h-11 bg-white border-b border-[#E8E4DF] flex-none">
               <ClientBar styleOnly />
-              <div className="w-px h-5 bg-[#E8E4DF]" />
+              <div className="w-px h-5 bg-[#E8E4DF] max-sm:hidden" />
               {(['canvas', 'categorize'] as const).map((t) => (
                 <button
                   key={t}
@@ -222,6 +247,23 @@ function App() {
                   )}
                 </button>
               ))}
+              {/* Below 1024px the board's panels show one at a time; this row picks which (index.css). */}
+              {onePanel && styleTab === 'canvas' && (
+                <div role="tablist" aria-label="Show" className="basis-full flex border-t border-[#E8E4DF]">
+                  {STYLE_PANELS.map(([key, label]) => (
+                    <button
+                      key={key}
+                      role="tab"
+                      aria-selected={stylePanel === key}
+                      onClick={() => setStylePanel(key)}
+                      className={`relative flex-1 min-h-11 text-[12px] tracking-[0.18em] uppercase ${stylePanel === key ? 'text-[#1A1A1A]' : 'text-[#888]'}`}
+                    >
+                      {label}{key === 'board' && boardCount > 0 ? ` (${boardCount})` : ''}
+                      {stylePanel === key && <span className="absolute left-4 right-4 bottom-0 h-[1.5px] bg-[#1A1A1A]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {/* BOTH Style tabs stay mounted; the inactive one is hidden, not unmounted. Unmounting
                 threw away the closet, the looks and the capsules on every Canvas <-> Categorize
@@ -231,7 +273,7 @@ function App() {
                 Categorize mounts on first visit, then stays.
                 scripts/check-style-tabs-mounted.mjs fails if either panel goes back to being
                 mounted by a styleTab conditional. */}
-            <div className="relative flex flex-1 overflow-hidden">
+            <div data-show-panel={stylePanel} className="relative flex flex-1 overflow-hidden">
               <StylePane active={styleTab === 'canvas'} layer="base">
                 <ClosetPanel />
                 <LookCanvas />

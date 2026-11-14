@@ -144,6 +144,9 @@ export function IntakeInbox() {
   // item list below; the header bar shows how many batches are waiting so it's still discoverable.
   const [showConfirm, setShowConfirm] = useState(false)
   const [confirmWaiting, setConfirmWaiting] = useState(0)
+  // A phone (under 768px) has room for the menu OR the work, not both side by side: picking a piece,
+  // a list or Upload opens the work, and "Digitize" at its top comes back. An iPad and a computer keep both.
+  const [phonePane, setPhonePane] = useState<'menu' | 'work'>('menu')
   const toggleSelect = (id: string) =>
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const handleBulkAction = async (action: 'approve' | 'reject') => {
@@ -465,7 +468,7 @@ export function IntakeInbox() {
     <div className="flex-1 bg-[#F8F7F5] flex flex-row overflow-hidden">
       {/* Sidebar, laid out like the Shop's: small spaced-capital section labels, a thin line on the active item, counts as pills.
           The Queue opens to its tabs and the pieces waiting; Upload and Confirm items sit at the bottom. */}
-      <aside className="relative z-20 w-[256px] shrink-0 border-r border-[#E8E4DF] bg-white flex flex-col min-h-0">
+      <aside className={`relative z-20 w-[256px] max-md:w-full shrink-0 border-r max-md:border-r-0 border-[#E8E4DF] bg-white flex flex-col min-h-0 ${phonePane === 'work' ? 'max-md:hidden' : ''}`}>
         <div className="px-4 pt-4 pb-3 border-b border-[#E8E4DF]">
           <ClientFilter
           options={(() => {
@@ -487,8 +490,8 @@ export function IntakeInbox() {
           {tabs.map(tab => (
             <div key={tab.key}>
               <button
-                onClick={() => setFilter(tab.key)}
-                className={`w-full flex items-center justify-between pl-5 pr-4 py-2.5 text-left text-[13px] border-l-2 transition-colors ${filter === tab.key ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#888] hover:text-[#1A1A1A]'}`}
+                onClick={() => { setFilter(tab.key); if (tab.key !== 'queue' && tab.key !== 'pending_review') setPhonePane('work') }}
+                className={`w-full flex items-center justify-between pl-5 pr-4 py-2.5 max-md:min-h-11 text-left text-[13px] border-l-2 transition-colors ${filter === tab.key ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#888] hover:text-[#1A1A1A]'}`}
               >
                 <span className="flex items-center gap-2">
                   {tab.key === 'in_progress' && tab.count > 0 && <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />}
@@ -528,7 +531,7 @@ export function IntakeInbox() {
                   {tab.key === 'pending_review' && (
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['camera', 'From the camera', cap.items.length > 0 && reviewSrc === 'camera' ? Math.max(cap.items.length, cap.total ?? 0) : counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }) }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }); if (k === 'uploads') setPhonePane('work') }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                   )}
@@ -563,7 +566,7 @@ export function IntakeInbox() {
                   {capList.length > 0 && (
                     <div className="mt-1 mx-3 max-h-[42vh] overflow-y-auto space-y-1.5 pr-1">
                       {capList.filter(i => (!capList.some(x => x.done) || (capView === 'done') === !!i.done) && (tab.key !== 'pending_review' || retailOk(i))).map(it => (
-                        <button key={it.id} onClick={() => tellFrame({ type: 'select', id: it.id })} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
+                        <button key={it.id} onClick={() => { tellFrame({ type: 'select', id: it.id }); setPhonePane('work') }} className={`w-full flex items-center gap-2.5 p-1.5 text-left border ${cap.selectedId === it.id ? 'border-[#1A1A1A] bg-[#F8F7F5]' : 'border-[#E8E4DF]'}`}>
                           {it.thumb ? <img src={it.thumb} alt="" className="h-11 w-9 flex-none bg-[#F8F7F5] object-contain" /> : <div className="h-11 w-9 flex-none bg-[#F8F7F5]" />}
                           <span className="min-w-0">
                             <span className="block truncate text-[11px] text-[#1A1A1A]">{it.title}</span>
@@ -579,12 +582,16 @@ export function IntakeInbox() {
               )}
             </div>
           ))}
+          {/* A phone: the list or the piece for the tab picked above opens on its own screen. */}
+          <button onClick={() => setPhonePane('work')} className="md:hidden mx-4 mt-2 w-[calc(100%-2rem)] min-h-11 border border-[#1A1A1A] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+            Open {tabs.find((t) => t.key === filter)?.label ?? 'list'}
+          </button>
         </nav>
         <div className="border-t border-[#E8E4DF] p-3 flex flex-col gap-2">
           <a href="/sops#digitize-with-camera" target="_blank" rel="noreferrer" className="text-center text-[10px] tracking-[0.2em] uppercase text-[#888] underline hover:text-[#1A1A1A]">SOP</a>
           {(confirmWaiting > 0 || showConfirm) && (
             <button
-              onClick={() => setShowConfirm(v => !v)}
+              onClick={() => { setShowConfirm(v => !v); setPhonePane('work') }}
               className={`flex items-center justify-between px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${showConfirm ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
             >
               <span>Confirm items {confirmWaiting > 0 ? confirmWaiting : ''}</span>
@@ -592,7 +599,7 @@ export function IntakeInbox() {
             </button>
           )}
           <button
-            onClick={() => setShowUpload(!showUpload)}
+            onClick={() => { setShowUpload(!showUpload); setPhonePane('work') }}
             className={`flex items-center justify-center gap-1.5 px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase rounded transition-colors ${showUpload ? 'bg-[#1A1A1A] text-white' : 'bg-[#F8E5E7] text-[#1A1A1A] hover:bg-[#F0D8DB]'}`}
           >
             <Camera className="h-3.5 w-3.5" />
@@ -601,7 +608,10 @@ export function IntakeInbox() {
         </div>
       </aside>
 
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className={`flex-1 min-w-0 flex flex-col overflow-hidden ${phonePane === 'menu' ? 'max-md:hidden' : ''}`}>
+      <button onClick={() => setPhonePane('menu')} className="md:hidden flex-none flex items-center gap-1 px-3 min-h-11 bg-white border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+        <ChevronDown className="h-4 w-4 rotate-90" /> Digitize
+      </button>
       {/* Upload panel — collapsible */}
       {showUpload && (
         <UploadPanel

@@ -1044,6 +1044,7 @@ export function LookCanvas() {
   return (
     <main
       ref={setNodeRef}
+      data-pane="board"
       className="@container flex-1 flex flex-col items-center relative overflow-hidden"
       style={{ backgroundColor: 'rgba(245, 241, 234, 0.3)' }}
     >

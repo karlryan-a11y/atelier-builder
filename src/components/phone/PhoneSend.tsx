@@ -82,14 +82,15 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
 
   return (
     <div data-phone-send className="flex flex-col h-full w-full overflow-hidden bg-[#F8F7F5]">
-      <div className="flex items-center justify-between px-4 h-12 bg-[#050505] flex-none">
+      {/* box-content + the top inset: in the home-screen app the black bar runs under the notch and the clock. */}
+      <div className="box-content flex items-center justify-between px-4 h-12 pt-[env(safe-area-inset-top)] bg-[#050505] flex-none">
         <a href="/" className="text-white text-[22px] leading-none tracking-[0.015em]" style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}>
           ATELIER
         </a>
         <button
           onClick={onFullTool}
           title="The whole Style tool, as on a computer"
-          className="text-[10px] tracking-[0.18em] uppercase text-white/70"
+          className="min-h-11 px-2 -mr-2 text-[10px] tracking-[0.18em] uppercase text-white/70"
         >Full Style</button>
       </div>
       <div className="flex items-center px-4 h-14 bg-white border-b border-[#E8E4DF] flex-none">
