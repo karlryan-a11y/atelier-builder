@@ -189,8 +189,9 @@ export function CategorizePanel() {
   // It only tags when `tagging` is on: see lib/lookCategoryFilter.ts for why a click used to
   // re-file looks without saying so.
   const [brush, setBrush] = useState<string | null>(null)
-  // A phone (under 768px) shows the looks, with the category list a tap away ("Categories"), not both
-  // side by side; picking a category shows the looks again. An iPad and a computer keep both.
+  // Under 1024px (a phone, an iPad upright) the looks fill the screen, with the category list a tap away
+  // ("Categories"); picking a category shows the looks again. Side by side, 44px touch buttons left the
+  // names "B...". A computer and an iPad sideways keep both.
   const [railOpen, setRailOpen] = useState(false)
   const [tagging, setTagging] = useState(false)
   // ADR-0154: the per-client seasons switch, and the list of looks standing in its way.
@@ -885,8 +886,8 @@ export function CategorizePanel() {
   return (
     <div className="flex-1 flex overflow-hidden bg-[#F8F7F5]">
       {/* Left rail: category brush + rename + create */}
-      <aside className={`w-[260px] max-md:w-full flex-none border-r max-md:border-r-0 border-[#E8E4DF] bg-white flex flex-col ${railOpen ? '' : 'max-md:hidden'}`}>
-        <button onClick={() => setRailOpen(false)} className="md:hidden flex-none flex items-center gap-1 px-3 min-h-11 border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+      <aside data-categorize-rail className={`w-[260px] max-lg:w-full flex-none border-r max-lg:border-r-0 border-[#E8E4DF] bg-white flex flex-col ${railOpen ? '' : 'max-lg:hidden'}`}>
+        <button onClick={() => setRailOpen(false)} className="lg:hidden flex-none flex items-center gap-1 px-3 min-h-11 border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
           <ChevronLeft className="h-4 w-4" /> Back to the looks
         </button>
         <div className="px-5 py-4 border-b border-[#E8E4DF]">
@@ -1324,8 +1325,8 @@ export function CategorizePanel() {
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 min-w-0 flex flex-col overflow-hidden ${railOpen ? 'max-md:hidden' : ''}`}>
-        <button onClick={() => setRailOpen(true)} className="md:hidden flex-none flex items-center justify-between px-3 min-h-11 bg-white border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+      <div className={`flex-1 min-w-0 flex flex-col overflow-hidden ${railOpen ? 'max-lg:hidden' : ''}`}>
+        <button onClick={() => setRailOpen(true)} className="lg:hidden flex-none flex items-center justify-between px-3 min-h-11 bg-white border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
           <span>Categories</span><ChevronRight className="h-4 w-4" />
         </button>
         <div className="flex items-center justify-between px-6 max-md:px-3 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">

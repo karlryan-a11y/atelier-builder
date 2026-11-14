@@ -199,6 +199,11 @@
   a[href], [role=button], summary { align-content: center; }
 }
 
+/* An iPad sideways keeps Categorize's category list beside the looks; with 44px row buttons it needs the room. */
+@media (pointer: coarse) and (min-width: 1024px) {
+  [data-categorize-rail] { width: 380px; }
+}
+
 /* No hover on a touch screen: a button that only shows on hover (a tile's Edit and View larger)
    is shown all the time there, or it could never be reached. A hover-only label (pointer-events-none,
    like the "Ask Atelier" hint) stays hidden: it is not a button and would cover one. */

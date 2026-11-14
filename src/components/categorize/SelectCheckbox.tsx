@@ -54,4 +54,4 @@ export function SelectCheckbox({
  * How far the card's own top-left badge (the order number, the Live/Draft pill) moves across to
  * make room. Exported so both cards shift by the same amount and neither can drift.
  */
-export const BADGE_OFFSET_WHEN_SELECTABLE = 'left-7'
+export const BADGE_OFFSET_WHEN_SELECTABLE = 'left-7 [@media(pointer:coarse)]:left-14'

@@ -107,8 +107,9 @@ ok(/tellFrame\(\{ type: 'select', id: it\.id \}\); setPhonePane\('work'\)/.test(
 ok(/max-sm:overflow-x-auto/.test(header) && /max-sm:\[&>\*\]:min-h-11/.test(header), 'the top tabs must scroll inside the bar on a phone, each 44px tall')
 
 const cat = read('src/components/categorize/CategorizePanel.tsx')
-ok(/<aside className=\{`w-\[260px\] max-md:w-full[^`]*\$\{railOpen \? '' : 'max-md:hidden'\}/.test(cat), "Categorize's category list hides on a phone until Categories is tapped")
-ok(/\$\{railOpen \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setRailOpen\(true\)\}/.test(cat), "Categorize's looks show on a phone, with a Categories button")
+ok(/<aside data-categorize-rail className=\{`w-\[260px\] max-lg:w-full[^`]*\$\{railOpen \? '' : 'max-lg:hidden'\}/.test(cat), "Categorize's category list hides below 1024px until Categories is tapped")
+ok(/\[data-categorize-rail\] \{ width: 380px; \}/.test(css), "on an iPad sideways the category list is wide enough for its names")
+ok(/\$\{railOpen \? 'max-lg:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setRailOpen\(true\)\} className="lg:hidden/.test(cat), "Categorize's looks show below 1024px, with a Categories button")
 ok(/useEffect\(\(\) => \{ setRailOpen\(false\) \}, \[brush, uncatOnly, activeGarmentCats\]\)/.test(cat), 'picking a category on a phone shows the looks again')
 ok((cat.match(/px-5 py-3 max-md:pb-24 border-t/g) ?? []).length === 2, 'on a phone the New category boxes sit above the Ask Atelier button')
 
