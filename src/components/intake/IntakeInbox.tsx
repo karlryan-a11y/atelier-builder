@@ -587,7 +587,8 @@ export function IntakeInbox() {
             Open {tabs.find((t) => t.key === filter)?.label ?? 'list'}
           </button>
         </nav>
-        <div className="border-t border-[#E8E4DF] p-3 flex flex-col gap-2">
+        {/* max-md:pb-20: on a phone Upload sits above the round Ask Atelier button, not under it. */}
+        <div className="border-t border-[#E8E4DF] p-3 max-md:pb-20 flex flex-col gap-2">
           <a href="/sops#digitize-with-camera" target="_blank" rel="noreferrer" className="text-center text-[10px] tracking-[0.2em] uppercase text-[#888] underline hover:text-[#1A1A1A]">SOP</a>
           {(confirmWaiting > 0 || showConfirm) && (
             <button

@@ -191,9 +191,10 @@
 }
 
 /* No hover on a touch screen: a button that only shows on hover (a tile's Edit and View larger)
-   is shown all the time there, or it could never be reached. */
+   is shown all the time there, or it could never be reached. A hover-only label (pointer-events-none,
+   like the "Ask Atelier" hint) stays hidden: it is not a button and would cover one. */
 @media (hover: none) {
-  .group .group-hover\:opacity-100 { opacity: 1; }
+  .group .group-hover\:opacity-100:not(.pointer-events-none) { opacity: 1; }
 }
 
 /* Style below 1024px (an iPad upright, an iPhone): the closet, the board and the looks stood side by

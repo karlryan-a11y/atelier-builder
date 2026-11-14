@@ -80,7 +80,9 @@ const css = read('src/index.css')
 const coarse = css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
 ok(/input:not\(\[type=checkbox\]\)/.test(coarse) && /select/.test(coarse) && /textarea/.test(coarse) && /font-size: max\(16px, 1em\) !important/.test(coarse),
   'index.css must make every input, select and textarea at least 16px on a touch screen')
-ok(/@media \(hover: none\) \{\s*\.group \.group-hover\\:opacity-100 \{ opacity: 1; \}/.test(css), 'hover-only buttons (a tile\'s Edit) must show on a touch screen')
+ok(/@media \(hover: none\) \{\s*\.group \.group-hover\\:opacity-100:not\(\.pointer-events-none\) \{ opacity: 1; \}/.test(css), 'hover-only buttons (a tile\'s Edit) must show on a touch screen, hover-only labels must not')
+ok(/fixed bottom-\[calc\(1\.25rem\+env\(safe-area-inset-bottom\)\)\]/.test(read('src/components/feedback/AskAtelierButton.tsx')), 'the Ask Atelier button must sit above the home bar')
+ok(/max-md:pb-20 flex flex-col gap-2/.test(read('src/components/intake/IntakeInbox.tsx')), 'on a phone Upload must sit above the Ask Atelier button')
 
 // ── 4. Style one panel at a time ─────────────────────────────────────────────────────────────────
 ok(/const ONE_PANEL_QUERY = '\(max-width: 1023px\)'/.test(app), 'App.tsx must switch to one panel at a time below 1024px')

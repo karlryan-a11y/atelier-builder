@@ -44,7 +44,7 @@ export function AskAtelierButton() {
 
   return (
     <>
-      <div className="group fixed bottom-5 right-5 z-40 flex items-center">
+      <div className="group fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 flex items-center">
         <span className="pointer-events-none mr-3 translate-x-2 rounded-full bg-[#1a1a1a] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white opacity-0 shadow-sm transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100">Ask Atelier</span>
         <button type="button" onClick={toggle} aria-label="Ask Atelier" aria-expanded={open} title="Ask Atelier (Cmd K)"
           className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1a1a1a] text-white shadow-lg transition-all duration-300 hover:scale-105 hover:bg-black">
