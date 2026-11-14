@@ -106,6 +106,11 @@ ok(/\$\{phonePane === 'menu' \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\
 ok(/tellFrame\(\{ type: 'select', id: it\.id \}\); setPhonePane\('work'\)/.test(inbox), 'tapping a piece on a phone opens it')
 ok(/max-sm:overflow-x-auto/.test(header) && /max-sm:\[&>\*\]:min-h-11/.test(header), 'the top tabs must scroll inside the bar on a phone, each 44px tall')
 
+const cat = read('src/components/categorize/CategorizePanel.tsx')
+ok(/<aside className=\{`w-\[260px\] max-md:w-full[^`]*\$\{railOpen \? '' : 'max-md:hidden'\}/.test(cat), "Categorize's category list hides on a phone until Categories is tapped")
+ok(/\$\{railOpen \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setRailOpen\(true\)\}/.test(cat), "Categorize's looks show on a phone, with a Categories button")
+ok(/useEffect\(\(\) => \{ setRailOpen\(false\) \}, \[brush, uncatOnly, activeGarmentCats\]\)/.test(cat), 'picking a category on a phone shows the looks again')
+
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {
   console.error(`\ncheck-home-screen-app: ${problems.length} problem(s) in ${checks} checks`)

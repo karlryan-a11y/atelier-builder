@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { Plus, Tag, X, Search, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home } from 'lucide-react'
+import { Plus, Tag, X, Search, Send, Pencil, Check, Link2, Trash2, RotateCcw, StickyNote, Home, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useClientStore } from '@/stores/clientStore'
 import { LoadError } from '@/components/common/LoadError'
 import { useLookCategories, type TaggableLook, type TaggableCapsule, type LookCategory } from '@/hooks/useLookCategories'
@@ -189,6 +189,9 @@ export function CategorizePanel() {
   // It only tags when `tagging` is on: see lib/lookCategoryFilter.ts for why a click used to
   // re-file looks without saying so.
   const [brush, setBrush] = useState<string | null>(null)
+  // A phone (under 768px) shows the looks, with the category list a tap away ("Categories"), not both
+  // side by side; picking a category shows the looks again. An iPad and a computer keep both.
+  const [railOpen, setRailOpen] = useState(false)
   const [tagging, setTagging] = useState(false)
   // ADR-0154: the per-client seasons switch, and the list of looks standing in its way.
   const [seasonQueue, setSeasonQueue] = useState(false)
@@ -535,6 +538,7 @@ export function CategorizePanel() {
   const activeBrush = brush && categories.some((c) => c.id === brush && !c.is_hidden) ? brush : null
   // "Uncategorized" on the rail (Paige 10/13, Karl 10/14): only the looks in no category she files by.
   const [uncatOnly, setUncatOnly] = useState(false)
+  useEffect(() => { setRailOpen(false) }, [brush, uncatOnly, activeGarmentCats])
   const showUncat = uncatOnly && !activeBrush && !tagging
   const labelOf = useMemo(() => {
     const m = new Map(categories.map((c) => [c.id, c.label]))
@@ -881,7 +885,10 @@ export function CategorizePanel() {
   return (
     <div className="flex-1 flex overflow-hidden bg-[#F8F7F5]">
       {/* Left rail: category brush + rename + create */}
-      <aside className="w-[260px] flex-none border-r border-[#E8E4DF] bg-white flex flex-col">
+      <aside className={`w-[260px] max-md:w-full flex-none border-r max-md:border-r-0 border-[#E8E4DF] bg-white flex flex-col ${railOpen ? '' : 'max-md:hidden'}`}>
+        <button onClick={() => setRailOpen(false)} className="md:hidden flex-none flex items-center gap-1 px-3 min-h-11 border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+          <ChevronLeft className="h-4 w-4" /> Back to the looks
+        </button>
         <div className="px-5 py-4 border-b border-[#E8E4DF]">
           <p className="text-[10px] tracking-[0.3em] uppercase text-[#888]">Categorize</p>
           {chatStatus && <p className="mt-1 text-[10px] text-[#888] leading-snug">{chatStatus}</p>}
@@ -1317,9 +1324,12 @@ export function CategorizePanel() {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
-          <div className="flex items-center gap-1">
+      <div className={`flex-1 min-w-0 flex flex-col overflow-hidden ${railOpen ? 'max-md:hidden' : ''}`}>
+        <button onClick={() => setRailOpen(true)} className="md:hidden flex-none flex items-center justify-between px-3 min-h-11 bg-white border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">
+          <span>Categories</span><ChevronRight className="h-4 w-4" />
+        </button>
+        <div className="flex items-center justify-between px-6 max-md:px-3 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
+          <div className="flex items-center gap-1 max-md:max-w-full max-md:overflow-x-auto [&>*]:shrink-0">
             {/* Residences for every client: it is where her homes are added, so a client with none
                 yet must be able to reach it (Paige, 2026-11-13). */}
             {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
