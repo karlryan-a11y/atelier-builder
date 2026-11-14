@@ -112,6 +112,12 @@ ok(/\$\{railOpen \? 'max-md:hidden' : ''\}`\}>\s*<button onClick=\{\(\) => setRa
 ok(/useEffect\(\(\) => \{ setRailOpen\(false\) \}, \[brush, uncatOnly, activeGarmentCats\]\)/.test(cat), 'picking a category on a phone shows the looks again')
 ok((cat.match(/px-5 py-3 max-md:pb-24 border-t/g) ?? []).length === 2, 'on a phone the New category boxes sit above the Ask Atelier button')
 
+// The Needs Review card goes side by side by the CARD's width, not the screen's (an iPad upright cut its details off).
+ok(/<div className="@container bg-white rounded-sm border border-\[#E8E4DF\] overflow-hidden">\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="flex flex-col @\[720px\]:flex-row">/.test(inbox), "the Needs Review card must lay out by its own width (@container, side by side from 720px)")
+ok(!/<div className="flex flex-col md:flex-row">\s*\{\/\* Left: Images stack/.test(inbox), "the Needs Review card must not go side by side by screen width (md:)")
+// A finger needs about 44px: every control on a touch screen.
+ok(/button, \[role=button\], \[role=tab\], a\[href\], select, summary \{\s*min-height: 44px;\s*min-width: 44px;/.test(coarse), "on a touch screen every button, tab, link and picker must be at least 44px")
+
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {
   console.error(`\ncheck-home-screen-app: ${problems.length} problem(s) in ${checks} checks`)

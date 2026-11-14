@@ -188,6 +188,14 @@
   textarea {
     font-size: max(16px, 1em) !important;
   }
+
+  /* A finger needs about 44px (Karl's brief). Every button, link, tab and picker in the builder is at
+     least that on a touch screen; a computer (a mouse) keeps today's compact sizes. Inline links inside a
+     sentence are left alone (min sizes do nothing to inline text). */
+  button, [role=button], [role=tab], a[href], select, summary {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* No hover on a touch screen: a button that only shows on hover (a tile's Edit and View larger)

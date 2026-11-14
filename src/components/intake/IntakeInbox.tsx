@@ -1163,10 +1163,12 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
   }
 
   return (
-    <div className="bg-white rounded-sm border border-[#E8E4DF] overflow-hidden">
-      <div className="flex flex-col md:flex-row">
+    <div className="@container bg-white rounded-sm border border-[#E8E4DF] overflow-hidden">
+      {/* Side by side only when the CARD is 720px or wider (a computer). By screen width (md:) it went side by
+          by side in a 532px card on an iPad upright and the details column was cut off: "Leopa", "APPR". */}
+      <div className="flex flex-col @[720px]:flex-row">
         {/* Left: Images stack — AI photo on top, originals below */}
-        <div className="md:w-[420px] shrink-0 p-4 space-y-3">
+        <div className="w-full max-w-[420px] mx-auto @[720px]:mx-0 @[720px]:w-[420px] shrink-0 p-4 space-y-3">
           {/* Hero image — AI product photo if available, otherwise original garment */}
           {(() => {
             const heroKey = currentAiKey ?? item.garment_photo?.r2_key
@@ -1229,7 +1231,7 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
         </div>
 
         {/* Right: Metadata + Actions */}
-        <div className="flex-1 p-4 md:p-6 flex flex-col">
+        <div className="flex-1 min-w-0 p-4 @[720px]:p-6 flex flex-col">
           {/* Client + Item header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-start gap-3">
