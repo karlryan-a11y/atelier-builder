@@ -884,7 +884,7 @@ export function CategorizePanel() {
   ]
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-[#F8F7F5]">
+    <div data-touch-wrap className="flex-1 flex overflow-hidden bg-[#F8F7F5]">
       {/* Left rail: category brush + rename + create */}
       <aside data-categorize-rail className={`w-[260px] max-lg:w-full flex-none border-r max-lg:border-r-0 border-[#E8E4DF] bg-white flex flex-col ${railOpen ? '' : 'max-lg:hidden'}`}>
         <button onClick={() => setRailOpen(false)} className="lg:hidden flex-none flex items-center gap-1 px-3 min-h-11 border-b border-[#E8E4DF] text-[11px] tracking-[0.18em] uppercase text-[#1A1A1A]">

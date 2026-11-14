@@ -199,6 +199,18 @@
   a[href], [role=button], summary { align-content: center; }
 }
 
+/* No hover to read the rest of a cut line on a touch screen, so a piece or look name in Style's panels or
+   in Categorize wraps onto two lines there instead of ending in "..." (the dashboard does the same). */
+@media (pointer: coarse) {
+  [data-style-panes] .truncate, [data-touch-wrap] .truncate {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* An iPad sideways keeps Categorize's category list beside the looks; with 44px row buttons it needs the room. */
 @media (pointer: coarse) and (min-width: 1024px) {
   [data-categorize-rail] { width: 380px; }
