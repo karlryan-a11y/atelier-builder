@@ -196,6 +196,7 @@
     min-height: 44px;
     min-width: 44px;
   }
+  a[href], [role=button], summary { align-content: center; }
 }
 
 /* No hover on a touch screen: a button that only shows on hover (a tile's Edit and View larger)

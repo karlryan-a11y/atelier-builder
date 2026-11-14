@@ -1438,11 +1438,11 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
           )}
           {/* Action buttons — Approve / Restyle / Reject */}
           {(item.status === 'pending_review' || item.status === 'qc_passed') && !rejecting && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleApprove}
                 disabled={submitting || restyling}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
+                className="flex-1 basis-full @[720px]:basis-0 flex items-center justify-center gap-2 px-4 py-3 bg-[#1A1A1A] text-white text-[11px] tracking-[0.2em] uppercase rounded-sm hover:bg-[#333] transition-colors disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
                 {submitting ? 'Approving...' : dupes.length && dupeConfirmed ? 'Approve anyway' : 'Approve'}

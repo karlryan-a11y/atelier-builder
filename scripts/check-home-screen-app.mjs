@@ -118,6 +118,9 @@ ok(!/<div className="flex flex-col md:flex-row">\s*\{\/\* Left: Images stack/.te
 // A finger needs about 44px: every control on a touch screen.
 ok(/button, \[role=button\], \[role=tab\], a\[href\], select, summary \{\s*min-height: 44px;\s*min-width: 44px;/.test(coarse), "on a touch screen every button, tab, link and picker must be at least 44px")
 
+ok(/<div className="flex flex-wrap gap-2">\s*<button\s*onClick=\{handleApprove\}[\s\S]{0,120}className="flex-1 basis-full @\[720px\]:basis-0 /.test(inbox), "on a narrow card Approve must get a full row (it was squeezed to 44px with its word cut)")
+ok(/a\[href\], \[role=button\], summary \{ align-content: center; \}/.test(coarse), "a 44px link keeps its words in the middle")
+
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {
   console.error(`\ncheck-home-screen-app: ${problems.length} problem(s) in ${checks} checks`)
