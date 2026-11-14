@@ -68,7 +68,7 @@ if (existsSync(DASH + 'vercel.json')) {
 
 // ── 2. safe areas ────────────────────────────────────────────────────────────────────────────────
 const header = read('src/components/layout/Header.tsx')
-ok(/<header className=\{`[^`]*box-content pt-\[env\(safe-area-inset-top\)\]/.test(header), 'the Header must pad by the top safe-area inset (box-content keeps its own height)')
+ok(/<header className=\{`[^`]*h-\[calc\(120px\+env\(safe-area-inset-top\)\)\][^`]*pt-\[env\(safe-area-inset-top\)\]/.test(header), 'the Header must grow by the top safe-area inset and pad by it (120px on a computer, as before)')
 const app = read('src/App.tsx')
 ok(/h-\[100dvh\] flex flex-col overflow-hidden pb-\[env\(safe-area-inset-bottom\)\] pl-\[env\(safe-area-inset-left\)\] pr-\[env\(safe-area-inset-right\)\]/.test(app), 'the app must pad by the bottom and side safe-area insets')
 ok(/pb-\[env\(safe-area-inset-bottom\)\]">\s*<PhoneSend/.test(app), 'the phone Send screen must pad by the bottom inset')
