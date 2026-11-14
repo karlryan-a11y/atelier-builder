@@ -819,7 +819,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </span>
         <button
           onClick={() => setUnconfirmedOnly((v) => !v)}
-          className={`text-[10px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border transition-colors ${unconfirmedOnly ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'text-[#888] border-[#E8E4DF] hover:text-[#1A1A1A]'}`}
+          className={`shrink-0 whitespace-nowrap text-[10px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border transition-colors ${unconfirmedOnly ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'text-[#888] border-[#E8E4DF] hover:text-[#1A1A1A]'}`}
         >{unconfirmedOnly ? 'Showing unconfirmed' : 'Unconfirmed only'}</button>
         <button
           onClick={() => setAdding(true)}
