@@ -41,7 +41,7 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
     <header className={`${activeView === 'digitize' ? 'h-[calc(56px+env(safe-area-inset-top))]' : 'h-[calc(120px+env(safe-area-inset-top))] max-sm:h-[calc(56px+env(safe-area-inset-top))]'} pt-[env(safe-area-inset-top)] bg-[#050505] flex items-center justify-between gap-2 px-6 max-sm:px-3 border-b border-white/[0.06]`}>
       {/* A phone: the short bar, and the tabs scroll sideways inside it instead of running off the screen. */}
       <div className="min-w-0 flex items-center gap-8 max-sm:gap-2">
-        <a href="/" className={`flex flex-col transition-opacity duration-300 hover:opacity-80 ${activeView === 'digitize' ? 'py-0' : 'py-2'}`}>
+        <a href="/" className={`shrink-0 flex flex-col transition-opacity duration-300 hover:opacity-80 ${activeView === 'digitize' ? 'py-0' : 'py-2'}`}>
           <span
             className={`text-white ${activeView === 'digitize' ? 'text-[26px]' : 'text-[42px] max-sm:text-[22px]'} leading-none tracking-[0.015em]`}
             style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}

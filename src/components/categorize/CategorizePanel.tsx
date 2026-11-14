@@ -1330,7 +1330,7 @@ export function CategorizePanel() {
           <span>Categories</span><ChevronRight className="h-4 w-4" />
         </button>
         <div className="flex items-center justify-between px-6 max-md:px-3 py-3 border-b border-[#E8E4DF] bg-white gap-4 flex-wrap">
-          <div className="flex items-center gap-1 max-lg:max-w-full max-lg:overflow-x-auto [&>*]:shrink-0">
+          <div className="flex items-center gap-1 max-w-full overflow-x-auto [&>*]:shrink-0">
             {/* Residences for every client: it is where her homes are added, so a client with none
                 yet must be able to reach it (Paige, 2026-11-13). */}
             {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
@@ -1355,7 +1355,7 @@ export function CategorizePanel() {
           </div>
 
           {(mode === 'looks' || mode === 'capsules') && (
-          <div className="flex items-center gap-1 bg-[#F8F7F5] rounded p-0.5">
+          <div className="flex items-center gap-1 bg-[#F8F7F5] rounded p-0.5 max-w-full overflow-x-auto [&>*]:shrink-0">
             {statuses.map((s) => (
               <button
                 key={s.key}

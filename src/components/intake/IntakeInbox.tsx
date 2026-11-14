@@ -1490,12 +1490,12 @@ function InlineItemCard({ item, onAction, selected, onToggle, customCategories =
             </div>
           )}
           {(item.status === 'rejected' || item.status === 'rejected_final') && (
-            <div className="flex items-center justify-between gap-2 p-3 bg-red-50 rounded-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-red-50 rounded-sm">
               <div className="flex items-center gap-2">
                 <X className="h-4 w-4 text-red-500" />
                 <span className="text-sm text-red-600">Rejected</span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-x-4">
                 <button
                   onClick={() => handleRejectFinal(true)}
                   disabled={submitting || archiving}

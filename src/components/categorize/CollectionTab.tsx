@@ -792,7 +792,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </div>
         {(seasonNote || seasons.error) && <p className="mt-2 text-[11px] text-[#888]">{seasons.error ?? seasonNote}</p>}
       </div>
-      <div className="mb-5 flex items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#aaa]" />
           <input
@@ -823,7 +823,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         >{unconfirmedOnly ? 'Showing unconfirmed' : 'Unconfirmed only'}</button>
         <button
           onClick={() => setAdding(true)}
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#1A1A1A] text-white text-[11px] tracking-[0.08em] uppercase hover:bg-black transition-colors"
+          className="ml-auto shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#1A1A1A] text-white text-[11px] tracking-[0.08em] uppercase hover:bg-black transition-colors"
         >
           <Plus className="h-3.5 w-3.5" /> Add Item
         </button>
