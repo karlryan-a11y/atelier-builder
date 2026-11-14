@@ -63,7 +63,10 @@ const DraggableItem = memo(function DraggableItem({
   })
 
   const style: React.CSSProperties = {
-    touchAction: 'none',
+    // 'manipulation', not 'none': with 'none' a finger that lands on a picture (nearly all of the list)
+    // can't scroll the closet on an iPad or iPhone. A drag still works: the touch sensor waits for a
+    // 200 ms hold (App.tsx TOUCH_SENSOR), and once it holds, dnd-kit stops the page from scrolling.
+    touchAction: 'manipulation',
     ...(transform
       ? { transform: `translate(${transform.x}px, ${transform.y}px)`, opacity: isDragging ? 0.5 : 1 }
       : {}),
