@@ -534,7 +534,7 @@ export function IntakeInbox() {
                   {tab.key === 'pending_review' && (
                     <div className="mt-1 mx-3 flex gap-1.5">
                       {([['camera', 'From the camera', cap.items.length > 0 && reviewSrc === 'camera' ? Math.max(cap.items.length, cap.total ?? 0) : counts.camera], ['uploads', 'Uploads', counts.pending]] as const).map(([k, l, n]) => (
-                        <button key={k} onClick={() => { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }); if (k === 'uploads') setPhonePane('work') }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
+                        <button key={k} onClick={() => { if (k !== reviewSrc) { setReviewSrc(k); setCap({ tab: 'todo', attention: 0, items: [], selectedId: null }) } if (k === 'uploads') setPhonePane('work') }} className={`flex-1 px-2 py-1.5 text-[9px] tracking-[0.15em] uppercase border ${reviewSrc === k ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white' : 'border-[#E8E4DF] text-[#1A1A1A]'}`}>{l} ({n})</button>
                       ))}
                     </div>
                   )}
