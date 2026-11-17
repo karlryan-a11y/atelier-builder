@@ -1379,7 +1379,7 @@ export function CategorizePanel() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={mode === 'looks' ? 'Search look names…' : 'Search capsule names…'}
                 aria-label={mode === 'looks' ? 'Search look names' : 'Search capsule names'}
-                className="w-[210px] pointer-coarse:w-[280px] max-w-full pl-8 pr-16 py-1.5 text-[12px] bg-[#F8F7F5] rounded border border-transparent focus:border-[#E8E4DF] focus:bg-white focus:outline-none placeholder:text-[#bbb]"
+                className={`w-[210px] pointer-coarse:w-[280px] max-w-full pl-8 ${search ? 'pr-16' : 'pr-3'} py-1.5 text-[12px] bg-[#F8F7F5] rounded border border-transparent focus:border-[#E8E4DF] focus:bg-white focus:outline-none placeholder:text-[#bbb]`}
               />
               {search && (
                 <div className="absolute right-1.5 flex items-center gap-1">
