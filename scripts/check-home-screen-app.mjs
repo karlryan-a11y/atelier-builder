@@ -131,6 +131,9 @@ ok(/<aside data-digitize-side className=/.test(inbox) && /<nav data-digitize-nav
 ok(/@media \(max-width: 767px\), \(pointer: coarse\) \{\s*\[data-digitize-side\] \{ overflow-y: auto; \}\s*\[data-digitize-nav\] \{ flex: none; overflow: visible; \}\s*\[data-digitize-list\] \{ max-height: 75dvh; \}/.test(css), "on a phone or touch screen Digitize's sidebar scrolls as one page and the piece list is three quarters of the screen tall")
 // Style's board on a phone: each tool row is one row that scrolls sideways, so the board gets the screen.
 ok(/@media \(max-width: 639px\) \{\s*\[data-canvas-toolbar\] \[data-toolbar-base\],\s*\[data-canvas-toolbar\] \[data-toolbar-context\] > div \{\s*flex-wrap: nowrap;/.test(css), "on a phone the board's tools must sit in one sideways-scrolling row each, not wrap over the board")
+// Needs Review's search box is 16px on a touch screen: its hint was cut ("Search anything: Valentino shoe, si").
+const searchHint = inbox.match(/placeholder="([^"]*)"\s*aria-label="Search pieces"/)?.[1] ?? ''
+ok(searchHint && searchHint.length <= 26, `Needs Review's search hint must fit an iPad sidebar (26 characters or fewer), it reads "${searchHint}"`)
 
 if (checks < 30) fail(`only ${checks} checks ran`)
 if (problems.length) {

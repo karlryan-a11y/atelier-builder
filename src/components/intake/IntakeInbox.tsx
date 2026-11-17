@@ -511,7 +511,7 @@ export function IntakeInbox() {
                     type="search"
                     value={pieceQ}
                     onChange={(e) => searchFor(e.target.value)}
-                    placeholder="Search anything: Valentino shoe, size 8, black silk"
+                    placeholder="Search brand, size, color"
                     aria-label="Search pieces"
                     className="w-full border border-[#E8E4DF] bg-white px-2.5 py-1.5 pr-7 text-[12px] text-[#1A1A1A] outline-none focus:border-[#1A1A1A] [&::-webkit-search-cancel-button]:appearance-none"
                   />
