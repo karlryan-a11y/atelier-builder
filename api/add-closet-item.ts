@@ -109,6 +109,15 @@ async function createDraft(body: any) {
   return { item_id: created?.id ?? id }
 }
 
+// The season the stylist picked in Add Item (Cynthia Dada for Peyton Wheeler, 2026-11-17): the
+// dialog sends the markers from lib/pieceSeasons.ts withSeasonChoice, the same ones the bulk SS / FW
+// buttons write. Only season markers are kept, once each; null (No season) writes nothing new.
+export function seasonFieldsOf(body: any): string[] | null {
+  const sent = Array.isArray(body?.client_edited_fields) ? body.client_edited_fields : []
+  const kept = ['season-ss', 'season-fw'].filter((m) => sent.includes(m))
+  return kept.length ? kept : null
+}
+
 async function publish(body: any) {
   const id = String(body.item_id || '').trim()
   const name = String(body.name || '').trim()
@@ -137,7 +146,9 @@ async function publish(body: any) {
   )]
   // The team note goes to its own table, never onto the piece row or into raw (ADR-0165): a client
   // may read every column of her own rows.
+  const seasonFields = seasonFieldsOf(body)
   const patch = {
+    ...(seasonFields ? { client_edited_fields: seasonFields } : {}),
     name, brand, color, category, description,
     custom_categories: customCategories,
     color_family: colors[0] ?? null,

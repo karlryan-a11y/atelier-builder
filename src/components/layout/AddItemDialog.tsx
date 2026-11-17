@@ -11,14 +11,27 @@ import { nameForCategory } from '@/lib/categoryNames'
 import { ColorSetField } from '@/components/common/ColorSetField'
 import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
+import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
+import { withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
+
+// The same four choices, words and order as the bulk season buttons in Categorize > Collection.
+const SEASON_CHOICES: { key: SeasonChoice; label: string; title: string }[] = [
+  { key: 'ss', label: 'SS', title: 'Spring/Summer' },
+  { key: 'fw', label: 'FW', title: 'Fall/Winter' },
+  { key: 'both', label: 'Both', title: 'Both seasons, a year-round piece' },
+  { key: 'none', label: 'No season', title: 'She sees it under All only' },
+]
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const FIXED = (Object.entries(CATEGORY_LABELS) as [string, string][]).filter(([s]) => s !== 'other')
 
 // Absolute builder URL — the app is served under atelierbywatson.com/style (apex = the dashboard),
 // so a RELATIVE /api/... would hit the dashboard, not this builder's serverless function. Same
-// pattern as api/heic-convert. CORS is handled by the endpoint.
-const ADD_ITEM_API = 'https://atelier-builder.vercel.app/api/add-closet-item'
+// pattern as api/heic-convert. CORS is handled by the endpoint. A branch preview calls its OWN copy,
+// so a change to the route can be tried there before it is live (previews only).
+const ADD_ITEM_API = typeof location !== 'undefined' && /-wsgautomations-projects\.vercel\.app$/.test(location.hostname)
+  ? '/api/add-closet-item'
+  : 'https://atelier-builder.vercel.app/api/add-closet-item'
 const api = async (body: any) =>
   fetch(ADD_ITEM_API, {
     method: 'POST',
@@ -94,6 +107,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
   // Same model and the same editor as EditItemDialog's Collection-tab mode; a piece added here can be
   // a Top AND live in a custom grouping (49ers, a residence) from the moment it goes live.
   const [alsoIn, setAlsoIn] = useState<string[]>([])
+  // Its season (Cynthia Dada for Peyton Wheeler, 2026-11-17), offered only when her Collection shows
+  // seasons, so every other client's Add Item is what it was. No season unless she picks one.
+  const { on: seasonsOn } = useCollectionSeasons(clientId)
+  const [season, setSeason] = useState<SeasonChoice>('none')
 
   const currentInList = FIXED.some(([s]) => s === category) || customCategories.some(c => c.slug === category)
   const ready = !!draftId && !!processedUrl && !processing
@@ -181,6 +198,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
         colors: colorSet,
         category: finalCategory, style_note: styleNote, description,
         custom_categories: alsoInFinal.filter(s => s && s !== finalCategory),
+        client_edited_fields: withSeasonChoice(null, seasonsOn ? season : 'none'),
       })
       if (!d?.ok) { alert(d?.error || 'Could not add the item.'); return }
       const published = draftId
@@ -294,6 +312,24 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
               Put this piece in more than one place — e.g. Tops AND a custom category like 49ers. It shows under each.
             </p>
           </div>
+
+          {seasonsOn && (
+            <div>
+              <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Season</label>
+              <div role="radiogroup" aria-label="Season" className="flex gap-1.5">
+                {SEASON_CHOICES.map(c => (
+                  <button key={c.key} type="button" role="radio" aria-checked={season === c.key} title={c.title}
+                    onClick={() => setSeason(c.key)}
+                    className={`flex-1 px-2 py-2 rounded-sm text-[11px] tracking-[0.12em] uppercase transition-colors ${season === c.key ? 'bg-text text-white' : 'bg-tile text-text hover:bg-black/5'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">
+                Shows under that season on her Collection page. Both shows under SS and FW; No season, under All only.
+              </p>
+            </div>
+          )}
 
           <Field label="Color" value={color} onChange={setColor} placeholder="e.g. Navy" />
 
