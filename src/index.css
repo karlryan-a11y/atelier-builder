@@ -199,18 +199,17 @@
   a[href], [role=button], summary { align-content: center; }
 }
 
-/* No hover to read the rest of a cut line on a touch screen, so a piece or look name in Style's panels or
-   in Categorize wraps onto two lines there instead of ending in "..." (the dashboard does the same). */
+/* No hover to read the rest of a cut line on a touch screen, so a piece or look name (and its note) in Style's
+   panels, Categorize and Digitize shows whole there instead of ending in "...", whether it was cut to one line
+   (truncate) or held to two or three (line-clamp). The dashboard does the same. A computer is unchanged. */
 @media (pointer: coarse) {
-  [data-style-panes] .truncate, [data-touch-wrap] .truncate {
+  [data-style-panes] :is(.truncate, [class*="line-clamp-"]), [data-touch-wrap] :is(.truncate, [class*="line-clamp-"]) {
     white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
     overflow-wrap: anywhere;
   }
-  /* Digitize's lists show a piece's whole name, however long: it is how she tells two shoes apart. */
-  [data-touch-wrap="all"] .truncate { display: block; -webkit-line-clamp: unset; }
 }
 
 /* Digitize on a phone or a touch screen: between the filters and SOP, Confirm items and Upload, the piece list

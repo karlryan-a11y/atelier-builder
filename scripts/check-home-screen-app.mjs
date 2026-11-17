@@ -121,12 +121,13 @@ ok(/button, \[role=button\], \[role=tab\], a\[href\], select, summary \{\s*min-h
 
 ok(/<div className="flex flex-wrap gap-2">\s*<button\s*onClick=\{handleApprove\}[\s\S]{0,120}className="flex-1 basis-full @\[720px\]:basis-0 /.test(inbox), "on a narrow card Approve must get a full row (it was squeezed to 44px with its word cut)")
 ok(/a\[href\], \[role=button\], summary \{ align-content: center; \}/.test(coarse), "a 44px link keeps its words in the middle")
-// No hover on a touch screen to read a name cut with "...": Style's panels and Categorize wrap it onto two lines.
-ok(/@media \(pointer: coarse\) \{\s*\[data-style-panes\] \.truncate, \[data-touch-wrap\] \.truncate \{\s*white-space: normal;[\s\S]{0,120}-webkit-line-clamp: 2;/.test(css), 'on a touch screen a piece or look name in Style and Categorize must wrap onto two lines, not end in "..."')
+// No hover on a touch screen to read a name cut with "...": in Style's panels, Categorize and Digitize a name or
+// note shows whole, whether it was cut to one line (truncate) or held to two or three (line-clamp).
+ok(/@media \(pointer: coarse\) \{\s*\[data-style-panes\] :is\(\.truncate, \[class\*="line-clamp-"\]\), \[data-touch-wrap\] :is\(\.truncate, \[class\*="line-clamp-"\]\) \{\s*white-space: normal;\s*display: block;\s*-webkit-line-clamp: unset;\s*overflow: visible;/.test(css), 'on a touch screen a piece or look name in Style, Categorize and Digitize must show whole (truncate and line-clamp), not end in "..."')
 ok(/<div data-touch-wrap className="flex-1 flex overflow-hidden bg-\[#F8F7F5\]">/.test(cat), 'Categorize must carry data-touch-wrap')
 // Digitize: the review and Queue lists' names wrap too, and on a phone the whole sidebar scrolls as one page so
 // the list gets the screen (between the filters and Confirm/Upload it was a strip two cards tall).
-ok(/<div data-touch-wrap="all" className="flex-1 bg-\[#F8F7F5\] flex flex-row overflow-hidden">/.test(inbox) && /\[data-touch-wrap="all"\] \.truncate \{ display: block; -webkit-line-clamp: unset; \}/.test(css), 'Digitize must carry data-touch-wrap="all" so its list shows each whole name on a touch screen')
+ok(/<div data-touch-wrap="all" className="flex-1 bg-\[#F8F7F5\] flex flex-row overflow-hidden">/.test(inbox),'Digitize must carry data-touch-wrap="all" so its list shows each whole name on a touch screen')
 ok(/<aside data-digitize-side className=/.test(inbox) && /<nav data-digitize-nav className=/.test(inbox) && /<div data-digitize-list className="mt-1 mx-3 max-h-\[42vh\]/.test(inbox), "Digitize's sidebar, menu and piece list must carry data-digitize-side, -nav and -list")
 ok(/@media \(max-width: 767px\), \(pointer: coarse\) \{\s*\[data-digitize-side\] \{ overflow-y: auto; \}\s*\[data-digitize-nav\] \{ flex: none; overflow: visible; \}\s*\[data-digitize-list\] \{ max-height: 75dvh; \}/.test(css), "on a phone or touch screen Digitize's sidebar scrolls as one page and the piece list is three quarters of the screen tall")
 // Style's board on a phone: each tool row is one row that scrolls sideways, so the board gets the screen.
