@@ -12,6 +12,7 @@ import { slugifyCategory, labelForCategory } from '@/lib/garmentCategory'
 import { nameForCategory } from '@/lib/categoryNames'
 import { colorsOf } from '@/lib/colorFamily'
 import { enteredMaterialOf, withMaterialConfirmed } from '@/lib/materialConfirmed'
+import { CARE_CHIPS, addCare } from '@/lib/careChips'
 import { ColorSetField } from '@/components/common/ColorSetField'
 
 interface EditItemDialogProps {
@@ -61,14 +62,6 @@ interface EditItemDialogProps {
    *  the stylist before overwriting them. */
   clientEditedFields?: string[] | null
   clientFirst?: string
-}
-
-// Common care instructions, one tap each (same list as the client's sheet in atelier-looks).
-const CARE_CHIPS = ['Dry clean only', 'Hand wash cold', 'Machine wash cold', 'Lay flat to dry', 'Do not tumble dry', 'Steam, do not iron', 'Hand press only', 'Specialist clean']
-function addCare(cur: string, add: string): string {
-  const t = cur.trim()
-  if (t.toLowerCase().includes(add.toLowerCase())) return cur
-  return t ? (/[.!?]$/.test(t) ? t + ' ' : t + '. ') + add + '.' : add + '.'
 }
 
 export function EditItemDialog({ item, saving, customCategories = [], categoryNames, residenceSlugs, imageUrl, enableMultiCategory = false, enableMultiColor = true, onSave, onClose, onRemoveBackground, removingBg, onReplacePhoto, replacing, onRotate, rotating, onArchive, archiving, onTransitionOut, transitioning, clientEditedFields, clientFirst }: EditItemDialogProps) {

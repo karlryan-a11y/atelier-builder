@@ -20,7 +20,10 @@ need(/client_edited_fields:/.test(dlg), 'Add to Collection sends the season mark
 // The publish route keeps only season markers from the request and writes nothing new for No season.
 const m = api.match(/export function seasonFieldsOf[\s\S]*?\n}\n/)
 need(m, 'api/add-closet-item.ts has seasonFieldsOf')
-need(/\.\.\.\(seasonFields \? \{ client_edited_fields: seasonFields \} : \{\}\)/.test(api), 'publish writes client_edited_fields only when a season was picked')
+// Since 2026-11-18 the same write also carries a typed material's marker (editedFieldsOf, built on
+// seasonFieldsOf; check-additem-material-care.mjs tests the pair).
+need(/const kept = seasonFieldsOf\(body\) \?\? \[\]/.test(api), 'editedFieldsOf starts from seasonFieldsOf')
+need(/\.\.\.\(editedFields \? \{ client_edited_fields: editedFields \} : \{\}\)/.test(api), 'publish writes client_edited_fields only when a season was picked (or a material typed)')
 if (m) {
   const js = m[0].replace(/^export /, '').replace(/\(body: any\): string\[\] \| null/, '(body)')
   const seasonFieldsOf = new Function(`${js}; return seasonFieldsOf`)()

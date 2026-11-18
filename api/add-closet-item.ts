@@ -118,6 +118,16 @@ export function seasonFieldsOf(body: any): string[] | null {
   return kept.length ? kept : null
 }
 
+// What publish writes to client_edited_fields: the season markers, plus the marker lib/materialConfirmed.ts
+// names (MATERIAL_CONFIRMED) when a material was typed (Cynthia Dada, 2026-11-18), as Edit Item's save
+// does. Nothing a client sets is ever taken from the request.
+export function editedFieldsOf(body: any): string[] | null {
+  const kept = seasonFieldsOf(body) ?? []
+  const typed = !!String(body?.material || '').trim()
+  const fields = typed ? [...kept, 'material-confirmed'] : kept
+  return fields.length ? fields : null
+}
+
 async function publish(body: any) {
   const id = String(body.item_id || '').trim()
   const name = String(body.name || '').trim()
@@ -130,6 +140,10 @@ async function publish(body: any) {
   // Client-visible description (migration 028, ADR-0151). Separate from style_note on purpose:
   // one is hers to read and search, the other is team-only and she can do neither with it.
   const description = String(body.description || '').trim() || null
+  // Material and care, hers to see on her piece (Cynthia Dada, 2026-11-18). Columns only, with Edit
+  // Item's limits: raw.material stays digitizing's tag read, which lib/materialConfirmed compares against.
+  const material = String(body.material || '').trim().slice(0, 300) || null
+  const care = String(body.care || '').trim().slice(0, 2000) || null
   // The colour SET (ADR-0115), primary first. Palette values only, deduped, empties dropped — the
   // same posture as "Also in" below.
   const colors: string[] = [...new Set(
@@ -146,10 +160,10 @@ async function publish(body: any) {
   )]
   // The team note goes to its own table, never onto the piece row or into raw (ADR-0165): a client
   // may read every column of her own rows.
-  const seasonFields = seasonFieldsOf(body)
+  const editedFields = editedFieldsOf(body)
   const patch = {
-    ...(seasonFields ? { client_edited_fields: seasonFields } : {}),
-    name, brand, color, category, description,
+    ...(editedFields ? { client_edited_fields: editedFields } : {}),
+    name, brand, color, category, description, material, care,
     custom_categories: customCategories,
     color_family: colors[0] ?? null,
     color_families: colors.slice(1),

@@ -13,6 +13,8 @@ import { useClosetItems } from '@/hooks/useClosetItems'
 import { possibleDuplicates, describeDuplicate } from '@/lib/duplicateCheck'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
 import { withSeasonChoice, type SeasonChoice } from '@/lib/pieceSeasons'
+import { withMaterialConfirmed } from '@/lib/materialConfirmed'
+import { CARE_CHIPS, addCare } from '@/lib/careChips'
 
 // The same four choices, words and order as the bulk season buttons in Categorize > Collection.
 const SEASON_CHOICES: { key: SeasonChoice; label: string; title: string }[] = [
@@ -95,6 +97,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
   const [category, setCategory] = useState('')
   const [styleNote, setStyleNote] = useState('')
   const [description, setDescription] = useState('')
+  // Material and care (Cynthia Dada, 2026-11-18), the same two boxes and chips as Edit Item. Hers to
+  // see on her piece; empty unless the stylist types, so a piece added without them saves as before.
+  const [material, setMaterial] = useState('')
+  const [care, setCare] = useState('')
   // IS IT ALREADY IN HER CLOSET? (ADR-0164) The closet hook is cached and shared, so this is not a
   // second read. The warning names the match; the stylist decides with one extra, deliberate click.
   const { items: closetItems } = useClosetItems(clientId)
@@ -197,8 +203,10 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
         action: 'publish', item_id: draftId, name: name.trim(), brand, color,
         colors: colorSet,
         category: finalCategory, style_note: styleNote, description,
+        material: material.trim(), care: care.trim(),
         custom_categories: alsoInFinal.filter(s => s && s !== finalCategory),
-        client_edited_fields: withSeasonChoice(null, seasonsOn ? season : 'none'),
+        // A material she typed counts as entered, the marker Edit Item's save writes (lib/materialConfirmed).
+        client_edited_fields: withMaterialConfirmed(withSeasonChoice(null, seasonsOn ? season : 'none'), !!material.trim()),
       })
       if (!d?.ok) { alert(d?.error || 'Could not add the item.'); return }
       const published = draftId
@@ -343,6 +351,31 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
               placeholder='e.g. "Whiskey houndstooth wool, three-quarter sleeve"'
               className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none" />
             <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client, and searchable by you both</p>
+          </div>
+
+          {/* Material and care, as in Edit Item and in its order: after Description, before the team note. */}
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Material</label>
+            <input type="text" value={material} onChange={e => setMaterial(e.target.value)} maxLength={300}
+              placeholder='e.g. "100% cashmere"'
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush" />
+          </div>
+          <div>
+            <label className="text-[10px] tracking-[0.3em] uppercase text-text-muted/60 block mb-1.5">Care</label>
+            <textarea value={care} onChange={e => setCare(e.target.value)} maxLength={2000} rows={2}
+              placeholder='e.g. "Dry clean only. Steam, do not iron."'
+              className="w-full bg-tile rounded-sm px-3 py-2 text-sm placeholder:text-text-muted/40 focus:outline-none focus:ring-1 focus:ring-blush resize-none" />
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {CARE_CHIPS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCare((cur) => addCare(cur, c))}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-[#E8E4DF] text-text-muted hover:text-[#1A1A1A] hover:border-[#1A1A1A]/40"
+                >{c}</button>
+              ))}
+            </div>
+            <p className="text-[9px] tracking-[0.15em] uppercase text-text-muted/40 mt-1">Shown to the client on her piece with the material. She can edit both</p>
           </div>
 
           <div>
