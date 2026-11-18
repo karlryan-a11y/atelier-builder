@@ -3,7 +3,7 @@ import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas
 import { createDefaultLookCanvas } from '@/types/canvas'
 import type { OmittedPiece } from '@/lib/restyleSelection'
 import { labelStyleFor, rememberLabelStyle, type LabelStyle } from '@/lib/labelStyle'
-import { fitToPhoto } from '@/lib/photoFit'
+import { fitToPhoto, type PhotoBox } from '@/lib/photoFit'
 import { useAuthStore } from '@/stores/authStore'
 
 /** The original look a rebuild stands in for, shown beside the board while she restyles it. */
@@ -224,6 +224,7 @@ interface CanvasStoreActions {
   moveLayer: (ids: string[], direction: 'up' | 'down' | 'top' | 'bottom') => void
   setNodeImageUrl: (id: string, url: string) => void
   setNodeDims: (id: string, w: number, h: number) => void
+  fitNodeToPhoto: (id: string, w: number, h: number, box: PhotoBox | null) => void
   setNodeContent: (id: string, box: [number, number, number, number]) => void
   flipNodes: (ids: string[]) => void
   alignNodes: (ids: string[], edge: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
@@ -362,18 +363,23 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     saveImageUrls(newUrls)
   },
 
-  // Also fits the piece to the photo it is drawn with (lib/photoFit.ts): a replaced photo of another
-  // size keeps the saved size and place. Not an edit: no undo step, the board is not marked unsaved.
   setNodeDims: (id, w, h) => {
-    const { nodeDims, state } = get()
+    const { nodeDims } = get()
     const cur = nodeDims[id]
-    const sameDims = !!cur && cur.w === w && cur.h === h
+    if (cur && cur.w === w && cur.h === h) return
+    set({ nodeDims: { ...nodeDims, [id]: { w, h } } })
+  },
+
+  // Fit a piece to the photo it is drawn with (lib/photoFit.ts): a replaced photo of another size
+  // keeps the garment's saved size and place. Not an edit: no undo step, the board is not marked unsaved.
+  fitNodeToPhoto: (id, w, h, box) => {
+    const { state } = get()
     const node = state.nodes.find((n) => n.id === id)
-    const fitted = node?.type === 'closet_item' ? fitToPhoto(node, w, h) : node
-    if (sameDims && fitted === node) return
-    if (fitted === node) { set({ nodeDims: { ...nodeDims, [id]: { w, h } } }); return }
-    const updated = { ...state, nodes: state.nodes.map((n) => (n.id === id ? fitted! : n)) }
-    set({ nodeDims: sameDims ? nodeDims : { ...nodeDims, [id]: { w, h } }, state: updated })
+    if (node?.type !== 'closet_item') return
+    const fitted = fitToPhoto(node, w, h, box)
+    if (fitted === node) return
+    const updated = { ...state, nodes: state.nodes.map((n) => (n.id === id ? fitted : n)) }
+    set({ state: updated })
     saveDraft(updated)
   },
 

@@ -13,6 +13,7 @@ import { CanvasToolbar } from './CanvasToolbar'
 import { Grid3X3, ZoomIn, ZoomOut } from 'lucide-react'
 import { selectionOnPress, shouldClearSelection, ringOffsets, toBoardPoint, marqueeRect, boxesOverlap, type BoardRect } from '@/lib/canvasSelection'
 import { nextZoom, zoomLabel, MIN_ZOOM, MAX_ZOOM, resizeAllowed } from '@/lib/canvasView'
+import { photoContent } from '@/lib/photoFit'
 import type { CanvasNode, ClosetItemNode, TextNode, PictureNode } from '@/types/canvas'
 
 // The board IS the canvas (state.canvas.{width,height}). It's scaled to fit this
@@ -53,12 +54,10 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
   const [hitBox, setHitBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
   // Report this item's natural dimensions once its image loads, so flip-in-place can
-  // compensate the position by the rendered width (see store.flipNodes). The store also fits the
-  // piece to this photo (lib/photoFit.ts), so it runs again if an undo brings back a piece that
-  // remembers another photo.
+  // compensate the position by the rendered width (see store.flipNodes).
   useEffect(() => {
     if (image && natW(image)) useCanvasStore.getState().setNodeDims(node.id, natW(image), natH(image))
-  }, [image, node.id, node.photo_w, node.photo_h])
+  }, [image, node.id])
 
   // Clickable hit area. A cut-out photo's see-through margins shouldn't steal clicks from
   // neighbouring items — so a SOLID garment uses a pixel-accurate hit (its opaque pixels only).
@@ -71,30 +70,22 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
     if (!n || !image) return
     let sparse = false
     let bbox: { x: number; y: number; width: number; height: number } | null = null
-    try {
-      const NW = natW(image), NH = natH(image)
-      const s = Math.min(1, 96 / Math.max(NW, NH)) // scan a downscaled copy (≤96px) — cheap
-      const w = Math.max(1, Math.round(NW * s)), h = Math.max(1, Math.round(NH * s))
-      const c = document.createElement('canvas'); c.width = w; c.height = h
-      const ctx = c.getContext('2d', { willReadFrequently: true })!
-      ctx.drawImage(image, 0, 0, w, h)
-      const data = ctx.getImageData(0, 0, w, h).data
-      let minX = w, minY = h, maxX = -1, maxY = -1, opaque = 0
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        if (data[(y * w + x) * 4 + 3] > 10) { opaque++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
-      }
-      if (maxX >= minX && maxY >= minY) {
-        const bw = maxX - minX + 1, bh = maxY - minY + 1
-        // Fraction of the CONTENT box that's actually opaque. Solid garments/bags/shoes ≈ 0.8+;
-        // earrings, necklaces and thin jewelry sit well under 0.6 (mostly gaps) → give them the
-        // forgiving rectangle. Erring generous: a mis-flagged solid item only risks minor
-        // neighbour-steal, whereas a missed earring is the actual complaint.
-        sparse = opaque / (bw * bh) < 0.6
-        bbox = { x: minX / s, y: minY / s, width: bw / s, height: bh / s }
-        // ✨ fits each piece by this visible box, not its photo's empty margin.
-        useCanvasStore.getState().setNodeContent(node.id, [bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height])
-      }
-    } catch { /* tainted/unreadable image → fall through to the default (full-rect) hit */ }
+    // Scans a downscaled copy (≤96px), cheap. Null for a tainted/unreadable image → the default
+    // (full-rect) hit.
+    const content = photoContent(image, natW(image), natH(image))
+    if (content) {
+      const [x0, y0, x1, y1] = content.box
+      // Fraction of the CONTENT box that's actually opaque. Solid garments/bags/shoes ≈ 0.8+;
+      // earrings, necklaces and thin jewelry sit well under 0.6 (mostly gaps) → give them the
+      // forgiving rectangle. Erring generous: a mis-flagged solid item only risks minor
+      // neighbour-steal, whereas a missed earring is the actual complaint.
+      sparse = content.coverage < 0.6
+      bbox = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
+      // ✨ fits each piece by this visible box, not its photo's empty margin.
+      useCanvasStore.getState().setNodeContent(node.id, content.box)
+    }
+    // A replaced photo of another size keeps the garment's saved size and place (lib/photoFit.ts).
+    useCanvasStore.getState().fitNodeToPhoto(node.id, natW(image), natH(image), content?.box ?? null)
 
     if (sparse && bbox) {
       n.clearCache()
@@ -104,7 +95,8 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
       setHitBox(null)
       try { n.cache(); n.drawHitFromCache(); n.getLayer()?.batchDraw() } catch { /* not laid out yet; harmless */ }
     }
-  }, [image])
+    // Runs again if an undo, or Add looks to capsule, brings back a piece that remembers another photo.
+  }, [image, node.photo_w, node.photo_h])
 
   // If compose set a target_height AND the image is loaded, compute the exact scale
   // so the item renders at the correct pixel height on the canvas.

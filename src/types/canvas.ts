@@ -51,6 +51,9 @@ export interface ClosetItemNode extends LookMembership {
    *  pieces saved before 2026-11-18 until the board first draws them. */
   photo_w?: number
   photo_h?: number
+  /** Where the garment sits inside that photo, [left, top, right, bottom] in its pixels (the
+   *  see-through margin left out), so a tighter or looser replacement photo still fits the garment. */
+  photo_box?: [number, number, number, number]
   /**
    * OFF THE BOARD, STILL IN THE LOOK. ADR-0146.
    *

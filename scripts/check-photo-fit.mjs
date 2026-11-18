@@ -58,6 +58,19 @@ const centre = (nd, w, h) => {
 const [c0x, c0y] = centre(turned, 400, 500), [c1x, c1y] = centre(tf, 1212, 1297)
 assert('a turned piece keeps its centre', near(c0x, c1x) && near(c0y, c1y))
 
+// Round Top's earrings: the old 194x287 photo had a wide empty margin (earring in [60,40,134,247]),
+// the new 1024x1536 one is cropped close ([20,30,1004,1506]). The earring keeps its drawn size and centre.
+const ear = { id: 'e', type: 'closet_item', closet_item_id: 'r', x: 100, y: 50, scale: 0.4, rotation: 0, flipped: false, z_index: 2, locked: false, photo_w: 194, photo_h: 287, photo_box: [60, 40, 134, 247] }
+const ef = fitToPhoto(ear, 1024, 1536, [20, 30, 1004, 1506])
+const g0 = { x: ear.x + 60 * 0.4, y: ear.y + 40 * 0.4, w: 74 * 0.4, h: 207 * 0.4 }
+const g1 = { x: ef.x + 20 * ef.scale, y: ef.y + 30 * ef.scale, w: 984 * ef.scale, h: 1476 * ef.scale }
+assert('tight new photo: earring keeps its drawn size', (near(g1.w, g0.w) && g1.h <= g0.h + 0.01) || (near(g1.h, g0.h) && g1.w <= g0.w + 0.01))
+assert('tight new photo: earring keeps its centre', near(g1.x + g1.w / 2, g0.x + g0.w / 2) && near(g1.y + g1.h / 2, g0.y + g0.h / 2))
+assert('tight new photo: remembers the new garment box', ef.photo_box?.[2] === 1004)
+// Without the garment box on either side, whole photos are fitted instead (the earring would grow).
+const whole = fitToPhoto({ ...ear, photo_box: undefined }, 1024, 1536, [20, 30, 1004, 1506])
+assert('no old garment box: whole photos', near(whole.scale, 0.4 * Math.min(194 / 1024, 287 / 1536)))
+
 // Same photo size: nothing changes, the very same node comes back (so the board is not touched).
 assert('same photo: untouched', fitToPhoto(crew, 400, 500) === crew)
 // A piece saved before photo sizes were remembered: only learns its photo, never moves.

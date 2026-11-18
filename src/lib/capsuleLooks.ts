@@ -1,6 +1,6 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
-import { fitToPhoto } from '@/lib/photoFit'
+import { fitToPhoto, photoContent, type PhotoBox } from '@/lib/photoFit'
 import { addLooksToBoard, CAPSULE_BOARD, type LookToAdd, type Size, type AddLooksResult } from '@/lib/capsuleLayout'
 import type { LookCanvasState, CanvasNode } from '@/types/canvas'
 
@@ -13,14 +13,19 @@ import type { LookCanvasState, CanvasNode } from '@/types/canvas'
  * Either way nothing she had is thrown away, which is the whole point: the old click threw it away.
  */
 
-/** Natural size of each photo, so a look is scaled by what is on it, not by a guess. */
-async function measure(urls: Record<string, string>): Promise<Record<string, Size>> {
-  const out: Record<string, Size> = {}
+/** Natural size of each photo, so a look is scaled by what is on it, not by a guess; and the box of
+ *  the garment in it, so a replaced photo keeps the garment's saved size (lib/photoFit.ts). */
+async function measure(urls: Record<string, string>): Promise<Record<string, Size & { box?: PhotoBox | null }>> {
+  const out: Record<string, Size & { box?: PhotoBox | null }> = {}
   await Promise.all(Object.entries(urls).map(([id, url]) => new Promise<void>((done) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     const timer = setTimeout(done, 5000) // a slow photo falls back to the estimate, never blocks
-    img.onload = () => { clearTimeout(timer); if (img.naturalHeight > 0) out[id] = { w: img.naturalWidth, h: img.naturalHeight }; done() }
+    img.onload = () => {
+      clearTimeout(timer)
+      if (img.naturalHeight > 0) out[id] = { w: img.naturalWidth, h: img.naturalHeight, box: photoContent(img, img.naturalWidth, img.naturalHeight)?.box }
+      done()
+    }
     img.onerror = () => { clearTimeout(timer); done() }
     img.src = url
   })))
@@ -61,7 +66,7 @@ export async function addLooksToCapsuleBoard(looks: { id: string; canvas_state: 
     const imageUrls = await resolveClosetImageUrls(look.canvas_state)
     const dims = await measure(imageUrls)
     // A piece whose photo was replaced since the look was saved keeps its saved box (lib/photoFit.ts).
-    const nodes = look.canvas_state.nodes.map((n) => (n.type === 'closet_item' && dims[n.id] ? fitToPhoto(n, dims[n.id].w, dims[n.id].h) : n))
+    const nodes = look.canvas_state.nodes.map((n) => (n.type === 'closet_item' && dims[n.id] ? fitToPhoto(n, dims[n.id].w, dims[n.id].h, dims[n.id].box) : n))
     toAdd.push({ lookId: look.id, state: { ...look.canvas_state, nodes }, imageUrls, dims })
   }
 
