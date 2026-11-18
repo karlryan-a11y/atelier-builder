@@ -25,7 +25,10 @@ export function fitToPhoto(node: ClosetItemNode, w: number, h: number, box?: Pho
   if (!(w > 0 && h > 0)) return node
   const learned = { photo_w: w, photo_h: h, ...(box ? { photo_box: box } : {}) }
   if (node.photo_w === w && node.photo_h === h) {
-    return box && !node.photo_box ? { ...node, photo_box: box } : node
+    // Same size. Only a garment that sits clearly elsewhere in it (a new photo cropped another way,
+    // Round Top's ring) is refitted; reading the same photo again never moves anything.
+    const moved = box && node.photo_box && box.some((v, i) => Math.abs(v - node.photo_box![i]) > 0.03 * Math.max(w, h))
+    if (!moved) return box && !node.photo_box ? { ...node, photo_box: box } : node
   }
   if (!(node.photo_w && node.photo_h) || node.target_height) return { ...node, ...learned }
 

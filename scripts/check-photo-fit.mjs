@@ -71,6 +71,12 @@ assert('tight new photo: remembers the new garment box', ef.photo_box?.[2] === 1
 const whole = fitToPhoto({ ...ear, photo_box: undefined }, 1024, 1536, [20, 30, 1004, 1506])
 assert('no old garment box: whole photos', near(whole.scale, 0.4 * Math.min(194 / 1024, 287 / 1536)))
 
+// Round Top's ring: a new photo of the SAME size with the ring drawn smaller in it is refitted by the ring.
+const ring = { ...ear, photo_w: 1536, photo_h: 1024, photo_box: [400, 200, 1136, 824] }
+const rf = fitToPhoto(ring, 1536, 1024, [600, 350, 936, 674])
+assert('same size, ring cropped smaller: ring keeps its drawn size', near((936 - 600) * rf.scale, (1136 - 400) * ring.scale) || near((674 - 350) * rf.scale, (824 - 200) * ring.scale))
+assert('same size, same ring read again (a pixel off): untouched', fitToPhoto(ring, 1536, 1024, [401, 199, 1137, 824]) === ring)
+
 // Same photo size: nothing changes, the very same node comes back (so the board is not touched).
 assert('same photo: untouched', fitToPhoto(crew, 400, 500) === crew)
 // A piece saved before photo sizes were remembered: only learns its photo, never moves.
