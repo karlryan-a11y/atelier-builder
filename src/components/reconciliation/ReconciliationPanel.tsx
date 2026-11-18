@@ -403,7 +403,7 @@ export function ReconciliationPanel() {
     if (!editing) return
     setRemovingBg(true)
     try {
-      const d = await removeItemBackground(editing.id, editing.client_id, resolveItemImage(toClosetItem(editing)))
+      const d = await removeItemBackground(editing.id, resolveItemImage(toClosetItem(editing)))
       if (!d.ok) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       setEditing(null); refetch()
     } catch { alert('Failed to remove background — try again.') } finally { setRemovingBg(false) }

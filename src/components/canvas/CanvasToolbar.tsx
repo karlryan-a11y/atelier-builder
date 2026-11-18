@@ -94,7 +94,7 @@ export function CanvasToolbar() {
     setRemovingBg(true)
     try {
       const currentUrl = useCanvasStore.getState().imageUrls[node.id]
-      const d = await removeItemBackground(node.closet_item_id, activeClientId, currentUrl)
+      const d = await removeItemBackground(node.closet_item_id, currentUrl)
       if (!d.ok || !d.url) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       setNodeImageUrl(node.id, d.url)
     } catch {

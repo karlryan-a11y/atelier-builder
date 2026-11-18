@@ -13,7 +13,7 @@ import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFrom
 import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
-import { removeItemBackground } from '@/lib/removeBg'
+import { removeItemBackground, storeRefusedMessage } from '@/lib/removeBg'
 import { requestHeroRefresh } from '@/lib/renderer'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
@@ -604,7 +604,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     if (!editing) return
     setRemovingBg(true)
     try {
-      const d = await removeItemBackground(editing.id, editing.client_id, resolveItemImage(editing))
+      const d = await removeItemBackground(editing.id, resolveItemImage(editing))
       if (!d.ok) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       // Photo changed → re-bake every look / capsule hero this item is styled into.
       void requestHeroRefresh(editing.id)
@@ -629,10 +629,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     setBgBusy(true); setBgProgress({ done: 0, total: items.length })
     let ok = 0, fail = 0, done = 0
     const okIds: string[] = []
+    const refused: string[] = [] // pieces whose store's site wouldn't hand over the photo
     const run = async (item: ClosetItem) => {
       try {
-        const d = await removeItemBackground(item.id, item.client_id, resolveItemImage(item))
-        if (d.ok) { ok++; okIds.push(item.id) } else fail++
+        const url = resolveItemImage(item)
+        const d = await removeItemBackground(item.id, url)
+        if (d.ok) { ok++; okIds.push(item.id) } else if (url && d.reason === storeRefusedMessage(url)) refused.push(displayName(item)); else fail++
       } catch { fail++ }
       finally { done++; setBgProgress({ done, total: items.length }) }
     }
@@ -646,7 +648,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     setBgBusy(false); setBgProgress({ done: 0, total: 0 })
     setSelected(new Set())
     refetch()
-    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (thin/jewelry items or the remover was unavailable — try those individually)` : ''}.`)
+    alert(`Background removed on ${ok} item${ok === 1 ? '' : 's'}${fail ? ` · ${fail} couldn't be processed (thin/jewelry items or the remover was unavailable — try those individually)` : ''}.` +
+      (refused.length ? `\n\nThe store's site won't let Atelier download the photo for ${refused.join(', ')}. Save each photo from the store's page, then use Replace photo on the piece: it comes back as a clean cutout.` : ''))
   }
 
   // Replace an item's image with a stylist-uploaded photo (cleaned through Photoroom on the way in).
