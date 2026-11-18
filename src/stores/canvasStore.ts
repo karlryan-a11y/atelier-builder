@@ -3,6 +3,7 @@ import type { LookCanvasState, CanvasNode, ClosetItemNode } from '@/types/canvas
 import { createDefaultLookCanvas } from '@/types/canvas'
 import type { OmittedPiece } from '@/lib/restyleSelection'
 import { labelStyleFor, rememberLabelStyle, type LabelStyle } from '@/lib/labelStyle'
+import { fitToPhoto } from '@/lib/photoFit'
 import { useAuthStore } from '@/stores/authStore'
 
 /** The original look a rebuild stands in for, shown beside the board while she restyles it. */
@@ -361,11 +362,19 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     saveImageUrls(newUrls)
   },
 
+  // Also fits the piece to the photo it is drawn with (lib/photoFit.ts): a replaced photo of another
+  // size keeps the saved size and place. Not an edit: no undo step, the board is not marked unsaved.
   setNodeDims: (id, w, h) => {
-    const { nodeDims } = get()
+    const { nodeDims, state } = get()
     const cur = nodeDims[id]
-    if (cur && cur.w === w && cur.h === h) return
-    set({ nodeDims: { ...nodeDims, [id]: { w, h } } })
+    const sameDims = !!cur && cur.w === w && cur.h === h
+    const node = state.nodes.find((n) => n.id === id)
+    const fitted = node?.type === 'closet_item' ? fitToPhoto(node, w, h) : node
+    if (sameDims && fitted === node) return
+    if (fitted === node) { set({ nodeDims: { ...nodeDims, [id]: { w, h } } }); return }
+    const updated = { ...state, nodes: state.nodes.map((n) => (n.id === id ? fitted! : n)) }
+    set({ nodeDims: sameDims ? nodeDims : { ...nodeDims, [id]: { w, h } }, state: updated })
+    saveDraft(updated)
   },
 
   setNodeContent: (id, box) => {

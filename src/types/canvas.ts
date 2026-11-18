@@ -46,6 +46,11 @@ export interface ClosetItemNode extends LookMembership {
   /** When set by compose, the render layer computes scale = target_height / image.naturalHeight.
    *  Cleared on manual transform so user edits stick. */
   target_height?: number
+  /** The photo size (natural pixels) `scale` was set against. When the piece's photo is replaced
+   *  with one of another size, lib/photoFit.ts fits the new photo into the same box. Absent on
+   *  pieces saved before 2026-11-18 until the board first draws them. */
+  photo_w?: number
+  photo_h?: number
   /**
    * OFF THE BOARD, STILL IN THE LOOK. ADR-0146.
    *

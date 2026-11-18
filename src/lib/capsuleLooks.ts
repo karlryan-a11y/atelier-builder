@@ -1,5 +1,6 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
+import { fitToPhoto } from '@/lib/photoFit'
 import { addLooksToBoard, CAPSULE_BOARD, type LookToAdd, type Size, type AddLooksResult } from '@/lib/capsuleLayout'
 import type { LookCanvasState, CanvasNode } from '@/types/canvas'
 
@@ -58,12 +59,18 @@ export async function addLooksToCapsuleBoard(looks: { id: string; canvas_state: 
   for (const look of looks) {
     if (!look.canvas_state) continue
     const imageUrls = await resolveClosetImageUrls(look.canvas_state)
-    toAdd.push({ lookId: look.id, state: look.canvas_state, imageUrls, dims: await measure(imageUrls) })
+    const dims = await measure(imageUrls)
+    // A piece whose photo was replaced since the look was saved keeps its saved box (lib/photoFit.ts).
+    const nodes = look.canvas_state.nodes.map((n) => (n.type === 'closet_item' && dims[n.id] ? fitToPhoto(n, dims[n.id].w, dims[n.id].h) : n))
+    toAdd.push({ lookId: look.id, state: { ...look.canvas_state, nodes }, imageUrls, dims })
   }
 
   const result = addLooksToBoard(base, baseUrls, baseDims, toAdd, newId)
   // Re-read: the board must not have changed under the awaits above, or we would drop her edit.
-  if (useCanvasStore.getState().state !== st.state) {
+  // Every edit, undo or redo is a new history; a photo finishing loading (setNodeDims fitting a
+  // piece to it) is not an edit, and the board fits that piece again once the new state is drawn.
+  const now = useCanvasStore.getState()
+  if (now.past !== st.past || now.future !== st.future || now.state.nodes.length !== st.state.nodes.length) {
     throw new Error('The board changed while the looks were loading. Try adding them again.')
   }
   useCanvasStore.getState().applyCapsuleBoard(result.state, result.imageUrls, !onCapsule)

@@ -13,6 +13,7 @@ import type { LookCanvasState, ClosetItemNode, TextNode, PictureNode } from '@/t
 import { toKonvaConfig, pictureKonvaAttrs } from '@/components/canvas/CanvasAdapter'
 import { loadBoardImage } from '@/lib/loadBoardImage'
 import { bakeWithShrunkPhotos } from '@/lib/bakeShrink'
+import { fitToPhoto } from '@/lib/photoFit'
 
 // The ONE board loader (lib/loadBoardImage, ADR-0168): CORS always, one cache-busted retry,
 // never a tainted fallback. A tainted picture makes toDataURL return "" and the whole bake blank;
@@ -114,12 +115,14 @@ export async function renderCanvasComposite(
     if (node.type === 'closet_item') {
       const image = loaded.get(node.id)
       if (!image) continue
+      // A replaced photo of another size keeps the saved box, as on the board (lib/photoFit.ts).
+      const piece = fitToPhoto(node, image.naturalWidth, image.naturalHeight)
       // compose sets target_height; the render layer computes the exact on-canvas scale.
-      let effectiveScale = node.scale
-      if (node.target_height && image.naturalHeight > 0) {
-        effectiveScale = Math.min(Math.max(node.target_height / image.naturalHeight, 0.03), 3.0)
+      let effectiveScale = piece.scale
+      if (piece.target_height && image.naturalHeight > 0) {
+        effectiveScale = Math.min(Math.max(piece.target_height / image.naturalHeight, 0.03), 3.0)
       }
-      const config = toKonvaConfig({ ...node, scale: effectiveScale })
+      const config = toKonvaConfig({ ...piece, scale: effectiveScale })
       layer.add(new Konva.Image({
         image,
         x: config.x,

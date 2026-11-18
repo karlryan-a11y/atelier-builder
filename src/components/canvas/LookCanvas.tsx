@@ -53,10 +53,12 @@ function ClosetItemImage({ node, image, isSelected, solo, onSelect, onDragStart,
   const [hitBox, setHitBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
   // Report this item's natural dimensions once its image loads, so flip-in-place can
-  // compensate the position by the rendered width (see store.flipNodes).
+  // compensate the position by the rendered width (see store.flipNodes). The store also fits the
+  // piece to this photo (lib/photoFit.ts), so it runs again if an undo brings back a piece that
+  // remembers another photo.
   useEffect(() => {
     if (image && natW(image)) useCanvasStore.getState().setNodeDims(node.id, natW(image), natH(image))
-  }, [image, node.id])
+  }, [image, node.id, node.photo_w, node.photo_h])
 
   // Clickable hit area. A cut-out photo's see-through margins shouldn't steal clicks from
   // neighbouring items — so a SOLID garment uses a pixel-accurate hit (its opaque pixels only).
