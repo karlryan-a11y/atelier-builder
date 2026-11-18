@@ -13,6 +13,7 @@ import { primaryCategoryOf, categoriesOf, labelForCategory, customCategoriesFrom
 import { useCategoryNames } from '@/hooks/useCategoryNames'
 import { colorsOf } from '@/lib/colorFamily'
 import { supabase } from '@/lib/supabase'
+import { removeItemBackground } from '@/lib/removeBg'
 import { requestHeroRefresh } from '@/lib/renderer'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
@@ -603,14 +604,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     if (!editing) return
     setRemovingBg(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: editing.id, image_url: resolveItemImage(editing) }),
-      })
-      const d = await resp.json().catch(() => ({}))
-      if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      const d = await removeItemBackground(editing.id, editing.client_id, resolveItemImage(editing))
+      if (!d.ok) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       // Photo changed → re-bake every look / capsule hero this item is styled into.
       void requestHeroRefresh(editing.id)
       setEditing(null)
@@ -632,19 +627,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     const byId = new Map(visible.map((i) => [i.id, i]))
     const items = ids.map((id) => byId.get(id)).filter((x): x is ClosetItem => !!x)
     setBgBusy(true); setBgProgress({ done: 0, total: items.length })
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token ?? ''
     let ok = 0, fail = 0, done = 0
     const okIds: string[] = []
     const run = async (item: ClosetItem) => {
       try {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item_id: item.id, image_url: resolveItemImage(item) }),
-        })
-        const d = await resp.json().catch(() => ({}))
-        if (resp.ok && d?.ok) { ok++; okIds.push(item.id) } else fail++
+        const d = await removeItemBackground(item.id, item.client_id, resolveItemImage(item))
+        if (d.ok) { ok++; okIds.push(item.id) } else fail++
       } catch { fail++ }
       finally { done++; setBgProgress({ done, total: items.length }) }
     }

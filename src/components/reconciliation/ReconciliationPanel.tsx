@@ -4,6 +4,7 @@ import { useClientStore } from '@/stores/clientStore'
 import { useAuditStore } from '@/stores/auditStore'
 import { useReconciliation, fetchUploadedFingerprints, fetchIngestedPhotos, type IngestedPhoto } from '@/hooks/useReconciliation'
 import { supabase } from '@/lib/supabase'
+import { removeItemBackground } from '@/lib/removeBg'
 import { resolveItemImage, proxyImageUrl, type ClosetItem } from '@/lib/images'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { signInAndPickPhotos, downloadDriveFile, isGoogleDriveConfigured, type DriveFile } from '@/lib/googleDrive'
@@ -402,14 +403,8 @@ export function ReconciliationPanel() {
     if (!editing) return
     setRemovingBg(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: editing.id, image_url: resolveItemImage(toClosetItem(editing)) }),
-      })
-      const d = await resp.json().catch(() => ({}))
-      if (!resp.ok || !d?.ok) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      const d = await removeItemBackground(editing.id, editing.client_id, resolveItemImage(toClosetItem(editing)))
+      if (!d.ok) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       setEditing(null); refetch()
     } catch { alert('Failed to remove background — try again.') } finally { setRemovingBg(false) }
   }

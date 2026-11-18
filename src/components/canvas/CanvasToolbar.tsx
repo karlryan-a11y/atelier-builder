@@ -8,7 +8,7 @@ import {
   Eraser, BringToFront, SendToBack, Loader2, EyeOff, ImagePlus,
 } from 'lucide-react'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { supabase } from '@/lib/supabase'
+import { removeItemBackground } from '@/lib/removeBg'
 import { styleHouse } from '@/lib/style'
 import { useClientStore } from '@/stores/clientStore'
 import type { CanvasNode, ClosetItemNode, PictureNode, TextNode } from '@/types/canvas'
@@ -16,8 +16,6 @@ import { addPictureFilesToBoard, removePictureBackground } from '@/lib/addPictur
 import { r2KeyOf } from '@/lib/imageUrls'
 import { BOARD_PRESETS } from '@/types/canvas'
 import { BRAND_LABEL_STYLE, type LabelStyle } from '@/lib/labelStyle'
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 // Amalfi Coast (the WSG brand script) is first in the list and the starting font for a stylist
 // who has never styled a label. After that a new label takes her last style (lib/labelStyle.ts).
@@ -95,15 +93,9 @@ export function CanvasToolbar() {
     if (removingBg) return
     setRemovingBg(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const currentUrl = useCanvasStore.getState().imageUrls[node.id]
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/intake-remove-bg-item`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: node.closet_item_id, image_url: currentUrl }),
-      })
-      const d = await resp.json().catch(() => ({}))
-      if (!resp.ok || !d?.ok || !d?.url) { alert(d?.reason || d?.error || 'Could not remove the background.'); return }
+      const d = await removeItemBackground(node.closet_item_id, activeClientId, currentUrl)
+      if (!d.ok || !d.url) { alert(d.reason || d.error || 'Could not remove the background.'); return }
       setNodeImageUrl(node.id, d.url)
     } catch {
       alert('Failed to remove background — try again.')
