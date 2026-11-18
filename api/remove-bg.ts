@@ -17,6 +17,18 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const BUCKET = 'shopping-images'
 const DEMO = new Set(['de301700a2026ba7b1ede1ce', '67d07083e2ef5b4561d5e846', 'wsg_1a117e2a7186d7ab4'])
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+// Ways to ask, in order: a plain server request first, then the way Chrome asks from the store's own page.
+const ASKS = (url: string): [string, Record<string, string>][] => {
+  let origin = ''
+  try { origin = new URL(url).origin } catch { /* checked by the caller */ }
+  const accept = 'image/jpeg,image/png;q=0.9,image/webp;q=0.8,*/*;q=0.5'
+  return [
+    ['plain', { accept }],
+    ['browser', { 'user-agent': UA, accept, 'accept-language': 'en-US,en;q=0.9', referer: origin + '/',
+      'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"', 'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"macOS"', 'sec-fetch-dest': 'image', 'sec-fetch-mode': 'no-cors', 'sec-fetch-site': 'same-origin' }],
+  ]
+}
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 
 const CORS = {
@@ -53,9 +65,15 @@ export default async function handler(req: any, res: any) {
   // Read the photo the way a browser does, and keep a copy in our storage.
   let copyUrl = ''
   try {
-    const r = await fetch(imageUrl, { headers: { 'user-agent': UA, accept: 'image/jpeg,image/png;q=0.9,image/webp;q=0.8,*/*;q=0.5' } })
-    const ct = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
-    if (!r.ok || !EXT[ct]) return res.status(200).json({ ok: false, reason: `The store's site wouldn't hand over this photo (${r.status}). Try Replace photo with a saved copy.` })
+    let r: Response | null = null
+    const tried: string[] = []
+    for (const [name, headers] of ASKS(imageUrl)) {
+      r = await fetch(imageUrl, { headers })
+      tried.push(`${name} ${r.status}`)
+      if (r.ok && EXT[(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()]) break
+    }
+    const ct = (r?.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
+    if (!r || !r.ok || !EXT[ct]) return res.status(200).json({ ok: false, tried, reason: `The store's site wouldn't hand over this photo (${r?.status}). Try Replace photo with a saved copy.` })
     const bytes = new Uint8Array(await r.arrayBuffer())
     if (bytes.byteLength === 0 || bytes.byteLength > 15_000_000) return res.status(200).json({ ok: false, reason: 'This photo is empty or too big to clean.' })
     const path = `closet-originals/${clientId.replace(/[^A-Za-z0-9_-]/g, '')}/${itemId.replace(/[^A-Za-z0-9_-]/g, '')}-${Date.now()}.${EXT[ct]}`
