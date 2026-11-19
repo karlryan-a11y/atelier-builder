@@ -1,5 +1,6 @@
 import { CategoryOptions } from '@/components/common/CategoryOptions'
 import { splitCategoryChoices } from '@/lib/categoryChoices'
+import { categoriesForHomes, homesPickedIn } from '@/lib/homeCategories'
 import { useUsedCategories } from '@/hooks/useUsedCategories'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus, Upload, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
@@ -78,11 +79,13 @@ interface Props {
    * it to Lake House.
    */
   residenceSlugs?: Map<string, string>
+  /** Home slug -> the categories that home's pieces use (lib/homeCategories.ts categoriesByHome). */
+  homeCategories?: Map<string, Set<string>>
   onClose: () => void
   onAdded: () => void
 }
 
-export function AddItemDialog({ clientId, clientName, customCategories = [], categoryNames, residenceSlugs, onClose, onAdded }: Props) {
+export function AddItemDialog({ clientId, clientName, customCategories = [], categoryNames, residenceSlugs, homeCategories, onClose, onAdded }: Props) {
   const usedCategories = useUsedCategories()
   const fileRef = useRef<HTMLInputElement>(null)
   const [processing, setProcessing] = useState(false)
@@ -122,6 +125,9 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
   const ready = !!draftId && !!processedUrl && !processing
 
   const primarySlug = customMode ? slugifyCategory(customName) : category
+  // A home picked (under Category or Also in): both lists offer only the categories that home's
+  // pieces use, plus her homes (Cynthia Dada for Keil Cadieux, 2026-11-19). null = the full list.
+  const atHome = categoriesForHomes(homesPickedIn(category, alsoIn, residenceSlugs), homeCategories, residenceSlugs)
   // Every fixed category + this client's customs, minus the current primary and ones already added.
   const split = splitCategoryChoices(customCategories, usedCategories)
   const alsoInOptions: { slug: string; label: string }[] = [
@@ -129,6 +135,7 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
     ...split.more,
   ].filter((o, i, arr) => arr.findIndex(x => x.slug === o.slug) === i)
     .filter(o => o.slug !== primarySlug && !alsoIn.includes(o.slug))
+    .filter(o => !atHome || atHome(o.slug))
 
   function addAlsoIn(slug: string) {
     const s = slugifyCategory(slug)
@@ -276,7 +283,8 @@ export function AddItemDialog({ clientId, clientName, customCategories = [], cat
                 className="w-full bg-tile rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blush">
                 <option value="">— Choose a category —</option>
                 {/* Her categories first, then the rest (lib/categoryChoices.ts, Karl 2026-10-07). */}
-                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames} />
+                <CategoryOptions custom={customCategories} used={usedCategories} names={categoryNames}
+                  omit={atHome ? (s => s !== category && !atHome(s)) : undefined} />
                 {category && !currentInList && <option value={category}>{labelForCategory(category)}</option>}
                 <option value="__new__">＋ New category…</option>
               </select>

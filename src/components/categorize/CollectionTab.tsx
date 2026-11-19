@@ -17,6 +17,7 @@ import { removeItemBackground, storeRefusedMessage } from '@/lib/removeBg'
 import { requestHeroRefresh } from '@/lib/renderer'
 import { EditItemDialog } from '@/components/layout/EditItemDialog'
 import { AddItemDialog } from '@/components/layout/AddItemDialog'
+import { categoriesByHome } from '@/lib/homeCategories'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { useClientStore } from '@/stores/clientStore'
 import { TileImage } from '@/components/common/TileImage'
@@ -327,6 +328,8 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   // Every picker on this tab (Set category, Also add to, Add Item, Edit Item) reads this list, so
   // an empty category she made is offered in all of them.
   const customCats = useMemo(() => withSavedCategories(customCategoriesFromItems(items), savedCategories ?? []), [items, savedCategories])
+  // What each home's pieces are filed under, so Add Item with a home picked offers only those.
+  const homeCategories = useMemo(() => categoriesByHome(categoriesByItem, homes), [categoriesByItem, homes])
 
   // Report category counts up to the rail (present categories + counts for the filter chips).
   // '__total__' carries the true number of DISTINCT items (not the sum of category counts, which
@@ -1079,7 +1082,7 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </div>
       )}
 
-      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} categoryNames={catNames.names} residenceSlugs={residenceSlugs} onClose={() => setAdding(false)} onAdded={refetch} />}
+      {adding && clientId && <AddItemDialog clientId={clientId} clientName={activeClient?.name} customCategories={customCats} categoryNames={catNames.names} residenceSlugs={residenceSlugs} homeCategories={homeCategories} onClose={() => setAdding(false)} onAdded={refetch} />}
       {editing && <EditItemDialog item={editing} saving={saving} customCategories={customCats} categoryNames={catNames.names} residenceSlugs={residenceSlugs} enableMultiCategory enableMultiColor imageUrl={(() => { const s = resolveItemImage(editing); return s ? proxyImageUrl(s) : null })()} onSave={save} onClose={() => setEditing(null)} onRemoveBackground={removeBg} removingBg={removingBg} onReplacePhoto={replacePhoto} replacing={replacing} onRotate={rotate} rotating={rotating} onArchive={askArchive} onTransitionOut={askTransitionOut} clientEditedFields={editing.client_edited_fields} clientFirst={clientFirst} />}
 
       {confirmState && (() => {
