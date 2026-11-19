@@ -86,10 +86,11 @@ export function ReviewTab({ clientId, clientName, deleted }: {
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null }) {
     if (!editing) return
     setSaving(true)
-    const { error } = await updateClosetItem(editing.id, editing.client_id, data)
+    // With the markers the box opened with, so a season set since it opened stays (lib/editedFields.ts).
+    const { error, fields } = await updateClosetItem(editing.id, editing.client_id, data, editing.client_edited_fields ?? null)
     setSaving(false)
     if (error) { alert('Could not save — ' + error.message); return }
-    patchItems([editing.id], data as Partial<ClosetItem>)
+    patchItems([editing.id], { ...data, ...(fields !== undefined ? { client_edited_fields: fields } : {}) } as Partial<ClosetItem>)
     setEditing(null)
     refetch()
   }

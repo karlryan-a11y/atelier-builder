@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { patternsOn, withPatterns } from '@/lib/piecePatterns'
+import { saveEditedFields } from '@/lib/saveEditedFields'
 
 /**
  * Patterns & Textures for one client (lib/piecePatterns.ts). `on` is false until her row is read,
@@ -19,18 +20,10 @@ export function usePatternsOn(clientId: string | null): boolean {
 }
 
 /**
- * Save one piece's patterns. Reads the piece's markers fresh, so a change the client made a minute
- * ago is kept, replaces only the pattern markers, and asks for the row back: a write that is refused
- * comes back empty, not as an error (ADR-0108), and must not read as saved.
+ * Save one piece's patterns. Replaces only the pattern markers on the list the piece has now, so a
+ * season or a change the client made a minute ago is kept, and a write that lands between the read
+ * and the save is not undone (lib/saveEditedFields.ts asks for the row back, ADR-0108).
  */
 export async function savePiecePatterns(itemId: string, clientId: string, slugs: readonly string[]): Promise<{ fields: string[] | null } | { error: string }> {
-  const { data: cur, error: rErr } = await supabase.from('gp_closet_items')
-    .select('client_edited_fields').eq('id', itemId).eq('client_id', clientId).maybeSingle()
-  if (rErr || !cur) return { error: rErr?.message ?? 'This piece could not be read.' }
-  const next = withPatterns((cur as { client_edited_fields?: string[] | null }).client_edited_fields, slugs)
-  const { data, error } = await supabase.from('gp_closet_items')
-    .update({ client_edited_fields: next }).eq('id', itemId).eq('client_id', clientId).select('id, client_edited_fields')
-  if (error) return { error: error.message }
-  if (!data?.length) return { error: 'The change was not saved.' }
-  return { fields: (data[0] as { client_edited_fields: string[] | null }).client_edited_fields }
+  return saveEditedFields(itemId, clientId, (now) => withPatterns(now, slugs))
 }

@@ -24,6 +24,7 @@ import { TileImage } from '@/components/common/TileImage'
 import { LOOK_TILE_WIDTH, PIECE_TILE_WIDTH } from '@/lib/derivedImage'
 import { useClientCategories } from '@/hooks/useClientCategories'
 import { updateClosetItem } from '@/lib/teamNotes'
+import { saveEditedFields } from '@/lib/saveEditedFields'
 import { MATERIAL_CONFIRMED } from '@/lib/materialConfirmed'
 import { withSavedCategories, type CategoryChoice } from '@/lib/savedClosetCategories'
 import { useCollectionSeasons } from '@/hooks/useCollectionSeasons'
@@ -255,15 +256,14 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
   async function setSeasonOn(ids: string[], choiceFor: (id: string) => SeasonChoice) {
     if (!ids.length || !clientId) return
     setSeasonBusy(true); setSeasonNote(null)
-    const byId = new Map(items.map((i) => [i.id, i]))
     let idx = 0, failed = 0
     const saved: { id: string; fields: string[] | null }[] = []
+    // The choice goes onto the markers the piece has NOW, not this screen's copy, so a pattern or
+    // Material mark set since the page loaded stays (lib/editedFields.ts).
     const run = async (id: string) => {
-      const fields = withSeasonChoice(byId.get(id)?.client_edited_fields, choiceFor(id))
-      const { data, error: e } = await supabase.from('gp_closet_items')
-        .update({ client_edited_fields: fields }).eq('id', id).eq('client_id', clientId).select('id')
-      if (e || !data?.length) { failed++; return }
-      saved.push({ id, fields })
+      const r = await saveEditedFields(id, clientId, (now) => withSeasonChoice(now, choiceFor(id)))
+      if ('error' in r) { failed++; return }
+      saved.push({ id, fields: r.fields })
     }
     await Promise.all(Array.from({ length: Math.min(5, ids.length) }, async () => {
       while (idx < ids.length) { const id = ids[idx++]; await run(id) }
@@ -471,6 +471,17 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
     else alert('Some pieces could not be updated. Try again.')
   }
   const selectable = visible
+  // ONLY WHAT SHE CAN SEE IS SELECTED (Cynthia Dada for Peyton Wheeler, 2026-11-19). A piece picked
+  // in one category stayed selected, out of sight, after she tapped another, and the next season
+  // tap changed it too. A piece that leaves the screen (another category, a search, a filter)
+  // leaves the selection, so every bulk button changes only the pieces she sees ticked.
+  useEffect(() => {
+    const visibleIds = new Set(visible.map((i) => i.id))
+    setSelected((p) => {
+      const kept = [...p].filter((id) => visibleIds.has(id))
+      return kept.length === p.size ? p : new Set(kept)
+    })
+  }, [visible])
 
   async function save(data: { name_override: string | null; brand: string | null; color: string | null; style_note: string | null; category: string | null; custom_categories?: string[] | null; color_family?: string | null; color_families?: string[] | null; client_edited_fields?: string[] | null }) {
     if (!editing) return
@@ -501,9 +512,12 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
       })
       if (nextOwned.length !== owned.length) patch.client_edited_fields = nextOwned.length ? nextOwned : null
     }
-    const { error: e } = await updateClosetItem(editing.id, editing.client_id, patch)
+    // With the markers the box opened with, so only what it changed is written: a season or pattern
+    // set since it opened stays (lib/editedFields.ts).
+    const { error: e, fields } = await updateClosetItem(editing.id, editing.client_id, patch, editing.client_edited_fields ?? null)
     setSaving(false)
     if (e) { console.error('Failed to save item edits:', e); return }
+    if (fields !== undefined) patch.client_edited_fields = fields
     // Into the shared cache at once (every screen showing this piece), then a background re-read.
     patchItems([editing.id], patch as Partial<ClosetItem>)
     setEditing(null)

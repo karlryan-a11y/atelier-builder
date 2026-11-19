@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { withMaterialConfirmed } from '@/lib/materialConfirmed'
+import { saveEditedFields } from '@/lib/saveEditedFields'
 
 /**
  * An upload card was just approved with a Material a person typed: the piece now exists, and its
@@ -8,10 +9,9 @@ import { withMaterialConfirmed } from '@/lib/materialConfirmed'
  */
 export async function markUploadMaterial(intakeItemId: string, typed: string) {
   const { data: piece, error } = await supabase
-    .from('gp_closet_items').select('id, material, client_edited_fields').eq('intake_item_id', intakeItemId).maybeSingle()
+    .from('gp_closet_items').select('id, client_id, material').eq('intake_item_id', intakeItemId).maybeSingle()
   if (error || !piece) { console.error('markUploadMaterial: piece not found', intakeItemId, error?.message); return }
   if ((piece.material ?? '').trim() !== typed.trim()) return
-  const { error: e } = await supabase.from('gp_closet_items')
-    .update({ client_edited_fields: withMaterialConfirmed(piece.client_edited_fields, true) }).eq('id', piece.id)
-  if (e) console.error('markUploadMaterial: not saved', piece.id, e.message)
+  const r = await saveEditedFields(piece.id, piece.client_id, (now) => withMaterialConfirmed(now, true))
+  if ('error' in r) console.error('markUploadMaterial: not saved', piece.id, r.error)
 }

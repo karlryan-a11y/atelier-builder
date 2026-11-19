@@ -13,7 +13,11 @@ const fails = []
 const need = (ok, m) => { if (!ok) fails.push(m) }
 need(/patterns_on === true/.test(lib), 'only a client with raw.patterns_on gets patterns')
 need(/const kept = \(fields \?\? \[\]\)\.filter\(\(f\) => !isPatternMarker\(f\)\)/.test(lib), 'a pattern change must keep every other marker on the piece')
-need(/\.eq\('client_id', clientId\)\.select\('id, client_edited_fields'\)/.test(hook), 'the save names the client and asks for the row back')
+// The write itself lives in lib/saveEditedFields.ts since 11/19 (one writer for every marker).
+const writer = existsSync('src/lib/saveEditedFields.ts') ? readFileSync('src/lib/saveEditedFields.ts', 'utf8') : ''
+need(/\.eq\('client_id', clientId\)\.select\('id, client_edited_fields'\)/.test(hook)
+  || (/saveEditedFields\(itemId, clientId,/.test(hook) && /\.update\(\{ client_edited_fields: next \}\)\s*\.eq\('id', itemId\)\.eq\('client_id', clientId\)/.test(writer) && /\.select\('id, client_edited_fields'\)/.test(writer)),
+  'the save names the client and asks for the row back')
 need(/const patternsHere = usePatternsOn\(clientId\)/.test(tab), 'the Collection tab reads her switch')
 need(/\{patternsHere && <PatternPicker /.test(tab), 'each card shows its patterns, only when she has them on')
 need(/\{patternsHere && \(\s*<div data-pattern-filter/.test(tab), 'the pattern row shows only when she has them on')

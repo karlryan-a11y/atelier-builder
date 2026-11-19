@@ -324,7 +324,9 @@ export function ClosetPanel() {
     // This panel already FILTERS by categoriesOf (primary + "Also in"), so the chips it shows are
     // built from custom_categories — it has to be able to write the field it filters on. The key is
     // only present when the dialog manages it, so spreading it can never blank the column.
-    const { error } = await updateClosetItem(editingItem.id, editingItem.client_id, {
+    // The markers the box opened with go too, so only what it changed is written (a season set
+    // since it opened stays, lib/editedFields.ts).
+    const { error, fields } = await updateClosetItem(editingItem.id, editingItem.client_id, {
         name_override: data.name_override, brand: data.brand, color: data.color,
         style_note: data.style_note, category: data.category,
         ...('material' in data ? { material: data.material, care: data.care } : {}),
@@ -333,7 +335,7 @@ export function ClosetPanel() {
         // Same guard for the colour set (ADR-0115): the key is only present when the dialog
         // manages it, so spreading it can never blank the columns.
         ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
-      })
+      }, editingItem.client_edited_fields ?? null)
     setSavingItem(false)
     if (error) {
       console.error('Failed to save item edits:', error)
@@ -344,7 +346,7 @@ export function ClosetPanel() {
       name_override: data.name_override, brand: data.brand as string, color: data.color,
       style_note: data.style_note, category: data.category,
       ...('material' in data ? { material: data.material, care: data.care } : {}),
-      ...('client_edited_fields' in data ? { client_edited_fields: data.client_edited_fields } : {}),
+      ...('client_edited_fields' in data ? { client_edited_fields: fields ?? null } : {}),
       ...('custom_categories' in data ? { custom_categories: data.custom_categories } : {}),
       ...('color_family' in data ? { color_family: data.color_family, color_families: data.color_families } : {}),
     })

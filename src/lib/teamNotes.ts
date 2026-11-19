@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { mergeEditedFields } from '@/lib/editedFields'
+import { saveEditedFields } from '@/lib/saveEditedFields'
 
 /**
  * TEAM NOTES LIVE IN THEIR OWN TABLE (ADR-0165, migration 035).
@@ -27,18 +29,33 @@ export async function saveTeamNote(clientId: string, itemId: string, note: strin
   return { ok: true }
 }
 
-/** Update a piece; a `style_note` in the patch goes to the team table, never onto the piece row. */
-export async function updateClosetItem(itemId: string, clientId: string, patch: Record<string, unknown>) {
-  const { style_note, ...rest } = patch
+/**
+ * Update a piece; a `style_note` in the patch goes to the team table, never onto the piece row.
+ *
+ * A `client_edited_fields` in the patch is the list the Edit box ends with, and `editedFrom` the
+ * list it opened with: only that change is applied, to the list the piece has now
+ * (lib/editedFields.ts), so a season or pattern set since the box opened stays. `fields` is the
+ * list the piece has after the save, for the screen's copy.
+ */
+export async function updateClosetItem(itemId: string, clientId: string, patch: Record<string, unknown>, editedFrom?: string[] | null) {
+  const { style_note, client_edited_fields, ...rest } = patch
   if (Object.keys(rest).length) {
     const { error } = await supabase.from('gp_closet_items').update(rest).eq('id', itemId)
     if (error) return { error }
+  }
+  let fields: string[] | null | undefined
+  if ('client_edited_fields' in patch) {
+    const next = (client_edited_fields ?? null) as string[] | null
+    // No `editedFrom`: nothing is known to have changed, so nothing is taken off.
+    const r = await saveEditedFields(itemId, clientId, (now) => mergeEditedFields(now, editedFrom === undefined ? next : editedFrom, next))
+    if ('error' in r) return { error: { message: r.error } }
+    fields = r.fields
   }
   if ('style_note' in patch) {
     const r = await saveTeamNote(clientId, itemId, style_note as string | null)
     if (!r.ok) return { error: { message: r.error ?? 'note not saved' } }
   }
-  return { error: null }
+  return { error: null, fields }
 }
 
 /** Every team note for one client, item id -> note, paged past the 1,000-row cap. */
