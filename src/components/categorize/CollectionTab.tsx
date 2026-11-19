@@ -33,6 +33,9 @@ import { removalFrom, removalWords, NO_CATEGORY, type RemovalPatch } from '@/lib
 import { PATTERNS, PATTERNS_HEADING, PATTERN_SEARCH_WORDS, isPatternMarker, patternsOf, type PatternSlug } from '@/lib/piecePatterns'
 import { usePatternsOn, savePiecePatterns } from '@/hooks/usePiecePatterns'
 import { PatternPicker } from '@/components/categorize/PatternPicker'
+import { compareClosetRecency } from '@/lib/closetOrder'
+import { arrangeCloset, movedOrder } from '@/lib/closetArrangement'
+import { useClosetOrder } from '@/hooks/useClosetOrder'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const NO_PATTERN = '__no_pattern__'
@@ -391,8 +394,19 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
    * search inside it searches that category (ADR-0163, Maegan 2026-10-02: "it should only pull the
    * Chanel in that category"). `elsewhere` only feeds the empty message, never the grid.
    */
+  /*
+   * HER ORDER (Cynthia Dada for Chris Cadieux, 2026-11-18): newest first, as on her Collection page
+   * (lib/closetOrder.ts), then each suit's jacket and pants side by side and, once a stylist drags a
+   * piece, the order she saved (lib/closetArrangement.ts). Her lookbook runs the same two files, so
+   * this grid and her Collection show the same order in every category.
+   */
+  const { order: savedOrder, save: saveOrder, error: orderError } = useClosetOrder(clientId)
+  const newestFirst = useMemo(() => items.filter((i) => !i.is_deleted).sort((a, b) => compareClosetRecency(
+    { id: a.id, display_order: null, last_modified: a.last_modified ?? null, added_at: a.added_at },
+    { id: b.id, display_order: null, last_modified: b.last_modified ?? null, added_at: b.added_at },
+  )), [items])
   const searched = useMemo(() => {
-    const live = items.filter((i) => !i.is_deleted)
+    const live = newestFirst
     const scoped = !!filterCategories && filterCategories.size > 0
     // A HOME NARROWS, IT DOES NOT ADD (Cynthia, 2026-10-08, Keil Cadieux: Creekside + Denim showed
     // all 1,234 pieces). Within homes and within garment types a tap adds (either one); across the
@@ -406,8 +420,20 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         && (typesOn.length === 0 || cats.some((c) => typesOn.includes(c)))
     }
     return searchInCategory(live, inScope, scoped, q, fieldsOf, 'team')
-  }, [items, q, filterCategories, categoriesByItem, fieldsOf, homes])
-  const baseVisible = searched.ranked
+  }, [newestFirst, q, filterCategories, categoriesByItem, fieldsOf, homes])
+  // A search ranks by match, so only the unsearched grid is in her order (and can be dragged).
+  const canArrange = q.trim() === ''
+  const baseVisible = useMemo(() => (canArrange ? arrangeCloset(searched.ranked, savedOrder) : searched.ranked), [canArrange, searched, savedOrder])
+  // Drag a card onto another: it goes before that card (after it, when dropped on its right half).
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null)
+  function dropOn(targetId: string, after: boolean) {
+    const moving = dragId
+    setDragId(null); setDropAt(null)
+    if (!moving || moving === targetId) return
+    const full = arrangeCloset(newestFirst, savedOrder).map((i) => i.id)
+    void saveOrder(movedOrder(full, visible.map((i) => i.id), moving, targetId, after))
+  }
   // Drive-verification progress for the current view (before the "unconfirmed only" filter).
   const verifiedCount = useMemo(() => baseVisible.filter((i) => i.drive_verified_at).length, [baseVisible])
   // Styled coverage over the SAME scope the counts above use, so filtering to Shoes answers
@@ -947,6 +973,24 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
         </div>
       )}
       {bulkNote && <p data-bulk-note className="-mt-2 mb-4 text-[11px] text-[#888]">{bulkNote}</p>}
+      {visible.length > 1 && (
+        <p data-closet-order className="-mt-1 mb-4 text-[11px] text-[#888]">
+          {!canArrange
+            ? 'Clear the search to change the order.'
+            : savedOrder.length
+              ? `Drag a piece to move it. ${clientFirst} sees this same order on the lookbook.`
+              : `Each suit's jacket and pants sit side by side. Drag a piece to move it, and ${clientFirst} sees the same order on the lookbook.`}
+          {canArrange && savedOrder.length > 0 && (
+            <button
+              type="button"
+              data-closet-order-reset
+              onClick={() => { if (window.confirm(`Go back to Atelier's order for ${clientFirst}'s whole Collection? Newest first, with each suit's pieces side by side. The order you dragged is not kept.`)) void saveOrder(null) }}
+              className="ml-2 underline underline-offset-2 hover:text-[#1A1A1A]"
+            >Back to Atelier's order</button>
+          )}
+          {orderError && <span className="ml-2 text-[#b4544a]">{orderError}</span>}
+        </p>
+      )}
 
       {patternsHere && (
         <div data-pattern-filter className="mb-4 flex items-center gap-1.5 flex-wrap text-[11px]">
@@ -987,7 +1031,25 @@ export function CollectionTab({ clientId, filterCategories, residenceSlugs, save
             const verified = !!item.drive_verified_at
             return (
               <Fragment key={item.id}>
-              <div className={`group relative border rounded-sm overflow-hidden bg-white ${isSel ? 'border-[#1A1A1A] ring-1 ring-[#1A1A1A]/15' : verified ? 'border-[#3f7d55]/50 ring-1 ring-[#3f7d55]/20' : 'border-[#E8E4DF]'}`}>
+              <div
+                data-piece-id={item.id}
+                draggable={canArrange}
+                onDragStart={(e) => { setDragId(item.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id) }}
+                onDragEnd={() => { setDragId(null); setDropAt(null) }}
+                onDragOver={(e) => {
+                  if (!dragId || dragId === item.id) return
+                  e.preventDefault()
+                  const box = e.currentTarget.getBoundingClientRect()
+                  const after = e.clientX > box.left + box.width / 2
+                  if (dropAt?.id !== item.id || dropAt.after !== after) setDropAt({ id: item.id, after })
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const box = e.currentTarget.getBoundingClientRect()
+                  dropOn(item.id, e.clientX > box.left + box.width / 2)
+                }}
+                className={`group relative border rounded-sm overflow-hidden bg-white ${canArrange ? 'cursor-grab active:cursor-grabbing' : ''} ${dragId === item.id ? 'opacity-40' : ''} ${dropAt?.id === item.id ? (dropAt.after ? 'shadow-[inset_-4px_0_0_#1A1A1A]' : 'shadow-[inset_4px_0_0_#1A1A1A]') : ''} ${isSel ? 'border-[#1A1A1A] ring-1 ring-[#1A1A1A]/15' : verified ? 'border-[#3f7d55]/50 ring-1 ring-[#3f7d55]/20' : 'border-[#E8E4DF]'}`}
+              >
                 <button
                   title="Select for bulk category"
                   onClick={() => toggleSelect(item.id)}

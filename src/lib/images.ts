@@ -75,6 +75,8 @@ export interface ClosetItem {
   processed_image_hash: string | null
   source: string | null
   added_at: string | null
+  /** When GoodPix last changed it. With added_at, decides newest first, as on her Collection page (lib/closetOrder.ts). */
+  last_modified?: string | null
 }
 
 /** Effective display name: stylist override wins over the scraped name. */
