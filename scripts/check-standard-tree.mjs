@@ -70,6 +70,15 @@ for (const f of ['src/components/categorize/CollectionTab.tsx', 'src/components/
   need(pickers > 0 && pickers === withTree, `${f}: ${withTree} of ${pickers} category pickers offer her standard categories`)
 }
 
+// Add Item with a home picked narrows HER categories to that home's (lib/homeCategories.ts), which
+// are her filing names; Maegan's list is fixed, so it stays whole (11/19: picking New York on Julian
+// left Shirts and Collections with no options).
+{
+  const opts = read('src/components/common/CategoryOptions.tsx')
+  const std = (opts.match(/const stdOpts[^\n]*\n[^\n]*/) || [''])[0]
+  need(std !== '' && !/omit/.test(std), "Maegan's list ignores the home filter (stdOpts never reads omit)")
+}
+
 if (checked === 0) failures.push('inspected nothing')
 if (failures.length) { console.error('standard tree FAILED:\n  ' + failures.join('\n  ')); process.exit(1) }
 console.log(`  standard tree ok - ${checked} checks: women's 19/103, men's 19/85, Collections, new clients only, every picker`)

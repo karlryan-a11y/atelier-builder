@@ -25,7 +25,8 @@ export function CategoryOptions({ custom, used, omit, names, tree }: {
   const keep = (c: CategoryChoice) => !omit?.(c.slug) && !offered.has(c.slug)
   const opts = (list: CategoryChoice[]) => list.filter(keep)
     .map((c) => <option key={c.slug} value={c.slug}>{names ? nameForCategory(c.slug, names, c.label) : c.label}</option>)
-  const stdOpts = (list: CategoryChoice[]) => list.filter((c) => !omit?.(c.slug))
+  // Maegan's list is fixed, so `omit` (her own filing names, e.g. a picked home's) never thins it.
+  const stdOpts = (list: CategoryChoice[]) => list
     .map((c) => <option key={c.slug} value={c.slug}>{c.label}</option>)
   const standard = tree ? (
     <>
