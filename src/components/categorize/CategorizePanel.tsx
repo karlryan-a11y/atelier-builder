@@ -23,6 +23,7 @@ import { NO_HOME } from '@/hooks/useItemHomes'
 import { NestingTab } from './NestingTab'
 import { ReviewTab, useReviewDeletedLooks } from './ReviewTab'
 import { TransitionsTab } from './TransitionsTab'
+import { PreordersTab } from './PreordersTab'
 import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
@@ -51,7 +52,7 @@ import { useClientCategories } from '@/hooks/useClientCategories'
 import { savedCustomCategories, customRailSlugs, nestRailSlugs } from '@/lib/savedClosetCategories'
 import { categoryKey } from '@/lib/categoryNesting'
 
-type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'nesting' | 'audit' | 'review' | 'transitions'
+type Mode = 'looks' | 'residences' | 'capsules' | 'collection' | 'preorders' | 'nesting' | 'audit' | 'review' | 'transitions'
 type Status = 'draft' | 'published' | 'archived' | 'totry' | 'didntwork' | 'all'
 
 /**
@@ -937,6 +938,18 @@ export function CategorizePanel() {
                 categories so search works, and fix color mismatches. Use the pills on the right.
               </p>
             </>
+          ) : mode === 'preorders' ? (
+            <>
+              <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Pre-orders</p>
+              <p className="text-[10px] text-[#888] leading-relaxed">
+                Pieces she has on order and hasn't tried on yet. Add one with its photos, price and
+                description: it shows on her Pre-orders tab, never in her Collection, looks or capsules.
+              </p>
+              <p className="text-[10px] text-[#888] leading-relaxed mt-3">
+                Once she tries it on, tap Keep and it moves into her Collection with the same photos,
+                price and description. Tap Return and it comes off her Pre-orders.
+              </p>
+            </>
           ) : mode === 'nesting' ? (
             <>
               <p className="text-[9px] tracking-[0.3em] uppercase text-[#888] mb-2">Nesting categories</p>
@@ -1306,7 +1319,7 @@ export function CategorizePanel() {
           {newClosetNote && <p className="mt-1.5 text-[10px] text-[#a33] leading-snug">{newClosetNote}</p>}
         </div>
         )}
-        {mode !== 'collection' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
+        {mode !== 'collection' && mode !== 'preorders' && mode !== 'nesting' && mode !== 'audit' && mode !== 'transitions' && mode !== 'review' && mode !== 'residences' && (
         <div className="px-5 py-3 max-md:pb-24 border-t border-[#E8E4DF]">
           <div className="flex items-center gap-1.5">
             <input
@@ -1333,14 +1346,14 @@ export function CategorizePanel() {
           <div className="flex items-center gap-1 max-w-full overflow-x-auto [&>*]:shrink-0">
             {/* Residences for every client: it is where her homes are added, so a client with none
                 yet must be able to reach it (Paige, 2026-11-13). */}
-            {(['looks', 'residences', 'capsules', 'collection', 'nesting', 'audit', 'review', 'transitions'] as const)
+            {(['looks', 'residences', 'capsules', 'collection', 'preorders', 'nesting', 'audit', 'review', 'transitions'] as const)
               .map((m) => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setSelected(new Set()); setTagging(false); setSearch('') }}
                 className={`relative px-4 py-1.5 text-[12px] tracking-[0.18em] uppercase rounded transition-colors ${mode === m ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A]'}`}
               >
-                {m}
+                {m === 'preorders' ? 'pre-orders' : m}
                 {m === 'transitions' && transitionCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#F8E5E7] text-[#1A1A1A] text-[10px] tracking-normal align-middle">{transitionCount}</span>
                 )}
@@ -1469,6 +1482,12 @@ export function CategorizePanel() {
           <ErrorBoundary label="Transitions couldn't render">
             <div className="flex-1 overflow-y-auto p-6">
               <TransitionsTab {...transitions} onRestyle={handleRestyleTransitionedLook} restylingId={openingLookId} />
+            </div>
+          </ErrorBoundary>
+        ) : mode === 'preorders' ? (
+          <ErrorBoundary label="Pre-orders couldn't render">
+            <div className="flex-1 overflow-y-auto p-6">
+              <PreordersTab clientId={activeClient?.id ?? null} clientName={activeClient?.name} />
             </div>
           </ErrorBoundary>
         ) : mode === 'residences' ? (

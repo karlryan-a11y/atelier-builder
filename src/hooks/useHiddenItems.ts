@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { r2ImageUrl } from '@/lib/imageUrls'
+import { PREORDER_REASONS } from '@/lib/preorders'
 
 // The hidden pool: items with is_deleted=true. Nothing else in the app surfaces these, so a piece
 // archived (or removed as a "duplicate", or by a one-off SQL command) simply vanishes with no way to
@@ -54,6 +55,9 @@ export function useHiddenItems(clientId: string | null) {
           .select('id, name, name_override, brand, category, raw, primary_image_hash, processed_image_hash, source, added_at, deleted_at, deleted_by, deleted_reason')
           .eq('client_id', clientId)
           .eq('is_deleted', true)
+          // A pre-order is hidden on purpose and has its own tab (lib/preorders.ts): restoring
+          // one from here would put a piece she hasn't kept into her Collection.
+          .or(`deleted_reason.is.null,deleted_reason.not.in.(${PREORDER_REASONS.join(',')})`)
           .order('added_at', { ascending: false, nullsFirst: false })
           .order('id', { ascending: true })
           .range(from, from + PAGE - 1)
