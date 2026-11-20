@@ -2,7 +2,7 @@
 // Colors audit tab dropdown. Order = display order.
 export const COLOR_ORDER = [
   'Black', 'Grey', 'White', 'Ivory', 'Beige', 'Brown',
-  'Red', 'Burgundy', 'Orange', 'Yellow', 'Gold', 'Silver',
+  'Red', 'Burgundy', 'Orange', 'Yellow', 'Gold', 'Silver', 'Metallic',
   'Pink', 'Blush', 'Purple', 'Lavender',
   'Navy', 'Blue', 'Light Blue', 'Teal', 'Green', 'Olive',
   'Multicolor',
@@ -10,11 +10,17 @@ export const COLOR_ORDER = [
 
 export type ColorFamily = (typeof COLOR_ORDER)[number]
 
+// Metallic (Cynthia Dada for Peyton Wheeler, 11/19) is for pieces with a metallic thread, and only a
+// stylist picks it: the word list (colorText.ts) and Add Item's photo read never file a piece under
+// it, so a gold or silver piece stays Gold or Silver.
+export const PICKED_ONLY = new Set<string>(['Metallic'])
+
 // Small dot color for the current/suggested chips in the audit rows.
 export const COLOR_SWATCH: Record<string, string> = {
   Black: '#1A1A1A', Grey: '#8A8A8A', White: '#FFFFFF', Ivory: '#F3EEE3',
   Beige: '#C8B99C', Brown: '#6B4A2F', Red: '#B22222', Burgundy: '#5E1A28',
   Orange: '#D2692E', Yellow: '#E3C245', Gold: '#C9A544', Silver: '#BFC1C4',
+  Metallic: 'linear-gradient(135deg, #8C8C8C, #F4F4F4 40%, #C9A544 65%, #EFE7CF)',
   Pink: '#E48BB0', Blush: '#E8C5C8', Purple: '#6B4A8A', Lavender: '#B9A7D6',
   Navy: '#1F2A44', Blue: '#3A5FA8', 'Light Blue': '#A9C6E0', Teal: '#2E8A8A',
   Green: '#3C7A4E', Olive: '#7A7A45', Multicolor: '',
