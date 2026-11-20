@@ -1,4 +1,4 @@
-import { COLOR_ORDER } from './colorFamily.ts'
+import { COLOR_ORDER, PICKED_ONLY } from './colorFamily.ts'
 
 /**
  * Free-text colour → the filing palette (ADR-0115).
@@ -17,7 +17,8 @@ import { COLOR_ORDER } from './colorFamily.ts'
  * written by a human, never parsed.
  */
 
-const PALETTE = new Map(COLOR_ORDER.map((c) => [c.toLowerCase(), c as string]))
+// A colour only a stylist picks (Metallic) is left out, so "metallic" still reads as Silver.
+const PALETTE = new Map(COLOR_ORDER.filter((c) => !PICKED_ONLY.has(c)).map((c) => [c.toLowerCase(), c as string]))
 
 /** Words a person uses for a colour the palette names differently. The whole authored surface. */
 const SYNONYMS: Record<string, string> = {

@@ -31,11 +31,14 @@ const CORS = {
 // share the app's module graph — scripts/check-color-palette.mjs asserts every copy agrees.
 const COLOR_ORDER = [
   'Black', 'Grey', 'White', 'Ivory', 'Beige', 'Brown',
-  'Red', 'Burgundy', 'Orange', 'Yellow', 'Gold', 'Silver',
+  'Red', 'Burgundy', 'Orange', 'Yellow', 'Gold', 'Silver', 'Metallic',
   'Pink', 'Blush', 'Purple', 'Lavender',
   'Navy', 'Blue', 'Light Blue', 'Teal', 'Green', 'Olive',
   'Multicolor',
 ]
+// Metallic is picked by a stylist only (src/lib/colorFamily.ts PICKED_ONLY), so the photo read is
+// never offered it and a gold or silver piece stays Gold or Silver.
+const AUTO_COLORS = COLOR_ORDER.filter((c) => c !== 'Metallic')
 
 const FIXED_CATEGORIES = [
   'dresses', 'tops', 'skirts', 'pants', 'jeans', 'shorts', 'outerwear', 'swim',
@@ -59,7 +62,7 @@ async function prefill(imageDataUri: string) {
     'Return concise, accurate product metadata. For "category" choose the single best-fit slug from ONLY this list: ' +
     FIXED_CATEGORIES.join(', ') + '. ' +
     'For "colors" list EVERY colour you can see, most dominant first, choosing ONLY from this list: ' +
-    COLOR_ORDER.join(', ') + '. A print or a piece with several colours gets several entries — do not ' +
+    AUTO_COLORS.join(', ') + '. A print or a piece with several colours gets several entries — do not ' +
     'collapse it to "Multicolor" unless no individual colour reads clearly. "color" stays a free-text ' +
     'description of the exact shade; "colors" is what the client filters by. ' +
     'Respond ONLY as compact JSON: {"name":"<short product name>","brand":"<brand or empty if unreadable>","color":"<primary color>","colors":["<palette colour>"],"category":"<slug>","material":"<material or empty>"}.'
@@ -85,7 +88,7 @@ async function prefill(imageDataUri: string) {
       color: typeof v.color === 'string' ? v.color.trim() : '',
       // Only palette values survive — a colour no chip carries is a colour nothing can filter by.
       colors: Array.isArray(v.colors)
-        ? [...new Set(v.colors.map((c: unknown) => String(c || '').trim()).filter((c: string) => COLOR_ORDER.includes(c)))]
+        ? [...new Set(v.colors.map((c: unknown) => String(c || '').trim()).filter((c: string) => AUTO_COLORS.includes(c)))]
         : [],
       category: typeof v.category === 'string' && FIXED_CATEGORIES.includes(v.category.trim().toLowerCase()) ? v.category.trim().toLowerCase() : '',
       material: typeof v.material === 'string' ? v.material.trim() : '',
