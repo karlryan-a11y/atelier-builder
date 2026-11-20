@@ -69,11 +69,17 @@ if (existsSync(DASH + 'vercel.json')) {
 // ── 2. safe areas ────────────────────────────────────────────────────────────────────────────────
 const header = read('src/components/layout/Header.tsx')
 ok(/<header className=\{`[^`]*h-\[calc\(120px\+env\(safe-area-inset-top\)\)\][^`]*pt-\[env\(safe-area-inset-top\)\]/.test(header), 'the Header must grow by the top safe-area inset and pad by it (120px on a computer, as before)')
+// On a phone every top bar pads at least the inset plus 36px: iOS blurs about the first 24px under the clock in the
+// home-screen app (Karl, 11/20). The bar grows by those 36px; the inner height stays as it was.
+const CLEAR = 'max-sm:pt-[calc(env(safe-area-inset-top)+36px)]'
+ok(header.includes(CLEAR), 'on a phone the Header must pad its top by the inset plus 36px')
+ok(/max-sm:h-\[calc\(92px\+env\(safe-area-inset-top\)\)\]/.test(header) && !/max-sm:h-\[calc\(56px/.test(header), 'on a phone the Header (Style and Digitize) must be 56px plus the 36px gap plus the inset')
 const app = read('src/App.tsx')
 ok(/h-\[100dvh\] flex flex-col overflow-hidden pb-\[env\(safe-area-inset-bottom\)\] pl-\[env\(safe-area-inset-left\)\] pr-\[env\(safe-area-inset-right\)\]/.test(app), 'the app must pad by the bottom and side safe-area insets')
 ok(/pb-\[env\(safe-area-inset-bottom\)\]">\s*<PhoneSend/.test(app), 'the phone Send screen must pad by the bottom inset')
 const ps = read('src/components/phone/PhoneSend.tsx')
-ok(/box-content[^"]*pt-\[env\(safe-area-inset-top\)\][^"]*bg-\[#050505\]/.test(ps), "the phone Send screen's black bar must pad by the top inset")
+ok(/box-content[^"]*pt-\[calc\(env\(safe-area-inset-top\)\+36px\)\][^"]*bg-\[#050505\]/.test(ps), "the phone Send screen's black bar must pad by the top inset plus 36px")
+ok(/@media \(display-mode: standalone\) \{\s*html \{ background-color: #050505; \}/.test(read('src/index.css')), 'index.css: in the home-screen app the page behind the bar must be black, so no white shows above it')
 
 // ── 3. no zoom on a tap ──────────────────────────────────────────────────────────────────────────
 const css = read('src/index.css')
