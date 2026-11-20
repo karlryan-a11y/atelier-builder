@@ -38,7 +38,8 @@ export function Header({ user, onSignOut, onOpenAdmin }: HeaderProps) {
   const hasBatch = typeof localStorage !== 'undefined' && localStorage.getItem('atelier_active_batch')
 
   return (
-    <header className={`${activeView === 'digitize' ? 'h-[calc(56px+env(safe-area-inset-top))]' : 'h-[calc(120px+env(safe-area-inset-top))] max-sm:h-[calc(56px+env(safe-area-inset-top))]'} pt-[env(safe-area-inset-top)] bg-[#050505] flex items-center justify-between gap-2 px-6 max-sm:px-3 border-b border-white/[0.06]`}>
+    <header className={`${activeView === 'digitize' ? 'h-[calc(56px+env(safe-area-inset-top))]' : 'h-[calc(120px+env(safe-area-inset-top))]'} max-sm:h-[calc(92px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] max-sm:pt-[calc(env(safe-area-inset-top)+36px)] bg-[#050505] flex items-center justify-between gap-2 px-6 max-sm:px-3 border-b border-white/[0.06]`}>
+      {/* A phone: ATELIER and the tabs sit 36px below the clock, clear of the blur iOS puts there in the home-screen app (Karl, 11/20). */}
       {/* A phone: the short bar, and the tabs scroll sideways inside it instead of running off the screen. */}
       <div className="min-w-0 flex items-center gap-8 max-sm:gap-2">
         <a href="/" className={`shrink-0 flex flex-col transition-opacity duration-300 hover:opacity-80 ${activeView === 'digitize' ? 'py-0' : 'py-2'}`}>

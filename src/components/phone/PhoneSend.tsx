@@ -82,8 +82,9 @@ export function PhoneSend({ onFullTool }: { onFullTool: () => void }) {
 
   return (
     <div data-phone-send className="flex flex-col h-full w-full overflow-hidden bg-[#F8F7F5]">
-      {/* box-content + the top inset: in the home-screen app the black bar runs under the notch and the clock. */}
-      <div className="box-content flex items-center justify-between px-4 h-12 pt-[env(safe-area-inset-top)] bg-[#050505] flex-none">
+      {/* box-content + the top inset: in the home-screen app the black bar runs under the notch and the clock, and ATELIER sits
+          36px below the clock, clear of the blur iOS puts there (Karl, 11/20). */}
+      <div className="box-content flex items-center justify-between px-4 h-12 pt-[calc(env(safe-area-inset-top)+36px)] bg-[#050505] flex-none">
         <a href="/" className="text-white text-[22px] leading-none tracking-[0.015em]" style={{ fontFamily: "'Schnyder', Georgia, serif", fontWeight: 300 }}>
           ATELIER
         </a>
