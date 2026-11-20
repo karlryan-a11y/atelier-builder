@@ -1,6 +1,7 @@
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
-import type { NaturalSize } from '@/lib/restyleSelection'
-import type { LookCanvasState } from '@/types/canvas'
+import { garmentRect, type GarmentRect, type NaturalSize } from '@/lib/restyleSelection'
+import { photoContent } from '@/lib/photoFit'
+import type { ClosetItemNode, LookCanvasState } from '@/types/canvas'
 
 /**
  * The size of the photo the canvas draws for each piece, for the few pieces whose place on a board
@@ -28,6 +29,36 @@ export async function measurePieces(closetItemIds: string[]): Promise<Map<string
     const done = () => { clearTimeout(timer); resolve() }
     const timer = setTimeout(done, 10_000)
     img.onload = () => { if (img.naturalWidth > 0) out.set(id, { width: img.naturalWidth, height: img.naturalHeight }); done() }
+    img.onerror = done
+    img.src = url
+  })))
+  return out
+}
+
+/**
+ * Where each piece's garment is drawn on a board, by node id, from the photo the canvas will load
+ * (fitted to it as the board fits it). Restyle reads it to tell which piece a brand label sits by
+ * (lib/restyleSelection.ts labelsOfLetGo). A photo that does not load is left out, and a label
+ * that would need it stays on the board.
+ */
+export async function measureGarments(canvas: LookCanvasState): Promise<Map<string, GarmentRect>> {
+  const out = new Map<string, GarmentRect>()
+  const nodes = canvas.nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item')
+  if (nodes.length === 0) return out
+  const urls = await resolveClosetImageUrls(canvas)
+  await Promise.all(nodes.map((node) => new Promise<void>((resolve) => {
+    const url = urls[node.id]
+    if (!url) { resolve(); return }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    const done = () => { clearTimeout(timer); resolve() }
+    const timer = setTimeout(done, 10_000)
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight
+      const rect = garmentRect(node, w, h, photoContent(img, w, h)?.box ?? null)
+      if (rect) out.set(node.id, rect)
+      done()
+    }
     img.onerror = done
     img.src = url
   })))

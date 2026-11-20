@@ -28,7 +28,7 @@ import { useTransitions } from '@/hooks/useTransitions'
 import { useStyleRefreshStore } from '@/hooks/useStyleTabRefresh'
 import type { QueueCard } from '@/lib/transitionQueue'
 import { boardPieceIds, restyleSavedBoard, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
-import { measurePieces } from '@/lib/measurePieces'
+import { measureGarments, measurePieces } from '@/lib/measurePieces'
 import { useResidenceReview } from '@/hooks/useResidenceReview'
 import { useShareLinks, openedAgo } from '@/hooks/useShareLinks'
 import { searchByName } from '@/lib/lookSearch'
@@ -405,7 +405,12 @@ export function CategorizePanel() {
         // Same plan the Transitions card reads (hooks/useTransitions.ts), so what comes off the
         // picture is exactly what the card named; a let-go piece parked off the side comes off too.
         let restyled = restyleSavedBoard(canvasState, pieces)
-        if (restyled.unknown.length) restyled = restyleSavedBoard(canvasState, pieces, await measurePieces(restyled.unknown))
+        const sizes = restyled.unknown.length ? await measurePieces(restyled.unknown) : undefined
+        // A brand label shared with a piece that stays is matched to its piece by where the
+        // garments are drawn, so the board's photos are measured only then (labelsOfLetGo).
+        const lettingGo = restyled.omitted.length + restyled.notInPicture.length > 0
+        const garments = lettingGo && canvasState.nodes.some((n) => n.type === 'text') ? await measureGarments(canvasState) : undefined
+        if (sizes || garments) restyled = restyleSavedBoard(canvasState, pieces, sizes, garments)
         omitted = restyled.omitted
         notInPicture = restyled.notInPicture
         const imageUrls = await resolveClosetImageUrls(restyled.canvas)

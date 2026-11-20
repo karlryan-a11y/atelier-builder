@@ -84,10 +84,21 @@ const old = { ...crew, photo_w: undefined, photo_h: undefined }
 const learned = fitToPhoto(old, 1212, 1297)
 assert('old piece: learns its photo', learned.photo_w === 1212 && learned.photo_h === 1297)
 assert('old piece: does not move or resize', learned.x === old.x && learned.y === old.y && learned.scale === old.scale && learned.scale_y === old.scale_y)
-// A piece Compose sized by height is drawn from its photo's height already: only learns its photo.
+// A piece sized by height was drawn target_height tall on the photo it remembers. Drawing the new
+// photo that tall changed the garment (Chris Cadieux's loafers, Look 66, 2026-11-20), so it is fitted
+// into the same box like any other piece (check-restyle-labels.mjs has the real loafers).
 const composed = { ...crew, target_height: 300 }
+const cb = box({ ...composed, scale: 300 / 500 }, 400, 500)
 const cf = fitToPhoto(composed, 1212, 1297)
-assert('composed piece: scale untouched', cf.scale === composed.scale && cf.x === composed.x)
+const ca = box(cf, 1212, 1297)
+assert('height-sized piece: becomes a plain scale', !cf.target_height)
+assert('height-sized piece: stays inside its drawn box, centred', ca.x >= cb.x - 0.01 && ca.x + ca.w <= cb.x + cb.w + 0.01 && near(ca.y + ca.h / 2, cb.y + cb.h / 2) && near(ca.x + ca.w / 2, cb.x + cb.w / 2))
+// Same photo: still sized by height, untouched.
+assert('height-sized piece, same photo: untouched', fitToPhoto(composed, 400, 500) === composed)
+// Never remembered a photo: only learns it, still sized by height.
+const composedOld = { ...composed, photo_w: undefined, photo_h: undefined }
+const co = fitToPhoto(composedOld, 1212, 1297)
+assert('height-sized piece, no photo remembered: only learns it', co.target_height === 300 && co.scale === composed.scale && co.x === composed.x)
 // A photo that has not loaded (0x0) changes nothing.
 assert('no photo yet: untouched', fitToPhoto(crew, 0, 0) === crew)
 

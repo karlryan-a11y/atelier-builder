@@ -29,6 +29,7 @@
  */
 
 import type { ClosetItemNode, LookCanvasState } from '@/types/canvas'
+import { fitToPhoto } from './photoFit.ts'
 
 export type OmitReason = 'transitioned' | 'deleted' | 'missing'
   /** GoodPix listed it for the look but it is not in the picture (a piece tried and taken out). */
@@ -125,8 +126,84 @@ export function restyleSavedBoard(
   canvasState: LookCanvasState,
   pieces: Map<string, RestylePiece>,
   sizes?: Map<string, NaturalSize>,
+  garments?: Map<string, GarmentRect>,
 ): BuilderRestylePlan {
-  return planBuilderRestyle(canvasState, (id) => savedBoardLetGo(id, pieces), sizes)
+  const plan = planBuilderRestyle(canvasState, (id) => savedBoardLetGo(id, pieces), sizes)
+  const gone = new Set([...plan.omitted, ...plan.notInPicture].map((p) => p.id))
+  const drop = labelsOfLetGo(canvasState.nodes, gone, (id) => pieces.get(id)?.brand ?? null, garments)
+  if (drop.size === 0) return plan
+  return { ...plan, canvas: { ...plan.canvas, nodes: plan.canvas.nodes.filter((n) => !drop.has(n.id)) } }
+}
+
+// ── The labels that belong to a piece that came off ──────────────────────────────────────────
+
+/** Where a garment is drawn on the board, in board pixels (its photo's see-through margin left out when known). */
+export interface GarmentRect { x0: number; y0: number; x1: number; y1: number }
+
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase()
+
+/**
+ * A LABEL GOES WITH ITS PIECE. Cynthia Dada, 2026-11-20, Chris Cadieux Look 66: Restyle took the
+ * Dior suit jacket and trousers off and left their two "Dior" labels floating on the board.
+ *
+ * A label is not linked to its piece on a saved board, so it is matched the way she reads it: a
+ * text that is exactly the brand of a piece on the board labels the nearest piece of that brand.
+ * It comes off when that piece came off. When every piece of that brand came off, the label goes
+ * without measuring; when some stay (the Dior shirt beside the Dior suit), the nearest garment
+ * decides, and without the garments' places the label stays: her own words are never taken off on
+ * a guess. Any other text (a title, a note, a brand no piece carries) always stays.
+ */
+export function labelsOfLetGo(
+  nodes: LookCanvasState['nodes'],
+  gone: Set<string>,
+  brandOf: (closetItemId: string) => string | null,
+  garments?: Map<string, GarmentRect>,
+): Set<string> {
+  const drop = new Set<string>()
+  if (gone.size === 0) return drop
+  const items = nodes.filter((n): n is ClosetItemNode => n.type === 'closet_item')
+  for (const t of nodes) {
+    if (t.type !== 'text') continue
+    const word = norm(t.content)
+    if (!word) continue
+    const same = items.filter((n) => norm(brandOf(n.closet_item_id)) === word)
+    if (!same.some((n) => gone.has(n.closet_item_id))) continue
+    if (same.every((n) => gone.has(n.closet_item_id))) { drop.add(t.id); continue }
+    const rects = same.map((n) => garments?.get(n.id))
+    if (rects.some((r) => !r)) continue
+    const lw = t.width ?? word.length * t.font_size * 0.6
+    const cx = t.x + lw / 2, cy = t.y + t.font_size * 0.6
+    let best = -1, bestD = Infinity
+    rects.forEach((r, i) => {
+      const dx = Math.max(r!.x0 - cx, 0, cx - r!.x1), dy = Math.max(r!.y0 - cy, 0, cy - r!.y1)
+      const d = Math.hypot(dx, dy)
+      if (d < bestD) { bestD = d; best = i }
+    })
+    if (best >= 0 && gone.has(same[best].closet_item_id)) drop.add(t.id)
+  }
+  return drop
+}
+
+/**
+ * The garment's drawn box for a piece on the board, from the photo it opens with: the node is
+ * first fitted to that photo (lib/photoFit.ts), exactly as the board will draw it.
+ */
+export function garmentRect(node: ClosetItemNode, w: number, h: number, box?: [number, number, number, number] | null): GarmentRect | null {
+  if (!(w > 0 && h > 0)) return null
+  const n = fitToPhoto(node, w, h, box)
+  let scale = n.scale
+  if (n.target_height) scale = Math.min(Math.max(n.target_height / h, 0.03), 3.0)
+  const sx = n.flipped ? -scale : scale
+  const sy = n.scale_y ?? scale
+  const r = ((n.rotation ?? 0) * Math.PI) / 180
+  const cos = Math.cos(r), sin = Math.sin(r)
+  const [u0, v0, u1, v1] = box ?? [0, 0, w, h]
+  const xs: number[] = [], ys: number[] = []
+  for (const [u, v] of [[u0, v0], [u1, v0], [u0, v1], [u1, v1]]) {
+    xs.push(n.x + cos * sx * u - sin * sy * v)
+    ys.push(n.y + sin * sx * u + cos * sy * v)
+  }
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
 }
 
 /**
