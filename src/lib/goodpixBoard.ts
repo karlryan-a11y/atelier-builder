@@ -3,7 +3,7 @@ import type { LookCanvasState } from '@/types/canvas'
 import { buildCanvasFromClosetItems } from '@/lib/rebuildLookCanvas'
 import { convertGoodPixLayout, fitPiecesToPhotos, needsFit, type GpLayout, type PhotoSize } from '@/lib/goodpixLayout'
 import { goodPixInPicture, lookCandidateIds, pieceUrls } from '@/lib/lookOutPieces'
-import { selectRestylePieces, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
+import { labelsOfLetGo, selectRestylePieces, type GarmentRect, type OmittedPiece, type RestylePiece } from '@/lib/restyleSelection'
 import { storedProxyUrl } from '@/lib/imageUrls'
 import { resolveClosetImageUrls } from '@/lib/resolveClosetImageUrls'
 import { measurePhoto } from '@/lib/photoContent'
@@ -37,6 +37,14 @@ export interface GoodPixBoard {
 }
 
 const mirrorUrl = (key: string) => storedProxyUrl(key)
+
+/** The board box GoodPix drew a piece in (centre, size, turn) as an upright rectangle. */
+function boxRect(b: { cx: number; cy: number; w: number; h: number; rotation: number }): GarmentRect {
+  const r = (b.rotation * Math.PI) / 180
+  const hw = (Math.abs(Math.cos(r)) * b.w + Math.abs(Math.sin(r)) * b.h) / 2
+  const hh = (Math.abs(Math.sin(r)) * b.w + Math.abs(Math.cos(r)) * b.h) / 2
+  return { x0: b.cx - hw, y0: b.cy - hh, x1: b.cx + hw, y1: b.cy + hh }
+}
 
 async function readPieces(ids: string[], clientId: string | null) {
   const out = new Map<string, RestylePiece & { urls: string[] }>()
@@ -99,6 +107,15 @@ export async function buildGoodPixBoard(lookId: string, closetItemIds: string[])
     mirrorUrl,
     idPrefix: lookId.slice(-6),
   })
+  // A brand label of a piece left off goes with it (lib/restyleSelection.ts labelsOfLetGo). GoodPix
+  // drew every piece in a known box, so the same layout with every piece in it says which is where.
+  const gone = new Set(omitted.map((p) => p.id))
+  if (gone.size && conv.texts) {
+    const every = new Set(inPicture)
+    const all = convertGoodPixLayout(layout, { keep: (id) => every.has(id), extraUrls, mirrorUrl, idPrefix: lookId.slice(-6) })
+    const drop = labelsOfLetGo(all.canvas.nodes, gone, (id) => pieces.get(id)?.brand ?? null, new Map(all.boxes.map((b) => [b.nodeId, boxRect(b)])))
+    if (drop.size) conv.canvas = { ...conv.canvas, nodes: conv.canvas.nodes.filter((n) => !drop.has(n.id)) }
+  }
 
   // Each piece is fitted into the box GoodPix drew, measured against the photo the board will
   // load. Cynthia Dada, 2026-10-21: a replaced or differently cropped photo came in too big or

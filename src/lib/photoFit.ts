@@ -16,8 +16,9 @@ import type { ClosetItemNode } from '@/types/canvas'
  * one had a wide empty margin (Round Top's earrings), and fitting whole photos would enlarge it.
  *
  * A piece that has never remembered a photo only learns it (it was saved before this, so its scale
- * is all there is). A piece Compose sized by height (target_height) is drawn from its photo's
- * height already. Returns the very same node when nothing changes, so callers can skip the update.
+ * is all there is). A piece sized by height (target_height) is turned into the scale it was drawn at
+ * on the photo it remembers, then fitted the same way. Returns the very same node when nothing
+ * changes, so callers can skip the update.
  */
 export type PhotoBox = [number, number, number, number]
 
@@ -30,27 +31,35 @@ export function fitToPhoto(node: ClosetItemNode, w: number, h: number, box?: Pho
     const moved = box && node.photo_box && box.some((v, i) => Math.abs(v - node.photo_box![i]) > 0.03 * Math.max(w, h))
     if (!moved) return box && !node.photo_box ? { ...node, photo_box: box } : node
   }
-  if (!(node.photo_w && node.photo_h) || node.target_height) return { ...node, ...learned }
+  const pw = node.photo_w, ph = node.photo_h
+  if (!(pw && ph)) return { ...node, ...learned }
+  // Compose or ClosetPanel sized it by height: it was drawn target_height tall on the photo it
+  // remembers. Drawing the new photo that tall changes the garment whenever the new photo is
+  // cropped another way (Chris Cadieux's Prada loafers, 400x500 to 1671x941: almost three times
+  // wider, Look 66, 2026-11-20). So take the scale it was drawn at and fit it like any other piece.
+  const piece: ClosetItemNode = node.target_height
+    ? { ...node, scale: Math.min(Math.max(node.target_height / ph, 0.03), 3.0), target_height: undefined }
+    : node
 
   // Garment boxes when both are known, else the whole photos.
-  const both = !!(box && node.photo_box)
-  const ob = both ? node.photo_box! : [0, 0, node.photo_w, node.photo_h]
+  const both = !!(box && piece.photo_box)
+  const ob = both ? piece.photo_box! : [0, 0, pw, ph]
   const nb = both ? box! : [0, 0, w, h]
   const obW = ob[2] - ob[0], obH = ob[3] - ob[1], nbW = nb[2] - nb[0], nbH = nb[3] - nb[1]
   if (!(obW > 0 && obH > 0 && nbW > 0 && nbH > 0)) return { ...node, ...learned }
   const f = Math.min(obW / nbW, obH / nbH)
-  const sx = node.scale, sy = node.scale_y ?? node.scale
+  const sx = piece.scale, sy = piece.scale_y ?? piece.scale
   // Move the origin so the new garment's centre lands on the old one's, in the piece's own
   // (unturned) frame. A flipped piece is drawn leftward from x, so its offset runs the other way.
-  const dx = ((ob[0] + obW / 2) * sx - (nb[0] + nbW / 2) * sx * f) * (node.flipped ? -1 : 1)
+  const dx = ((ob[0] + obW / 2) * sx - (nb[0] + nbW / 2) * sx * f) * (piece.flipped ? -1 : 1)
   const dy = (ob[1] + obH / 2) * sy - (nb[1] + nbH / 2) * sy * f
-  const r = ((node.rotation || 0) * Math.PI) / 180
+  const r = ((piece.rotation || 0) * Math.PI) / 180
   return {
-    ...node,
-    x: node.x + dx * Math.cos(r) - dy * Math.sin(r),
-    y: node.y + dx * Math.sin(r) + dy * Math.cos(r),
+    ...piece,
+    x: piece.x + dx * Math.cos(r) - dy * Math.sin(r),
+    y: piece.y + dx * Math.sin(r) + dy * Math.cos(r),
     scale: sx * f,
-    ...(node.scale_y != null ? { scale_y: node.scale_y * f } : {}),
+    ...(piece.scale_y != null ? { scale_y: piece.scale_y * f } : {}),
     photo_w: w,
     photo_h: h,
     ...(box ? { photo_box: box } : { photo_box: undefined }),
